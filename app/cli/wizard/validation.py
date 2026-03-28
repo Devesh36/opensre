@@ -4,14 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from anthropic import Anthropic
-from anthropic import AuthenticationError as AnthropicAuthError
-from openai import AuthenticationError as OpenAIAuthError
-from openai import OpenAI
-
-from app.agent.tools.tool_actions.knowledge_sre_book.sre_knowledge_actions import (
-    get_sre_guidance,
-)
 from app.cli.wizard.config import ProviderOption
 
 
@@ -31,6 +23,11 @@ def validate_provider_credentials(
     model: str,
 ) -> ValidationResult:
     """Run a tiny live request against the selected provider."""
+    from anthropic import Anthropic
+    from anthropic import AuthenticationError as AnthropicAuthError
+    from openai import AuthenticationError as OpenAIAuthError
+    from openai import OpenAI
+
     try:
         if provider.value == "anthropic":
             anthropic_client = Anthropic(api_key=api_key, timeout=30.0)
@@ -71,4 +68,8 @@ def validate_provider_credentials(
 
 def build_demo_action_response() -> dict:
     """Return a safe built-in action response for onboarding."""
+    from app.agent.tools.tool_actions.knowledge_sre_book.sre_knowledge_actions import (
+        get_sre_guidance,
+    )
+
     return get_sre_guidance(topic="recovery_remediation", max_topics=1)
