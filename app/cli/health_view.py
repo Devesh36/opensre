@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from rich import box
@@ -14,7 +15,7 @@ from rich.text import Text
 def _status_badge(status: str) -> Text:
     normalized = status.strip().lower()
     if normalized == "passed":
-        return Text("PASS", style="bold green")
+        return Text("PASSED", style="bold green")
     if normalized == "missing":
         return Text("MISSING", style="bold yellow")
     if normalized == "failed":
@@ -37,7 +38,7 @@ def render_health_report(
     *,
     console: Console,
     environment: str,
-    integration_store_path: str,
+    integration_store_path: str | Path,
     results: list[dict[str, Any]],
 ) -> None:
     """Render a polished health report with summary and actionable hints."""
@@ -94,7 +95,9 @@ def render_health_report(
     console.print()
 
     if counts["failed"] > 0:
-        console.print("[bold red]Action:[/bold red] Fix failed integrations, then rerun [bold]opensre health[/bold].")
+        console.print(
+            "[bold red]Action:[/bold red] Fix failed integrations, then rerun [bold]opensre health[/bold]."
+        )
     elif counts["missing"] > 0:
         console.print(
             "[bold yellow]Action:[/bold yellow] Configure missing integrations with "

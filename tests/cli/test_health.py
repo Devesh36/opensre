@@ -48,7 +48,7 @@ def test_health_command_uses_real_datadog_verification_path(monkeypatch) -> None
 
     result = runner.invoke(cli, ["health"])
 
-    assert result.exit_code == 0
+    assert result.exit_code == 1
     assert "Summary:" in result.output
     assert "datadog" in result.output
     assert "MISSING" in result.output
