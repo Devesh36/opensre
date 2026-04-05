@@ -44,6 +44,7 @@ def test_tool_decorator_registers_function_tool_with_inferred_schema() -> None:
     assert registered.input_schema["required"] == ["incident_id"]
     assert registered.surfaces == ("investigation", "chat")
 
+
 def test_tool_decorator_supports_minimal_single_file_function_tool() -> None:
     module: Any = ModuleType("app.tools.single_file_status_tool")
 

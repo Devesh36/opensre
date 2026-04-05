@@ -67,7 +67,7 @@ Use `issue/` or `fix/` prefix. Branch names should be lowercase with hyphens.
 
 For simple tools, you do not need a class or `ClassVar` metadata. Add one file under `app/tools/` and register a function with `@tool`.
 
-Example (`app/tools/ExampleStatusTool.py`):
+Example (`app/tools/example_status_tool.py`):
 
 ```python
 from app.tools.tool_decorator import tool
@@ -86,6 +86,7 @@ Notes:
 
 - `source` is required for function tools.
 - `name`, `description`, and `input_schema` are inferred by default.
+- `surfaces` defaults to `("investigation",)`. Pass `surfaces=("investigation", "chat")` to expose the tool in both investigation and chat contexts.
 - Use the existing package/class style when a tool has complex helper logic, multiple exports, or substantial integration-specific code.
 
 ### 3. Add or Update Tests
