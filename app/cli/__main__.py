@@ -228,19 +228,19 @@ def onboard_local_llm() -> None:
 def health() -> None:
     """Show a quick health summary of the local agent setup."""
     from app.config import get_environment
+    from app.cli.health_view import render_health_report
     from app.integrations.store import STORE_PATH
-    from app.integrations.verify import format_verification_results, verify_integrations
+    from app.integrations.verify import verify_integrations
+    from rich.console import Console
 
     capture_cli_invoked()
     results = verify_integrations()
-
-    click.echo("")
-    click.echo("OpenSRE Health")
-    click.echo("")
-    click.echo("CLI")
-    click.echo(f"  environment: {get_environment().value}")
-    click.echo(f"  integration store: {STORE_PATH}")
-    click.echo(format_verification_results(results))
+    render_health_report(
+        console=Console(highlight=False),
+        environment=get_environment().value,
+        integration_store_path=STORE_PATH,
+        results=results,
+    )
 
 
 @cli.command()
