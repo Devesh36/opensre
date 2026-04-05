@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import importlib
+import sys
 
 from fastapi import FastAPI, Response, status
 from pydantic import BaseModel
@@ -21,11 +21,7 @@ app = FastAPI()
 
 
 def _graph_loaded() -> bool:
-    try:
-        importlib.import_module("app.graph_pipeline")
-    except Exception:
-        return False
-    return True
+    return "app.graph_pipeline" in sys.modules
 
 
 def _llm_configured() -> bool:
