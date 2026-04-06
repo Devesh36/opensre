@@ -10,6 +10,7 @@ import click
 
 if TYPE_CHECKING:
     from app.remote.client import RemoteAgentClient
+    from app.remote.ops import RemoteOpsProvider, RemoteServiceScope
 
 
 def _context_value(ctx: click.Context, key: str) -> str | None:
@@ -66,6 +67,28 @@ def _sample_alert_payload() -> dict[str, str]:
         "severity": "critical",
         "message": SYNTHETIC_ALERT,
     }
+
+
+def _resolve_remote_ops_scope(ctx: click.Context) -> tuple[RemoteOpsProvider, RemoteServiceScope]:
+    from app.cli.wizard.store import load_remote_ops_config
+    from app.remote.ops import RemoteServiceScope, resolve_remote_ops_provider
+
+    stored = load_remote_ops_config()
+
+    provider_raw = _context_value(ctx, "ops_provider") or stored.get("provider") or "railway"
+    provider = str(provider_raw).strip().lower()
+    project = _context_value(ctx, "ops_project") or stored.get("project")
+    service = _context_value(ctx, "ops_service") or stored.get("service")
+
+    remote_provider = resolve_remote_ops_provider(provider)
+    scope = RemoteServiceScope(provider=provider, project=project, service=service)
+    return remote_provider, scope
+
+
+def _persist_remote_ops_scope(scope: RemoteServiceScope) -> None:
+    from app.cli.wizard.store import save_remote_ops_config
+
+    save_remote_ops_config(provider=scope.provider, project=scope.project, service=scope.service)
 
 
 def _run_remote_interactive(ctx: click.Context) -> None:
@@ -144,8 +167,12 @@ def _run_remote_interactive(ctx: click.Context) -> None:
 
 
 @click.group(name="remote", invoke_without_command=True)
-@click.option("--url", default=None, help="Remote agent base URL (e.g. 1.2.3.4 or http://host:2024).")
-@click.option("--api-key", default=None, envvar="OPENSRE_API_KEY", help="API key for the remote agent.")
+@click.option(
+    "--url", default=None, help="Remote agent base URL (e.g. 1.2.3.4 or http://host:2024)."
+)
+@click.option(
+    "--api-key", default=None, envvar="OPENSRE_API_KEY", help="API key for the remote agent."
+)
 @click.pass_context
 def remote(ctx: click.Context, url: str | None, api_key: str | None) -> None:
     """Connect to and trigger a remote deployed agent."""
@@ -155,6 +182,126 @@ def remote(ctx: click.Context, url: str | None, api_key: str | None) -> None:
 
     if ctx.invoked_subcommand is None:
         _run_remote_interactive(ctx)
+
+
+@remote.group(name="ops")
+@click.option("--provider", "ops_provider", default=None, help="Remote provider (e.g. railway).")
+@click.option("--project", "ops_project", default=None, help="Provider project ID/name.")
+@click.option("--service", "ops_service", default=None, help="Provider service ID/name.")
+@click.pass_context
+def remote_ops(
+    ctx: click.Context,
+    ops_provider: str | None,
+    ops_project: str | None,
+    ops_service: str | None,
+) -> None:
+    """Run provider-level post-deploy operations on hosted services."""
+    ctx.ensure_object(dict)
+    ctx.obj["ops_provider"] = ops_provider
+    ctx.obj["ops_project"] = ops_project
+    ctx.obj["ops_service"] = ops_service
+
+
+@remote_ops.command(name="status")
+@click.option("--json", "as_json", is_flag=True, default=False, help="Print raw JSON output.")
+@click.pass_context
+def remote_ops_status(ctx: click.Context, as_json: bool) -> None:
+    """Inspect deployment status and metadata for a hosted service."""
+    from app.remote.ops import RemoteOpsError
+
+    try:
+        provider, scope = _resolve_remote_ops_scope(ctx)
+        status = provider.status(scope)
+        _persist_remote_ops_scope(scope)
+    except RemoteOpsError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    payload = {
+        "provider": status.provider,
+        "project": status.project,
+        "service": status.service,
+        "deployment_id": status.deployment_id,
+        "deployment_status": status.deployment_status,
+        "environment": status.environment,
+        "url": status.url,
+        "health": status.health,
+        "metadata": status.metadata,
+    }
+    if as_json:
+        click.echo(json.dumps(payload, indent=2))
+        return
+
+    click.echo(f"Provider: {status.provider}")
+    click.echo(f"Project: {status.project or '-'}")
+    click.echo(f"Service: {status.service or '-'}")
+    click.echo(f"Deployment: {status.deployment_id or '-'}")
+    click.echo(f"Status: {status.deployment_status or '-'}")
+    click.echo(f"Environment: {status.environment or '-'}")
+    click.echo(f"Health: {status.health}")
+    click.echo(f"URL: {status.url or '-'}")
+    if status.metadata:
+        click.echo("Metadata:")
+        for key, value in status.metadata.items():
+            click.echo(f"  {key}: {value}")
+
+
+@remote_ops.command(name="logs")
+@click.option("--follow", is_flag=True, default=False, help="Stream logs continuously.")
+@click.option(
+    "--lines", default=200, type=click.IntRange(1), help="Number of recent log lines to tail."
+)
+@click.pass_context
+def remote_ops_logs(ctx: click.Context, follow: bool, lines: int) -> None:
+    """Tail or stream provider logs for a hosted service."""
+    from app.remote.ops import RemoteOpsError
+
+    try:
+        provider, scope = _resolve_remote_ops_scope(ctx)
+        _persist_remote_ops_scope(scope)
+        provider.logs(scope, lines=lines, follow=follow)
+    except RemoteOpsError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+@remote_ops.command(name="restart")
+@click.option("--yes", is_flag=True, default=False, help="Skip confirmation prompt.")
+@click.option("--json", "as_json", is_flag=True, default=False, help="Print raw JSON output.")
+@click.pass_context
+def remote_ops_restart(ctx: click.Context, yes: bool, as_json: bool) -> None:
+    """Request a restart or redeploy for a hosted service."""
+    from app.remote.ops import RemoteOpsError
+
+    try:
+        provider, scope = _resolve_remote_ops_scope(ctx)
+    except RemoteOpsError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    target = scope.service or "selected service"
+    if not yes and not click.confirm(f"Restart/redeploy {target} on {scope.provider}?"):
+        click.echo("Cancelled.")
+        return
+
+    try:
+        result = provider.restart(scope)
+        _persist_remote_ops_scope(scope)
+    except RemoteOpsError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    payload = {
+        "provider": result.provider,
+        "project": result.project,
+        "service": result.service,
+        "requested": result.requested,
+        "deployment_id": result.deployment_id,
+        "message": result.message,
+    }
+    if as_json:
+        click.echo(json.dumps(payload, indent=2))
+        return
+
+    click.echo(result.message)
+    if result.deployment_id:
+        click.echo(f"Deployment: {result.deployment_id}")
 
 
 @remote.command(name="health")
@@ -190,9 +337,7 @@ def remote_trigger(ctx: click.Context, alert_json: str | None) -> None:
         missing_url_hint="Pass a URL or run 'opensre remote trigger <url>'.",
     )
     try:
-        events = client.trigger_investigation(
-            _parse_alert_json(alert_json) if alert_json else None
-        )
+        events = client.trigger_investigation(_parse_alert_json(alert_json) if alert_json else None)
         StreamRenderer().render_stream(events)
         _save_remote_base_url(client)
     except httpx.TimeoutException as exc:
@@ -203,7 +348,9 @@ def remote_trigger(ctx: click.Context, alert_json: str | None) -> None:
 
 @remote.command(name="investigate")
 @click.option("--alert-json", default=None, help="Inline alert JSON payload string.")
-@click.option("--sample", is_flag=True, default=False, help="Use the built-in sample alert payload.")
+@click.option(
+    "--sample", is_flag=True, default=False, help="Use the built-in sample alert payload."
+)
 @click.pass_context
 def remote_investigate(ctx: click.Context, alert_json: str | None, sample: bool) -> None:
     """Run an investigation on the lightweight remote server."""
@@ -241,7 +388,9 @@ def remote_investigate(ctx: click.Context, alert_json: str | None, sample: bool)
 
 
 @remote.command(name="pull")
-@click.option("--latest", is_flag=True, default=False, help="Download only the most recent investigation.")
+@click.option(
+    "--latest", is_flag=True, default=False, help="Download only the most recent investigation."
+)
 @click.option("--all", "pull_all", is_flag=True, default=False, help="Download all investigations.")
 @click.option("--output-dir", default="./investigations", help="Directory to save .md files to.")
 @click.pass_context

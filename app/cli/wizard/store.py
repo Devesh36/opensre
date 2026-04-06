@@ -86,3 +86,40 @@ def save_remote_url(url: str, path: Path | None = None) -> None:
     data.setdefault("remote", {})["url"] = url
     store_path.parent.mkdir(parents=True, exist_ok=True)
     store_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+def load_remote_ops_config(path: Path | None = None) -> dict[str, str | None]:
+    """Return persisted remote ops config values."""
+    data = _load_raw(path)
+    remote_data = data.get("remote", {})
+    if not isinstance(remote_data, dict):
+        return {"provider": None, "project": None, "service": None}
+    return {
+        "provider": str(remote_data.get("provider") or "") or None,
+        "project": str(remote_data.get("project") or "") or None,
+        "service": str(remote_data.get("service") or "") or None,
+    }
+
+
+def save_remote_ops_config(
+    *,
+    provider: str,
+    project: str | None,
+    service: str | None,
+    path: Path | None = None,
+) -> None:
+    """Persist remote ops provider scope to the store."""
+    store_path = path or get_store_path()
+    data = _load_raw(store_path)
+    remote_data = data.setdefault("remote", {})
+    remote_data["provider"] = provider
+    if project:
+        remote_data["project"] = project
+    else:
+        remote_data.pop("project", None)
+    if service:
+        remote_data["service"] = service
+    else:
+        remote_data.pop("service", None)
+    store_path.parent.mkdir(parents=True, exist_ok=True)
+    store_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")

@@ -7,6 +7,7 @@ import httpx
 from click.testing import CliRunner
 
 from app.cli.__main__ import cli
+from app.remote.ops import RestartResult, ServiceStatus
 from app.remote.stream import StreamEvent
 
 
@@ -89,3 +90,162 @@ def test_remote_group_passes_api_key_to_client() -> None:
 
     assert result.exit_code == 0
     mock_client_cls.assert_called_once_with("10.0.0.1", api_key="secret")
+
+
+def test_remote_ops_status_uses_provider_and_persists_scope() -> None:
+    runner = CliRunner()
+    provider = MagicMock()
+    provider.status.return_value = ServiceStatus(
+        provider="railway",
+        project="proj-1",
+        service="svc-1",
+        deployment_id="dep-1",
+        deployment_status="success",
+        environment="production",
+        url="https://svc-1.up.railway.app",
+        health="healthy",
+        metadata={"region": "us-west"},
+    )
+
+    with (
+        patch(
+            "app.cli.wizard.store.load_remote_ops_config",
+            return_value={"provider": None, "project": None, "service": None},
+        ),
+        patch("app.remote.ops.resolve_remote_ops_provider", return_value=provider) as mock_resolver,
+        patch("app.cli.wizard.store.save_remote_ops_config") as mock_save_scope,
+    ):
+        result = runner.invoke(
+            cli,
+            [
+                "remote",
+                "ops",
+                "--provider",
+                "railway",
+                "--project",
+                "proj-1",
+                "--service",
+                "svc-1",
+                "status",
+            ],
+        )
+
+    assert result.exit_code == 0
+    mock_resolver.assert_called_once_with("railway")
+    provider.status.assert_called_once()
+    mock_save_scope.assert_called_once_with(provider="railway", project="proj-1", service="svc-1")
+    assert "Provider: railway" in result.output
+    assert "Health: healthy" in result.output
+
+
+def test_remote_ops_status_prints_json() -> None:
+    runner = CliRunner()
+    provider = MagicMock()
+    provider.status.return_value = ServiceStatus(
+        provider="railway",
+        project="proj-2",
+        service="svc-2",
+        deployment_id=None,
+        deployment_status="building",
+        environment=None,
+        url=None,
+        health="unknown",
+        metadata={},
+    )
+
+    with (
+        patch(
+            "app.cli.wizard.store.load_remote_ops_config",
+            return_value={"provider": "railway", "project": "proj-2", "service": "svc-2"},
+        ),
+        patch("app.remote.ops.resolve_remote_ops_provider", return_value=provider),
+        patch("app.cli.wizard.store.save_remote_ops_config"),
+    ):
+        result = runner.invoke(cli, ["remote", "ops", "status", "--json"])
+
+    assert result.exit_code == 0
+    assert '"provider": "railway"' in result.output
+    assert '"deployment_status": "building"' in result.output
+
+
+def test_remote_ops_logs_forwards_follow_and_lines() -> None:
+    runner = CliRunner()
+    provider = MagicMock()
+
+    with (
+        patch(
+            "app.cli.wizard.store.load_remote_ops_config",
+            return_value={"provider": "railway", "project": "proj-3", "service": "svc-3"},
+        ),
+        patch("app.remote.ops.resolve_remote_ops_provider", return_value=provider),
+        patch("app.cli.wizard.store.save_remote_ops_config") as mock_save_scope,
+    ):
+        result = runner.invoke(cli, ["remote", "ops", "logs", "--follow", "--lines", "50"])
+
+    assert result.exit_code == 0
+    provider.logs.assert_called_once()
+    _, kwargs = provider.logs.call_args
+    assert kwargs["follow"] is True
+    assert kwargs["lines"] == 50
+    mock_save_scope.assert_called_once_with(provider="railway", project="proj-3", service="svc-3")
+
+
+def test_remote_ops_restart_cancelled_without_yes() -> None:
+    runner = CliRunner()
+    provider = MagicMock()
+
+    with (
+        patch(
+            "app.cli.wizard.store.load_remote_ops_config",
+            return_value={"provider": "railway", "project": "proj-4", "service": "svc-4"},
+        ),
+        patch("app.remote.ops.resolve_remote_ops_provider", return_value=provider),
+    ):
+        result = runner.invoke(cli, ["remote", "ops", "restart"], input="n\n")
+
+    assert result.exit_code == 0
+    assert "Cancelled." in result.output
+    provider.restart.assert_not_called()
+
+
+def test_remote_ops_restart_yes_requests_redeploy() -> None:
+    runner = CliRunner()
+    provider = MagicMock()
+    provider.restart.return_value = RestartResult(
+        provider="railway",
+        project="proj-5",
+        service="svc-5",
+        requested=True,
+        deployment_id="dep-55",
+        message="Railway redeploy requested (queued).",
+    )
+
+    with (
+        patch(
+            "app.cli.wizard.store.load_remote_ops_config",
+            return_value={"provider": None, "project": None, "service": None},
+        ),
+        patch("app.remote.ops.resolve_remote_ops_provider", return_value=provider),
+        patch("app.cli.wizard.store.save_remote_ops_config") as mock_save_scope,
+    ):
+        result = runner.invoke(
+            cli,
+            [
+                "remote",
+                "ops",
+                "--provider",
+                "railway",
+                "--project",
+                "proj-5",
+                "--service",
+                "svc-5",
+                "restart",
+                "--yes",
+            ],
+        )
+
+    assert result.exit_code == 0
+    provider.restart.assert_called_once()
+    mock_save_scope.assert_called_once_with(provider="railway", project="proj-5", service="svc-5")
+    assert "Railway redeploy requested (queued)." in result.output
+    assert "Deployment: dep-55" in result.output
