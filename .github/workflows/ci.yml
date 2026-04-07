@@ -122,9 +122,9 @@ jobs:
       matrix:
         include:
           - name: cloudwatch-demo
-            command: python3 -m tests.e2e.cloudwatch_demo.test_orchestrator
+            command: python3 -m tests.e2e.cloudwatch_demo.test_aws
           - name: s3-failed-python
-            command: python3 -m tests.e2e.s3_failed_python_on_linux.test_orchestrator
+            command: python3 -m tests.e2e.s3_failed_python_on_linux.test_aws
           - name: upstream-lambda
             command: python3 -m tests.e2e.upstream_lambda.test_agent_e2e
           - name: prefect-ecs-fargate
