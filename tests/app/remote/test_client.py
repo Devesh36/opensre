@@ -216,6 +216,32 @@ class TestProbeHealth:
         )
         assert "Remote /ok endpoint does not expose uptime yet." in report["hints"]
 
+    def test_probe_health_missing_remote_version_warns(self) -> None:
+        ok_resp = MagicMock()
+        ok_resp.status_code = 200
+        ok_resp.raise_for_status = MagicMock()
+        ok_resp.json.return_value = {"ok": True}
+
+        version_resp = MagicMock()
+        version_resp.status_code = 404
+        version_resp.json.return_value = {}
+
+        with patch("app.remote.client.httpx.Client") as mock_client_cls:
+            mock_client = MagicMock()
+            mock_client.__enter__ = MagicMock(return_value=mock_client)
+            mock_client.__exit__ = MagicMock(return_value=False)
+            mock_client.get.side_effect = [ok_resp, version_resp, httpx.ConnectError("missing")]
+            mock_client_cls.return_value = mock_client
+
+            client = RemoteAgentClient("http://host:2024")
+            report = client.probe_health(local_version="2026.4.5")
+
+        assert report["status"] == "warn"
+        assert report["remote_version"] == "unknown"
+        version_check = next(check for check in report["checks"] if check["name"] == "Version")
+        assert version_check["status"] == "warn"
+        assert version_check["detail"] == "Remote did not report a version."
+
 
 class TestBuildSyntheticPayload:
     def test_has_required_fields(self) -> None:
@@ -374,9 +400,7 @@ class TestPreflight:
 
     def test_preflight_connection_refused(self) -> None:
         client = RemoteAgentClient("http://host:2024")
-        with patch.object(
-            client, "health", side_effect=httpx.ConnectError("refused")
-        ):
+        with patch.object(client, "health", side_effect=httpx.ConnectError("refused")):
             result = client.preflight()
 
         assert result.ok is False

@@ -197,6 +197,80 @@ class RemoteAgentClient:
             return "warn"
         return "passed"
 
+    def _endpoint_exists(self, client: httpx.Client, path: str) -> bool:
+        url = f"{self.base_url}{path}"
+        try:
+            response = client.get(url, headers=self._headers)
+        except Exception:  # noqa: BLE001
+            return False
+        return response.status_code != 404
+
+    def _detect_server_type(self) -> tuple[str, list[str]]:
+        endpoints: list[str] = []
+        with httpx.Client(timeout=PREFLIGHT_TIMEOUT) as client:
+            if self._endpoint_exists(client, "/investigate"):
+                endpoints.append("/investigate")
+            if self._endpoint_exists(client, "/investigate/stream"):
+                endpoints.append("/investigate/stream")
+            if self._endpoint_exists(client, "/investigations"):
+                endpoints.append("/investigations")
+            if self._endpoint_exists(client, "/threads"):
+                endpoints.append("/threads")
+            if self._endpoint_exists(client, "/threads/*/runs/stream"):
+                endpoints.append("/threads/*/runs/stream")
+
+        if any(endpoint.startswith("/investigate") for endpoint in endpoints):
+            return "lightweight", endpoints
+        if any(endpoint.startswith("/threads") for endpoint in endpoints):
+            return "langgraph", endpoints
+        return "unknown", endpoints
+
+    def preflight(self, *, timeout: float = PREFLIGHT_TIMEOUT) -> PreflightResult:
+        started = time.monotonic()
+        try:
+            payload = self.health(timeout=timeout)
+            latency_ms = int((time.monotonic() - started) * 1000)
+
+            ok = bool(payload.get("ok", True))
+            version = str(payload.get("version", "")).strip()
+            server_type = str(payload.get("server_type", "unknown") or "unknown")
+            raw_system = payload.get("system")
+            system: dict[str, Any] = {}
+            if isinstance(raw_system, dict):
+                system = {str(key): value for key, value in raw_system.items()}
+
+            raw_endpoints = payload.get("endpoints")
+            endpoints = (
+                [str(ep) for ep in raw_endpoints if isinstance(ep, str)]
+                if isinstance(raw_endpoints, list)
+                else []
+            )
+
+            if not endpoints or server_type == "unknown":
+                detected_type, detected_endpoints = self._detect_server_type()
+                if not endpoints:
+                    endpoints = detected_endpoints
+                if server_type == "unknown":
+                    server_type = detected_type
+
+            return PreflightResult(
+                ok=ok,
+                version=version,
+                server_type=server_type,
+                endpoints=endpoints,
+                latency_ms=latency_ms,
+                system=system,
+            )
+        except httpx.TimeoutException:
+            return PreflightResult(ok=False, error="connection timed out")
+        except httpx.ConnectError:
+            return PreflightResult(ok=False, error="connection refused")
+        except httpx.HTTPStatusError as exc:
+            code = exc.response.status_code
+            return PreflightResult(ok=False, error=f"HTTP {code}")
+        except Exception as exc:  # noqa: BLE001
+            return PreflightResult(ok=False, error=str(exc) or "unknown error")
+
     def probe_health(
         self,
         *,
@@ -212,7 +286,10 @@ class RemoteAgentClient:
 
         version_status = "passed"
         version_detail = "Remote version matches local CLI"
-        if remote_version and remote_version != local_version:
+        if not remote_version:
+            version_status = "warn"
+            version_detail = "Remote did not report a version."
+        elif remote_version != local_version:
             version_status = "warn"
             version_detail = (
                 f"Remote is {remote_version}; local CLI is {local_version}. Consider redeploying."

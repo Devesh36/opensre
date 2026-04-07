@@ -100,21 +100,25 @@ def _run_deploy_interactive(ctx: click.Context) -> None:
     choices: list[Any] = []
 
     if status.get("ip"):
-        choices.extend([
-            questionary.Choice("Check deployment health", value="health"),
-            questionary.Choice("Tear down EC2 deployment", value="down"),
-            questionary.Choice("Redeploy (tear down + deploy)", value="redeploy"),
-        ])
+        choices.extend(
+            [
+                questionary.Choice("Check deployment health", value="health"),
+                questionary.Choice("Tear down EC2 deployment", value="down"),
+                questionary.Choice("Redeploy (tear down + deploy)", value="redeploy"),
+            ]
+        )
     else:
         choices.append(
             questionary.Choice("Deploy to AWS EC2 (Bedrock)", value="ec2"),
         )
 
-    choices.extend([
-        questionary.Choice("Deploy to Railway", value="railway"),
-        questionary.Separator(),
-        questionary.Choice("Exit", value="exit"),
-    ])
+    choices.extend(
+        [
+            questionary.Choice("Deploy to Railway", value="railway"),
+            questionary.Separator(),
+            questionary.Choice("Exit", value="exit"),
+        ]
+    )
 
     action = questionary.select(
         "What would you like to do?",
@@ -257,3 +261,34 @@ def deploy_ec2(down: bool, branch: str) -> None:
         except click.ClickException as exc:
             click.echo(f"\n  [warn] Health check: {exc.format_message()}", err=True)
             click.echo("  Deployment provisioned. Retry with: opensre remote health")
+
+
+@deploy.command(name="railway")
+@click.option("--project", "project_name", default=None, help="Railway project name.")
+@click.option("--service", "service_name", default=None, help="Railway service name.")
+@click.option("--dry-run", is_flag=True, default=False, help="Simulate deployment only.")
+@click.option("--yes", is_flag=True, default=False, help="Skip confirmation prompt.")
+def deploy_railway(
+    project_name: str | None,
+    service_name: str | None,
+    dry_run: bool,
+    yes: bool,
+) -> None:
+    """Deploy OpenSRE to Railway."""
+    from app.cli.deploy import run_deploy
+
+    capture_cli_invoked()
+    capture_deploy_started(target="railway", dry_run=dry_run)
+    exit_code = run_deploy(
+        target="railway",
+        project_name=project_name,
+        service_name=service_name,
+        dry_run=dry_run,
+        yes=yes,
+    )
+    if exit_code == 0:
+        capture_deploy_completed(target="railway", dry_run=dry_run)
+        return
+
+    capture_deploy_failed(target="railway", dry_run=dry_run)
+    raise SystemExit(exit_code)
