@@ -4,8 +4,8 @@
   "version": "1.0.0",
   "description": "Mintlify documentation site for OpenSRE.",
   "scripts": {
-    "dev": "npx --yes mint@latest dev",
-    "update": "npx --yes mint@latest update",
+    "dev": "npx --yes mint dev",
+    "update": "npx --yes mint update",
     "check:navigation": "python3 scripts/check_docs_navigation.py",
     "check:config": "python3 -m json.tool docs.json > /dev/null",
     "check": "npm run check:config && npm run check:navigation"
