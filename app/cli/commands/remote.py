@@ -8,6 +8,10 @@ from typing import TYPE_CHECKING, Any
 
 import click
 
+from app.cli.commands.remote_health import _save_remote_base_url, run_remote_health_check
+from app.cli.context import is_json_output, is_yes
+from app.cli.errors import OpenSREError
+
 if TYPE_CHECKING:
     from app.remote.client import RemoteAgentClient
     from app.remote.ops import RemoteOpsProvider, RemoteServiceScope
@@ -36,15 +40,13 @@ def _load_remote_client(ctx: click.Context, *, missing_url_hint: str) -> RemoteA
 
     resolved_url = _context_value(ctx, "url") or load_remote_url()
     if not resolved_url:
-        raise click.ClickException(f"No remote URL configured. {missing_url_hint}")
+        raise OpenSREError(
+            "No remote URL configured.",
+            suggestion=missing_url_hint,
+            docs_url="https://github.com/Tracer-Cloud/opensre#remote-agent",
+        )
 
     return RemoteAgentClient(resolved_url, api_key=_context_value(ctx, "api_key"))
-
-
-def _save_remote_base_url(client: RemoteAgentClient) -> None:
-    from app.cli.wizard.store import save_remote_url
-
-    save_remote_url(client.base_url)
 
 
 def _parse_alert_json(alert_json: str) -> dict[str, Any]:
@@ -95,75 +97,370 @@ def _run_remote_interactive(ctx: click.Context) -> None:
     import questionary
     from rich.console import Console
 
-    from app.cli.wizard.store import load_remote_url, save_remote_url
+    from app.cli.wizard.store import (
+        load_active_remote_name,
+        load_named_remotes,
+        load_remote_url,
+        save_named_remote,
+        set_active_remote,
+    )
 
     console = Console(highlight=False)
-    url = _context_value(ctx, "url") or load_remote_url()
-    status = f"  connected to {url}" if url else "  no remote URL configured"
     style = _remote_style(questionary)
 
+    explicit_url = _context_value(ctx, "url")
+    url = explicit_url or load_remote_url()
+    remotes = load_named_remotes()
+    active_name = load_active_remote_name()
+
+    if not explicit_url and len(remotes) > 1:
+        url = _pick_remote(remotes, active_name, style, questionary, console)
+        if url is None:
+            return
+        ctx.obj["url"] = url
+        for name, remote_url in remotes.items():
+            if remote_url == url:
+                set_active_remote(name)
+                active_name = name
+                break
+
+    label = active_name or "custom"
+    if url:
+        for name, remote_url in remotes.items():
+            if remote_url == url:
+                label = name
+                break
+
+    preflight: PreflightResult | None = None
+    if url:
+        preflight = _run_preflight(url, _context_value(ctx, "api_key"), console)
+
     console.print()
-    console.print(f"  [bold cyan]Remote Agent[/bold cyan]  {status}")
+    _render_preflight_status(url or "", label, preflight, console)
     console.print()
 
-    action = questionary.select(
-        "What would you like to do?",
-        choices=[
-            questionary.Choice("Check health", value="health"),
-            questionary.Choice("Run investigation (custom alert)", value="investigate"),
-            questionary.Choice("Run investigation (sample alert)", value="investigate-sample"),
-            questionary.Choice("List investigations", value="list"),
-            questionary.Choice("Pull investigation reports", value="pull"),
-            questionary.Choice("Configure remote URL", value="configure"),
-            questionary.Separator(),
-            questionary.Choice("Exit", value="exit"),
-        ],
+    while True:
+        configure_choices: list[Any] = [
+            questionary.Choice("Add new remote", value="configure-add"),
+        ]
+        if len(remotes) > 1:
+            configure_choices.append(
+                questionary.Choice("Switch active remote", value="configure-switch"),
+            )
+
+        investigation_choices = _build_investigation_choices(preflight, questionary)
+        managed_deployment = _managed_ec2_deployment_status(url, label)
+        deploy_choices = _build_deploy_choices(managed_deployment, preflight, questionary)
+
+        can_list = not preflight or preflight.ok
+        list_choices: list[Any] = []
+        if can_list:
+            list_choices = [
+                questionary.Choice("List investigations", value="list"),
+                questionary.Choice("Pull investigation reports", value="pull"),
+            ]
+
+        action = questionary.select(
+            "What would you like to do?",
+            choices=[
+                questionary.Choice("Check health", value="health"),
+                *investigation_choices,
+                *list_choices,
+                *deploy_choices,
+                questionary.Separator("─── Configure"),
+                *configure_choices,
+                questionary.Separator(),
+                questionary.Choice("Exit", value="exit"),
+            ],
+            style=style,
+        ).ask()
+
+        if action is None or action == "exit":
+            return
+
+        if action == "redeploy-ec2":
+            from app.cli.commands.deploy import _prompt_deploy_branch, _redeploy_ec2
+
+            branch = _prompt_deploy_branch(questionary, style)
+            if branch is None:
+                continue
+
+            confirmation = f"Tear down current EC2 remote and redeploy from '{branch}'?"
+            if preflight and preflight.supports_investigate and not preflight.supports_live_stream:
+                confirmation = (
+                    f"Tear down current EC2 remote and redeploy from '{branch}' "
+                    "to restore live investigation streaming?"
+                )
+
+            if not questionary.confirm(
+                confirmation,
+                default=False,
+                style=style,
+            ).ask():
+                console.print("  [dim]Cancelled.[/dim]")
+                console.print()
+                continue
+
+            _redeploy_ec2(ctx, branch=branch, console=console)
+            explicit_url = None
+            remotes = load_named_remotes()
+            active_name = load_active_remote_name()
+            url = load_remote_url()
+            if url:
+                ctx.obj["url"] = url
+
+            label = active_name or "custom"
+            if url:
+                for name, remote_url in remotes.items():
+                    if remote_url == url:
+                        label = name
+                        break
+                preflight = _run_preflight(url, _context_value(ctx, "api_key"), console)
+                console.print()
+                _render_preflight_status(url, label, preflight, console)
+            else:
+                preflight = None
+            console.print()
+            continue
+
+        if action == "configure-add":
+            name = questionary.text("Remote name (e.g. staging, local):", style=style).ask()
+            if not name:
+                continue
+            new_url = questionary.text("Remote URL:", default="", style=style).ask()
+            if not new_url:
+                continue
+            make_active = questionary.confirm(
+                "Set as active remote?", default=True, style=style
+            ).ask()
+            save_named_remote(name, new_url, set_active=bool(make_active), source="manual")
+            if make_active:
+                console.print(f"  Saved and activated: [bold]{name}[/bold] → {new_url}")
+            else:
+                console.print(f"  Saved: [bold]{name}[/bold] → {new_url}")
+            remotes = load_named_remotes()
+            continue
+
+        if action == "configure-switch":
+            switched_url = _pick_remote(remotes, active_name, style, questionary, console)
+            if switched_url:
+                for name, remote_url in remotes.items():
+                    if remote_url == switched_url:
+                        set_active_remote(name)
+                        active_name = name
+                        console.print(f"  Active remote: [bold]{name}[/bold] → {switched_url}")
+                        break
+                url = switched_url
+                ctx.obj["url"] = url
+                preflight = _run_preflight(url, _context_value(ctx, "api_key"), console)
+                console.print()
+                _render_preflight_status(url, name, preflight, console)
+            console.print()
+            continue
+
+        if action == "health":
+            if preflight and url:
+                _render_health_with_preflight(preflight, url, console)
+            else:
+                ctx.invoke(remote_health)
+            console.print()
+            continue
+
+        if action == "investigate":
+            alert_input = questionary.text("Alert JSON payload:", style=style).ask()
+            if not alert_input:
+                click.echo("  No payload provided.")
+                continue
+            _run_streamed_investigation(ctx, _parse_alert_json(alert_input))
+            continue
+
+        if action == "investigate-sample":
+            click.echo("  Using sample alert: etl-daily-orders-failure (critical)")
+            _run_streamed_investigation(ctx, _sample_alert_payload())
+            continue
+
+        if action in ("investigate-langgraph", "investigate-sample-langgraph"):
+            if action == "investigate-langgraph":
+                alert_input = questionary.text("Alert JSON payload:", style=style).ask()
+                if not alert_input:
+                    click.echo("  No payload provided.")
+                    continue
+                payload = _parse_alert_json(alert_input)
+            else:
+                click.echo("  Using sample alert: etl-daily-orders-failure (critical)")
+                payload = _sample_alert_payload()
+            _run_langgraph_investigation(ctx, payload)
+            continue
+
+        if action == "list":
+            _browse_investigations(ctx, style, questionary, console)
+            continue
+
+        mode = questionary.select(
+            "Which investigations?",
+            choices=[
+                questionary.Choice("Latest only", value="latest"),
+                questionary.Choice("All", value="all"),
+            ],
+            style=style,
+        ).ask()
+        if mode == "latest":
+            ctx.invoke(remote_pull, latest=True, pull_all=False, output_dir="./investigations")
+        elif mode == "all":
+            ctx.invoke(remote_pull, latest=False, pull_all=True, output_dir="./investigations")
+        console.print()
+
+
+def _pick_remote(
+    remotes: dict[str, str],
+    active_name: str | None,
+    style: Any,
+    questionary: Any,
+    console: Any,
+) -> str | None:
+    """Prompt the user to select from saved remotes. Returns the chosen URL."""
+    choices: list[Any] = []
+    default_url: str | None = None
+    for name, url in remotes.items():
+        suffix = "  ← active" if name == active_name else ""
+        choices.append(questionary.Choice(f"{name}  ({url}){suffix}", value=url))
+        if name == active_name:
+            default_url = url
+
+    console.print()
+    console.print("  [bold cyan]Remote Agent[/bold cyan]  multiple remotes configured")
+    console.print()
+
+    selected: str | None = questionary.select(
+        "Which remote?",
+        choices=choices,
+        default=default_url,
         style=style,
     ).ask()
+    return selected
 
-    if action is None or action == "exit":
+
+def _run_streamed_investigation(ctx: click.Context, raw_alert: dict[str, Any]) -> None:
+    """Stream an investigation from the remote server with live terminal UI.
+
+    Catches 404 on ``/investigate/stream`` and switches to the
+    LangGraph trigger path when appropriate.
+    """
+    import httpx
+
+    from app.remote.renderer import StreamRenderer
+
+    client = _load_remote_client(
+        ctx,
+        missing_url_hint="Pass --url or run 'opensre remote health <url>'.",
+    )
+    try:
+        events = client.stream_investigate(raw_alert)
+        StreamRenderer().render_stream(events)
+        _save_remote_base_url(client)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            _handle_stream_404(ctx, client, raw_alert)
+            return
+        raise OpenSREError(
+            f"Remote investigation failed: HTTP {exc.response.status_code}",
+            suggestion="Run 'opensre remote health' to verify the remote agent.",
+        ) from exc
+    except httpx.TimeoutException as exc:
+        raise OpenSREError(
+            f"Connection timed out reaching {client.base_url}.",
+            suggestion="Check network connectivity and verify the remote agent is running.",
+        ) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise OpenSREError(
+            f"Remote investigation failed: {exc}",
+            suggestion="Run 'opensre remote health' to verify the remote agent.",
+        ) from exc
+
+
+def _handle_stream_404(
+    ctx: click.Context,
+    client: RemoteAgentClient,
+    raw_alert: dict[str, Any],
+) -> None:
+    """Diagnose a 404 on ``/investigate/stream`` and keep streaming paths only."""
+    from rich.console import Console
+
+    console = Console(highlight=False)
+    preflight = client.preflight()
+
+    if preflight.supports_langgraph:
+        console.print(
+            "  [yellow]Streaming endpoint not available — LangGraph deployment detected.[/yellow]"
+        )
+        console.print("  [dim]Auto-switching to LangGraph trigger path...[/dim]")
+        console.print()
+        _run_langgraph_investigation(ctx, raw_alert)
         return
 
-    if action == "configure":
-        new_url = questionary.text("Remote URL:", default=url or "", style=style).ask()
-        if new_url:
-            save_remote_url(new_url)
-            click.echo(f"  Saved: {new_url}")
-        return
+    if preflight.ok and preflight.supports_investigate:
+        version_hint = f" (v{preflight.version})" if preflight.version else ""
+        raise OpenSREError(
+            f"Live investigation streaming is unavailable on this server{version_hint}.",
+            suggestion=(
+                "Redeploy the latest remote server to stream LangGraph step events. "
+                "Use 'opensre remote investigate --no-stream' only if you explicitly "
+                "want the legacy blocking request."
+            ),
+        )
 
-    if action == "health":
-        ctx.invoke(remote_health)
-        return
+    version_hint = f" (v{preflight.version})" if preflight.version else ""
+    raise OpenSREError(
+        f"Endpoint /investigate/stream not found on server{version_hint}.",
+        suggestion=(
+            "The remote server may need updating. "
+            "Redeploy with the latest version or use 'opensre remote trigger'."
+        ),
+    )
 
-    if action == "investigate":
-        alert_input = questionary.text("Alert JSON payload:", style=style).ask()
-        if alert_input:
-            ctx.invoke(remote_investigate, alert_json=alert_input, sample=False)
-        else:
-            click.echo("  No payload provided.")
-        return
 
-    if action == "investigate-sample":
-        click.echo("  Using sample alert: etl-daily-orders-failure (critical)")
-        ctx.invoke(remote_investigate, alert_json=json.dumps(_sample_alert_payload()), sample=False)
-        return
+def _run_langgraph_investigation(ctx: click.Context, raw_alert: dict[str, Any]) -> None:
+    """Run an investigation through the LangGraph ``/threads`` API.
 
-    if action == "list":
-        ctx.invoke(remote_pull, latest=False, pull_all=False, output_dir="./investigations")
-        return
+    If ``/threads`` returns 404 (misdetected server type), falls back to
+    the lightweight streaming path automatically.
+    """
+    import httpx
 
-    mode = questionary.select(
-        "Which investigations?",
-        choices=[
-            questionary.Choice("Latest only", value="latest"),
-            questionary.Choice("All", value="all"),
-        ],
-        style=style,
-    ).ask()
-    if mode == "latest":
-        ctx.invoke(remote_pull, latest=True, pull_all=False, output_dir="./investigations")
-    elif mode == "all":
-        ctx.invoke(remote_pull, latest=False, pull_all=True, output_dir="./investigations")
+    from app.remote.renderer import StreamRenderer
+
+    client = _load_remote_client(
+        ctx,
+        missing_url_hint="Pass --url or run 'opensre remote health <url>'.",
+    )
+    try:
+        events = client.trigger_investigation(raw_alert)
+        StreamRenderer().render_stream(events)
+        _save_remote_base_url(client)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            from rich.console import Console
+
+            console = Console(highlight=False)
+            console.print("  [yellow]LangGraph endpoint not available on this server.[/yellow]")
+            console.print("  [dim]Falling back to lightweight server path...[/dim]")
+            console.print()
+            _run_streamed_investigation(ctx, raw_alert)
+            return
+        raise OpenSREError(
+            f"Remote investigation failed: HTTP {exc.response.status_code}",
+            suggestion="Run 'opensre remote health' to verify the remote agent.",
+        ) from exc
+    except httpx.TimeoutException as exc:
+        raise OpenSREError(
+            f"Connection timed out reaching {client.base_url}.",
+            suggestion="Check network connectivity and verify the remote agent is running.",
+        ) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise OpenSREError(
+            f"Remote investigation failed: {exc}",
+            suggestion="Run 'opensre remote health' to verify the remote agent.",
+        ) from exc
 
 
 @click.group(name="remote", invoke_without_command=True)
@@ -181,6 +478,14 @@ def remote(ctx: click.Context, url: str | None, api_key: str | None) -> None:
     ctx.obj["api_key"] = api_key
 
     if ctx.invoked_subcommand is None:
+        if is_yes() or is_json_output():
+            raise OpenSREError(
+                "No subcommand provided.",
+                suggestion=(
+                    "Use 'opensre remote health', 'opensre remote trigger', "
+                    "'opensre remote investigate', or 'opensre remote pull'."
+                ),
+            )
         _run_remote_interactive(ctx)
 
 
@@ -305,28 +610,30 @@ def remote_ops_restart(ctx: click.Context, yes: bool, as_json: bool) -> None:
 
 
 @remote.command(name="health")
+@click.option(
+    "--json", "output_json", is_flag=True, help="Print machine-readable JSON health report."
+)
 @click.pass_context
-def remote_health(ctx: click.Context) -> None:
+def remote_health(ctx: click.Context, output_json: bool) -> None:
     """Check the health of a remote deployed agent."""
-    import httpx
-
     client = _load_remote_client(
         ctx,
         missing_url_hint="Pass a URL or run 'opensre remote health <url>'.",
     )
-    try:
-        click.echo(json.dumps(client.health(), indent=2))
-        _save_remote_base_url(client)
-    except httpx.TimeoutException as exc:
-        raise click.ClickException(f"Connection timed out reaching {client.base_url}.") from exc
-    except Exception as exc:  # noqa: BLE001
-        raise click.ClickException(f"Health check failed: {exc}") from exc
+    run_remote_health_check(
+        base_url=client.base_url,
+        api_key=_context_value(ctx, "api_key"),
+        output_json=output_json,
+        save_url=True,
+        client=client,
+    )
 
 
 @remote.command(name="trigger")
 @click.option("--alert-json", default=None, help="Inline alert JSON payload string.")
+@click.option("--detach", is_flag=True, help="Fire the investigation and return immediately.")
 @click.pass_context
-def remote_trigger(ctx: click.Context, alert_json: str | None) -> None:
+def remote_trigger(ctx: click.Context, alert_json: str | None, detach: bool) -> None:
     """Trigger an investigation on a remote deployed agent and stream results."""
     import httpx
 
@@ -334,16 +641,24 @@ def remote_trigger(ctx: click.Context, alert_json: str | None) -> None:
 
     client = _load_remote_client(
         ctx,
-        missing_url_hint="Pass a URL or run 'opensre remote trigger <url>'.",
+        missing_url_hint="Pass --url or run 'opensre remote trigger --url <host>'.",
     )
+    if detach:
+        click.echo("Detach mode is not yet supported; streaming inline.")
     try:
         events = client.trigger_investigation(_parse_alert_json(alert_json) if alert_json else None)
         StreamRenderer().render_stream(events)
         _save_remote_base_url(client)
     except httpx.TimeoutException as exc:
-        raise click.ClickException(f"Connection timed out reaching {client.base_url}.") from exc
+        raise OpenSREError(
+            f"Connection timed out reaching {client.base_url}.",
+            suggestion="Check network connectivity and verify the remote agent is running.",
+        ) from exc
     except Exception as exc:  # noqa: BLE001
-        raise click.ClickException(f"Remote investigation failed: {exc}") from exc
+        raise OpenSREError(
+            f"Remote investigation failed: {exc}",
+            suggestion="Run 'opensre remote health' to verify the remote agent.",
+        ) from exc
 
 
 @remote.command(name="investigate")
@@ -352,8 +667,35 @@ def remote_trigger(ctx: click.Context, alert_json: str | None) -> None:
     "--sample", is_flag=True, default=False, help="Use the built-in sample alert payload."
 )
 @click.pass_context
-def remote_investigate(ctx: click.Context, alert_json: str | None, sample: bool) -> None:
-    """Run an investigation on the lightweight remote server."""
+def remote_investigate(
+    ctx: click.Context, alert_json: str | None, sample: bool, no_stream: bool
+) -> None:
+    """Run an investigation on the lightweight remote server.
+
+    \b
+    By default the investigation streams live progress (tool calls,
+    reasoning steps) to the terminal.  Use --no-stream for a blocking
+    request that prints the result once complete.
+    """
+    if alert_json:
+        raw_alert = _parse_alert_json(alert_json)
+    elif sample:
+        raw_alert = _sample_alert_payload()
+        click.echo("  Using sample alert: etl-daily-orders-failure (critical)")
+    else:
+        raise OpenSREError(
+            "No alert payload provided.",
+            suggestion="Pass --alert-json '{...}' or use --sample for a demo payload.",
+        )
+
+    if no_stream:
+        _run_blocking_investigation(ctx, raw_alert)
+    else:
+        _run_streamed_investigation(ctx, raw_alert)
+
+
+def _run_blocking_investigation(ctx: click.Context, raw_alert: dict[str, Any]) -> None:
+    """Run an investigation using the blocking /investigate endpoint."""
     import httpx
 
     client = _load_remote_client(
@@ -361,22 +703,20 @@ def remote_investigate(ctx: click.Context, alert_json: str | None, sample: bool)
         missing_url_hint="Pass --url or run 'opensre remote health <url>'.",
     )
 
-    if alert_json:
-        raw_alert = _parse_alert_json(alert_json)
-    elif sample:
-        raw_alert = _sample_alert_payload()
-        click.echo("  Using sample alert: etl-daily-orders-failure (critical)")
-    else:
-        raise click.ClickException("Provide --alert-json or --sample.")
-
     click.echo("Sending investigation request (this may take a few minutes)...")
     try:
         result = client.investigate(raw_alert)
         _save_remote_base_url(client)
     except httpx.TimeoutException as exc:
-        raise click.ClickException(f"Connection timed out: {exc}") from exc
+        raise OpenSREError(
+            f"Connection timed out: {exc}",
+            suggestion="The remote agent may be overloaded. Try again or check 'opensre remote health'.",
+        ) from exc
     except Exception as exc:  # noqa: BLE001
-        raise click.ClickException(f"Remote investigation failed: {exc}") from exc
+        raise OpenSREError(
+            f"Remote investigation failed: {exc}",
+            suggestion="Run 'opensre remote health' to verify the remote agent.",
+        ) from exc
 
     click.echo(f"\n  Investigation ID: {result.get('id', 'N/A')}")
     root_cause = str(result.get("root_cause", ""))
@@ -406,9 +746,15 @@ def remote_pull(ctx: click.Context, latest: bool, pull_all: bool, output_dir: st
         investigations = client.list_investigations()
         _save_remote_base_url(client)
     except httpx.TimeoutException as exc:
-        raise click.ClickException(f"Connection timed out: {exc}") from exc
+        raise OpenSREError(
+            f"Connection timed out: {exc}",
+            suggestion="Check network connectivity and verify the remote agent is running.",
+        ) from exc
     except Exception as exc:  # noqa: BLE001
-        raise click.ClickException(f"Failed to list investigations: {exc}") from exc
+        raise OpenSREError(
+            f"Failed to list investigations: {exc}",
+            suggestion="Run 'opensre remote health' to verify the remote agent.",
+        ) from exc
 
     if not investigations:
         click.echo("No investigations found on the remote server.")
