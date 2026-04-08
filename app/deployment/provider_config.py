@@ -29,9 +29,6 @@ def validate_aws_deploy_config(config: Mapping[str, object]) -> ProviderValidati
     session_token = _string(config, "session_token")
 
     errors: list[str] = []
-    if not region:
-        errors.append("AWS region is required.")
-
     if role_arn:
         if not role_arn.startswith("arn:aws:iam::"):
             errors.append("AWS role ARN must start with 'arn:aws:iam::'.")
@@ -105,7 +102,7 @@ def dry_run_provider_validation(
     env: Mapping[str, str] | None = None,
 ) -> ProviderValidationResult:
     """Validate provider configuration using environment variables only."""
-    source_env = env or os.environ
+    source_env = env if env is not None else os.environ
     resolved = provider.strip().lower()
 
     if resolved == "aws":
