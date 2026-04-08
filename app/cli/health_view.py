@@ -62,9 +62,20 @@ def render_health_report(
     console.print()
     console.print(Panel.fit("[bold cyan]OpenSRE Health[/bold cyan]", border_style="cyan"))
 
+    from app.guardrails.rules import get_default_rules_path, load_rules
+
+    rules_path = get_default_rules_path()
+    if rules_path.exists():
+        rules = load_rules(rules_path)
+        enabled = [r for r in rules if r.enabled]
+        guardrails_status = f"{len(enabled)} rules active ({rules_path})"
+    else:
+        guardrails_status = "not configured"
+
     meta = Table.grid(padding=(0, 1))
     meta.add_row("[bold]Environment[/bold]", environment)
     meta.add_row("[bold]Integration store[/bold]", store_path_text)
+    meta.add_row("[bold]Guardrails[/bold]", guardrails_status)
     console.print(meta)
 
     summary = Text.assemble(
