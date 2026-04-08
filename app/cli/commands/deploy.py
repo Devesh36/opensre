@@ -7,6 +7,12 @@ from typing import Any
 
 import click
 
+from app.analytics.cli import (
+    capture_cli_invoked,
+    capture_deploy_completed,
+    capture_deploy_failed,
+    capture_deploy_started,
+)
 from app.cli.context import is_json_output, is_yes
 from app.cli.errors import OpenSREError
 from app.deployment.ec2_config import load_remote_outputs
@@ -143,6 +149,10 @@ def _run_deploy_interactive(ctx: click.Context) -> None:
         ctx.invoke(deploy_ec2, down=False, branch=branch)
         return
 
+    if action == "railway":
+        ctx.invoke(deploy_railway)
+        return
+
     if action == "down":
         if not questionary.confirm(
             f"Tear down EC2 instance {status.get('instance_id', '')}?",
@@ -193,6 +203,14 @@ def _check_deploy_health(status: dict[str, str], console: Any) -> None:
         console.print(f"  [red]Unhealthy[/red]  {exc}")
 
 
+def _build_remote_url(outputs: Mapping[str, object]) -> str | None:
+    ip = str(outputs.get("PublicIpAddress", "")).strip()
+    if not ip:
+        return None
+    port = str(outputs.get("ServerPort", "8080")).strip() or "8080"
+    return f"http://{ip}:{port}"
+
+
 @click.group(name="deploy", invoke_without_command=True)
 @click.pass_context
 def deploy(ctx: click.Context) -> None:
@@ -233,6 +251,48 @@ def deploy_ec2(down: bool, branch: str) -> None:
         destroy()
         return
 
+    from app.cli.commands.remote_health import run_remote_health_check
     from tests.deployment.ec2.infrastructure_sdk.deploy_remote import deploy as run_deploy
 
-    _persist_remote_url(run_deploy(branch=branch))
+    outputs = run_deploy(branch=branch)
+    _persist_remote_url(outputs)
+
+    remote_url = _build_remote_url(outputs)
+    if remote_url:
+        click.echo("\n  Running remote deployment health check...")
+        try:
+            run_remote_health_check(base_url=remote_url, output_json=False, save_url=False)
+        except click.ClickException as exc:
+            click.echo(f"\n  [warn] Health check: {exc.format_message()}", err=True)
+            click.echo("  Deployment provisioned. Retry with: opensre remote health")
+
+
+@deploy.command(name="railway")
+@click.option("--project", "project_name", default=None, help="Railway project name.")
+@click.option("--service", "service_name", default=None, help="Railway service name.")
+@click.option("--dry-run", is_flag=True, default=False, help="Simulate deployment only.")
+@click.option("--yes", is_flag=True, default=False, help="Skip confirmation prompt.")
+def deploy_railway(
+    project_name: str | None,
+    service_name: str | None,
+    dry_run: bool,
+    yes: bool,
+) -> None:
+    """Deploy OpenSRE to Railway."""
+    from app.cli.deploy import run_deploy
+
+    capture_cli_invoked()
+    capture_deploy_started(target="railway", dry_run=dry_run)
+    exit_code = run_deploy(
+        target="railway",
+        project_name=project_name,
+        service_name=service_name,
+        dry_run=dry_run,
+        yes=yes,
+    )
+    if exit_code == 0:
+        capture_deploy_completed(target="railway", dry_run=dry_run)
+        return
+
+    capture_deploy_failed(target="railway", dry_run=dry_run)
+    raise SystemExit(exit_code)
