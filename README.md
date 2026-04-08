@@ -449,6 +449,13 @@ Thanks goes to these amazing people:
             <sub><b>yashksaini-coder</b></sub>
         </a>
     </td>
+            <td align="center">
+        <a href="https://github.com/haliaeetusvocifer">
+            <img src="https://avatars.githubusercontent.com/u/20953018?v=4" width="100" alt="haliaeetusvocifer"/>
+            <br />
+            <sub><b>haliaeetusvocifer</b></sub>
+        </a>
+    </td>
 		</tr>
 	</tbody>
 </table>

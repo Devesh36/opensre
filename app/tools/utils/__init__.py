@@ -1,4 +1,4 @@
-"""Tool utilities - data validation and evidence compaction."""
+"""Tool utilities - data validation, evidence compaction, and log deduplication."""
 
 from app.tools.utils.compaction import (
     DEFAULT_ERROR_LOG_LIMIT,
@@ -16,6 +16,13 @@ from app.tools.utils.compaction import (
     truncate_message,
 )
 from app.tools.utils.data_validation import validate_host_metrics
+from app.tools.utils.log_compaction import (
+    build_error_taxonomy,
+    deduplicate_logs,
+)
+from app.tools.utils.log_compaction import (
+    compact_logs as compact_logs_dedup,
+)
 
 __all__ = [
     # Data validation
@@ -29,6 +36,10 @@ __all__ = [
     "truncate_list",
     "truncate_message",
     "truncate_log_entry",
+    # Log deduplication and taxonomy
+    "deduplicate_logs",
+    "build_error_taxonomy",
+    "compact_logs_dedup",
     # Constants
     "DEFAULT_LOG_LIMIT",
     "DEFAULT_ERROR_LOG_LIMIT",
