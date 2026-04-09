@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import time
 from typing import Any, TypedDict
+from urllib.parse import urlparse
 
 from app.nodes.publish_findings.urls.aws import (
     build_datadog_logs_url,
@@ -82,6 +83,9 @@ class ReportContext(TypedDict, total=False):
     # Integration endpoints (for building deep links)
     grafana_endpoint: str | None
     datadog_site: str | None
+
+    # Concrete source provenance, keyed by source name (grafana, eks, github, ...)
+    source_provenance: dict[str, dict[str, str]]
 
     kube_pod_name: str | None
     kube_container_name: str | None
@@ -153,6 +157,7 @@ class _NormalizedState:
     def __init__(self, state: InvestigationState) -> None:
         context = state.get("context", {}) or {}
         evidence = state.get("evidence", {}) or {}
+        available_sources = state.get("available_sources", {}) or {}
         raw_alert_value = state.get("raw_alert", {})
 
         self.evidence: dict[str, Any] = evidence
@@ -160,8 +165,8 @@ class _NormalizedState:
         self.web_run: dict[str, Any] = context.get("tracer_web_run", {}) or {}
         self.batch: dict[str, Any] = evidence.get("batch_jobs", {}) or {}
         self.s3: dict[str, Any] = evidence.get("s3", {}) or {}
+        self.available_sources: dict[str, dict[str, Any]] = available_sources
 
-        available_sources = state.get("available_sources", {}) or {}
         self.grafana_endpoint: str | None = (available_sources.get("grafana") or {}).get("grafana_endpoint")
         self.datadog_site: str = (available_sources.get("datadog") or {}).get("site") or "datadoghq.com"
 
@@ -484,6 +489,201 @@ def _add_coralogix_logs(
     source_to_id["coralogix_logs"] = eid
 
 
+def _normalize_endpoint_target(endpoint: str) -> str:
+    parsed = urlparse(endpoint.strip())
+    return parsed.netloc or parsed.path.strip("/") or endpoint.strip()
+
+
+def _build_source_provenance(available_sources: dict[str, dict[str, Any]]) -> dict[str, dict[str, str]]:
+    """Return a compact provenance summary for concrete source instances."""
+    provenance: dict[str, dict[str, str]] = {}
+
+    grafana = available_sources.get("grafana") or {}
+    grafana_endpoint = str(grafana.get("grafana_endpoint") or grafana.get("endpoint") or "").strip()
+    if grafana_endpoint:
+        provenance["grafana"] = {
+            "label": "Grafana",
+            "summary": ", ".join(
+                part
+                for part in [
+                    f"instance={_normalize_endpoint_target(grafana_endpoint)}",
+                    f"service={grafana.get('service_name')}" if grafana.get("service_name") else None,
+                    f"pipeline={grafana.get('pipeline_name')}" if grafana.get("pipeline_name") else None,
+                ]
+                if part
+            ),
+        }
+
+    datadog = available_sources.get("datadog") or {}
+    if datadog:
+        provenance["datadog"] = {
+            "label": "Datadog",
+            "summary": ", ".join(
+                part
+                for part in [
+                    f"site={datadog.get('site', 'datadoghq.com')}",
+                    f"query={datadog.get('default_query')}" if datadog.get("default_query") else None,
+                    f"namespace={((datadog.get('kubernetes_context') or {}).get('namespace'))}" if (datadog.get("kubernetes_context") or {}).get("namespace") else None,
+                ]
+                if part
+            ),
+        }
+
+    honeycomb = available_sources.get("honeycomb") or {}
+    if honeycomb:
+        provenance["honeycomb"] = {
+            "label": "Honeycomb",
+            "summary": ", ".join(
+                part
+                for part in [
+                    f"dataset={honeycomb.get('dataset', '__all__')}",
+                    f"service={honeycomb.get('service_name')}" if honeycomb.get("service_name") else None,
+                    f"trace_id={honeycomb.get('trace_id')}" if honeycomb.get("trace_id") else None,
+                ]
+                if part
+            ),
+        }
+
+    coralogix = available_sources.get("coralogix") or {}
+    if coralogix:
+        provenance["coralogix"] = {
+            "label": "Coralogix",
+            "summary": ", ".join(
+                part
+                for part in [
+                    f"application={coralogix.get('application_name')}" if coralogix.get("application_name") else None,
+                    f"subsystem={coralogix.get('subsystem_name')}" if coralogix.get("subsystem_name") else None,
+                ]
+                if part
+            ),
+        }
+
+    eks = available_sources.get("eks") or {}
+    if eks:
+        provenance["eks"] = {
+            "label": "AWS EKS",
+            "summary": ", ".join(
+                part
+                for part in [
+                    f"cluster={eks.get('cluster_name')}" if eks.get("cluster_name") else None,
+                    f"namespace={eks.get('namespace')}" if eks.get("namespace") else None,
+                    f"pod={eks.get('pod_name')}" if eks.get("pod_name") else None,
+                    f"deployment={eks.get('deployment')}" if eks.get("deployment") else None,
+                    f"region={eks.get('region')}" if eks.get("region") else None,
+                ]
+                if part
+            ),
+        }
+
+    cloudwatch = available_sources.get("cloudwatch") or {}
+    if cloudwatch:
+        provenance["cloudwatch"] = {
+            "label": "CloudWatch",
+            "summary": ", ".join(
+                part
+                for part in [
+                    f"log_group={cloudwatch.get('log_group')}" if cloudwatch.get("log_group") else None,
+                    f"stream={cloudwatch.get('log_stream')}" if cloudwatch.get("log_stream") else None,
+                    f"region={cloudwatch.get('region')}" if cloudwatch.get("region") else None,
+                ]
+                if part
+            ),
+        }
+
+    s3 = available_sources.get("s3") or {}
+    if s3:
+        provenance["s3"] = {
+            "label": "S3",
+            "summary": ", ".join(
+                part
+                for part in [
+                    f"bucket={s3.get('bucket')}" if s3.get("bucket") else None,
+                    f"key={s3.get('key')}" if s3.get("key") else None,
+                    f"prefix={s3.get('prefix')}" if s3.get("prefix") else None,
+                ]
+                if part
+            ),
+        }
+
+    tracer_web = available_sources.get("tracer_web") or {}
+    if tracer_web:
+        provenance["tracer_web"] = {
+            "label": "Tracer Web",
+            "summary": ", ".join(
+                part
+                for part in [
+                    f"trace_id={tracer_web.get('trace_id')}" if tracer_web.get("trace_id") else None,
+                    f"run_url={tracer_web.get('run_url')}" if tracer_web.get("run_url") else None,
+                ]
+                if part
+            ),
+        }
+
+    github = available_sources.get("github") or {}
+    if github:
+        provenance["github"] = {
+            "label": "GitHub",
+            "summary": ", ".join(
+                part
+                for part in [
+                    f"repo={github.get('owner')}/{github.get('repo')}" if github.get("owner") and github.get("repo") else None,
+                    f"ref={github.get('ref')}" if github.get("ref") else None,
+                    f"sha={github.get('sha')}" if github.get("sha") else None,
+                ]
+                if part
+            ),
+        }
+
+    gitlab = available_sources.get("gitlab") or {}
+    if gitlab:
+        provenance["gitlab"] = {
+            "label": "GitLab",
+            "summary": ", ".join(
+                part
+                for part in [
+                    f"project={gitlab.get('project_id')}" if gitlab.get("project_id") else None,
+                    f"ref={gitlab.get('ref_name')}" if gitlab.get("ref_name") else None,
+                    f"mr={gitlab.get('merge_request_iid')}" if gitlab.get("merge_request_iid") else None,
+                ]
+                if part
+            ),
+        }
+
+    vercel = available_sources.get("vercel") or {}
+    if vercel:
+        provenance["vercel"] = {
+            "label": "Vercel",
+            "summary": ", ".join(
+                part
+                for part in [
+                    f"project={vercel.get('project_name') or vercel.get('project_slug') or vercel.get('project_id')}"
+                    if (vercel.get('project_name') or vercel.get('project_slug') or vercel.get('project_id'))
+                    else None,
+                    f"deployment_id={vercel.get('deployment_id')}" if vercel.get("deployment_id") else None,
+                    f"commit={vercel.get('github_commit_sha')}" if vercel.get("github_commit_sha") else None,
+                ]
+                if part
+            ),
+        }
+
+    return provenance
+
+
+_PROVENANCE_SOURCE_ALIASES: dict[str, str] = {
+    "cloudwatch_logs": "cloudwatch",
+    "grafana_logs": "grafana",
+    "grafana_traces": "grafana",
+    "datadog_logs": "datadog",
+    "datadog_monitors": "datadog",
+    "datadog_events": "datadog",
+    "honeycomb_traces": "honeycomb",
+    "coralogix_logs": "coralogix",
+    "s3_metadata": "s3",
+    "s3_audit": "s3",
+    "vendor_audit": "s3",
+}
+
+
 def _build_evidence_catalog(
     ns: _NormalizedState,
 ) -> tuple[dict[str, dict], dict[str, str]]:
@@ -558,7 +758,13 @@ def build_report_context(state: InvestigationState) -> ReportContext:
     4. Assemble the final dict.
     """
     ns = _NormalizedState(state)
+    source_provenance = _build_source_provenance(ns.available_sources)
     catalog, source_to_id = _build_evidence_catalog(ns)
+    # Add provenance summaries to evidence entries when possible.
+    for source_name, entry_id in source_to_id.items():
+        provenance_key = _PROVENANCE_SOURCE_ALIASES.get(source_name, source_name)
+        if provenance_key in source_provenance and entry_id in catalog:
+            catalog[entry_id]["provenance"] = source_provenance[provenance_key]["summary"]
     display_map = {eid: entry.get("display_id", eid) for eid, entry in catalog.items()}
     validated_claims = _attach_evidence_to_claims(ns.validated_claims, source_to_id, display_map)
     non_validated_claims = _attach_evidence_to_claims(ns.non_validated_claims, source_to_id, display_map)
@@ -605,6 +811,7 @@ def build_report_context(state: InvestigationState) -> ReportContext:
         # Integration endpoints for deep links
         "grafana_endpoint": ns.grafana_endpoint,
         "datadog_site": ns.datadog_site,
+        "source_provenance": source_provenance,
         # Kubernetes pod details — from Datadog evidence first, then alert annotations
         "kube_pod_name": (
             ns.evidence.get("datadog_pod_name")

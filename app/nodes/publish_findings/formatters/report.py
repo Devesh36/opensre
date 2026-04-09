@@ -45,6 +45,17 @@ def render_cloudwatch_link(ctx: ReportContext) -> str:
     return ""
 
 
+def _format_provenance_lines(ctx: ReportContext) -> list[str]:
+    provenance = ctx.get("source_provenance") or {}
+    lines: list[str] = []
+    for source_name, entry in provenance.items():
+        label = entry.get("label") or source_name.title()
+        summary = entry.get("summary") or ""
+        if summary:
+            lines.append(f"• {label}: {summary}")
+    return lines
+
+
 # ---------------------------------------------------------------------------
 # Shared section helpers — called by both text and block renderers
 # ---------------------------------------------------------------------------
@@ -328,6 +339,11 @@ def format_slack_message(ctx: ReportContext) -> str:
     if non_validated_lines:
         conclusion_block += "\n*Non-Validated Claims (Inferred):*\n" + "\n".join(non_validated_lines) + "\n"
 
+    provenance_lines = _format_provenance_lines(ctx)
+    provenance_block = ""
+    if provenance_lines:
+        provenance_block = "\n*Provenance:*\n" + "\n".join(provenance_lines) + "\n"
+
     trace_steps = build_investigation_trace(ctx)
     trace_block = "\n## Investigation Trace\n" + "\n".join(trace_steps) + "\n" if trace_steps else ""
 
@@ -343,7 +359,7 @@ def format_slack_message(ctx: ReportContext) -> str:
     # Do not prefix with a separate [RCA] title line; the consumer can render
     # section headings (Root Cause text, Findings, Investigation Trace) with
     # larger fonts as needed.
-    return f"""{conclusion_block}{trace_block}
+    return f"""{conclusion_block}{provenance_block}{trace_block}
 {cited_section}
 {cloudwatch_link}{meta_block}
 """
@@ -404,6 +420,15 @@ def build_slack_blocks(ctx: ReportContext) -> list[dict]:
         _add(_mrkdwn_section("\n".join(validated_lines)))
     if non_validated_lines:
         _add(_mrkdwn_section("*Inferred (not yet validated)*\n" + "\n".join(non_validated_lines)))
+
+    provenance_lines = _format_provenance_lines(ctx)
+    if provenance_lines:
+        blocks.append({"type": "divider"})
+        blocks.append({
+            "type": "header",
+            "text": {"type": "plain_text", "text": "Provenance"},
+        })
+        _add(_mrkdwn_section("\n".join(provenance_lines)))
 
     # ── Investigation Trace ──
     trace_steps = build_investigation_trace(ctx)
