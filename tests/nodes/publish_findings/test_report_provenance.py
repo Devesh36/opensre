@@ -20,7 +20,6 @@ def _make_state() -> dict:
         "non_validated_claims": [],
         "investigation_recommendations": [],
         "remediation_steps": [],
-        "investigation_duration_seconds": 42,
         "available_sources": {
             "grafana": {
                 "grafana_endpoint": "https://myorg.grafana.net",
@@ -59,4 +58,7 @@ def test_format_slack_message_shows_provenance() -> None:
     assert "*Provenance:*" in message
     assert "Grafana: instance=myorg.grafana.net" in message
     assert "AWS EKS: cluster=prod-cluster, namespace=payments, region=us-east-1" in message
-    assert "provenance: instance=myorg.grafana.net, service=checkout-api, pipeline=checkout-service" in message
+    assert (
+        "provenance: instance=myorg.grafana.net, service=checkout-api, pipeline=checkout-service"
+        in message
+    )

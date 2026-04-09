@@ -64,18 +64,21 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     INVESTIGATIONS_DIR.mkdir(parents=True, exist_ok=True)
     _refresh_instance_metadata()
 
+    poller_task: asyncio.Task[None] | None = None
     poller = VercelPoller(investigations_dir=INVESTIGATIONS_DIR)
-    poll_task: asyncio.Task[None] | None = None
     if poller.is_enabled:
-        poll_task = asyncio.create_task(poller.run_forever(_handle_polled_candidate))
+        poller_task = asyncio.create_task(
+            poller.run_forever(_handle_polled_candidate),
+            name="vercel-poller",
+        )
 
     try:
         yield
     finally:
-        if poll_task is not None:
-            poll_task.cancel()
+        if poller_task is not None:
+            poller_task.cancel()
             with suppress(asyncio.CancelledError):
-                await poll_task
+                await poller_task
 
 
 app = FastAPI(
