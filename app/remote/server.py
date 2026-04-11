@@ -12,7 +12,6 @@ Start with::
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import json as _json
 import logging
 import os
@@ -22,7 +21,7 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -322,11 +321,6 @@ async def _handle_polled_candidate(candidate: VercelInvestigationCandidate) -> b
         candidate.dedupe_key,
     )
     return True
-
-
-async def _run_vercel_poller(poller: VercelPoller) -> None:
-    """Run the Vercel poller in background lifecycle task."""
-    await poller.run_forever(_handle_polled_candidate)
 
 
 @app.get("/investigations", response_model=list[InvestigationMeta])
