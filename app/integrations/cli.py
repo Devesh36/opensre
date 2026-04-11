@@ -7,8 +7,7 @@ Usage:
     python -m app.integrations remove <service>
     python -m app.integrations verify [service] [--send-slack-test]
 
-Supported services: aws, coralogix, datadog, grafana, honeycomb, mongodb, mongodb_atlas, slack, opensearch, rds, tracer, github, sentry
-Supported services: aws, coralogix, datadog, grafana, honeycomb, mongodb, slack, opensearch, rds, tracer, github, sentry, vercel
+Supported services: aws, coralogix, datadog, grafana, honeycomb, mongodb, postgresql, mongodb_atlas, slack, opensearch, rds, tracer, github, sentry, vercel
 """
 
 from __future__ import annotations
@@ -41,19 +40,21 @@ def _json_echo(data: Any) -> None:
     print(json.dumps(data, indent=2, default=str))
 
 
-_SECRET_KEYS = frozenset({
-    "api_token",
-    "api_key",
-    "api_private_key",
-    "app_key",
-    "password",
-    "secret_access_key",
-    "session_token",
-    "jwt_token",
-    "webhook_url",
-    "auth_token",
-    "connection_string",
-})
+_SECRET_KEYS = frozenset(
+    {
+        "api_token",
+        "api_key",
+        "api_private_key",
+        "app_key",
+        "password",
+        "secret_access_key",
+        "session_token",
+        "jwt_token",
+        "webhook_url",
+        "auth_token",
+        "connection_string",
+    }
+)
 
 
 def _p(label: str, default: str = "", secret: bool = False) -> str:
@@ -78,13 +79,19 @@ def _die(msg: str) -> NoReturn:
 
 def _mask(obj: Any) -> Any:
     if isinstance(obj, dict):
-        return {k: (v[:4] + "****" if isinstance(v, str) and v else "****") if k in _SECRET_KEYS else _mask(v) for k, v in obj.items()}
+        return {
+            k: (v[:4] + "****" if isinstance(v, str) and v else "****")
+            if k in _SECRET_KEYS
+            else _mask(v)
+            for k, v in obj.items()
+        }
     if isinstance(obj, list):
         return [_mask(i) for i in obj]
     return obj
 
 
 # ─── setup flows ──────────────────────────────────────────────────────────────
+
 
 def _setup_grafana() -> None:
     endpoint = _p("Instance URL (e.g. https://myorg.grafana.net)")
@@ -100,7 +107,9 @@ def _setup_datadog() -> None:
     site = _p("Site", default="datadoghq.com")
     if not api_key or not app_key:
         _die("api_key and app_key are required.")
-    upsert_integration("datadog", {"credentials": {"api_key": api_key, "app_key": app_key, "site": site}})
+    upsert_integration(
+        "datadog", {"credentials": {"api_key": api_key, "app_key": app_key, "site": site}}
+    )
 
 
 def _setup_honeycomb() -> None:
@@ -152,13 +161,30 @@ def _setup_aws() -> None:
         role_arn = _p("IAM Role ARN")
         if not role_arn:
             _die("role_arn is required.")
-        upsert_integration("aws", {"role_arn": role_arn, "external_id": _p("External ID (optional)"), "credentials": {"region": region}})
+        upsert_integration(
+            "aws",
+            {
+                "role_arn": role_arn,
+                "external_id": _p("External ID (optional)"),
+                "credentials": {"region": region},
+            },
+        )
     else:
         access_key = _p("AWS_ACCESS_KEY_ID", secret=True)
         secret_key = _p("AWS_SECRET_ACCESS_KEY", secret=True)
         if not access_key or not secret_key:
             _die("access_key and secret_key are required.")
-        upsert_integration("aws", {"credentials": {"access_key_id": access_key, "secret_access_key": secret_key, "session_token": _p("Session token (optional)"), "region": region}})
+        upsert_integration(
+            "aws",
+            {
+                "credentials": {
+                    "access_key_id": access_key,
+                    "secret_access_key": secret_key,
+                    "session_token": _p("Session token (optional)"),
+                    "region": region,
+                }
+            },
+        )
 
 
 def _setup_slack() -> None:
@@ -198,7 +224,18 @@ def _setup_rds() -> None:
     password = _p("Password", secret=True)
     if not host or not database or not username:
         _die("host, database, and username are required.")
-    upsert_integration("rds", {"credentials": {"host": host, "port": int(port) if port.isdigit() else 5432, "database": database, "username": username, "password": password}})
+    upsert_integration(
+        "rds",
+        {
+            "credentials": {
+                "host": host,
+                "port": int(port) if port.isdigit() else 5432,
+                "database": database,
+                "username": username,
+                "password": password,
+            }
+        },
+    )
 
 
 def _setup_tracer() -> None:
@@ -264,7 +301,9 @@ def _setup_sentry() -> None:
 
 
 def _setup_mongodb() -> None:
-    connection_string = _p("Connection string (e.g. mongodb+srv://user:pass@cluster.example.net)", secret=True)
+    connection_string = _p(
+        "Connection string (e.g. mongodb+srv://user:pass@cluster.example.net)", secret=True
+    )
     database = _p("Database name")
     auth_source = _p("Auth source", default="admin")
     tls_choice = questionary.select(
@@ -289,6 +328,41 @@ def _setup_mongodb() -> None:
                 "database": database,
                 "auth_source": auth_source,
                 "tls": tls,
+            }
+        },
+    )
+
+
+def _setup_postgresql() -> None:
+    host = _p("Host (e.g. localhost or postgres.example.com)")
+    database = _p("Database name")
+    if not host or not database:
+        _die("host and database are required.")
+    port = _p("Port", default="5432")
+    username = _p("Username", default="postgres")
+    password = _p("Password", secret=True)
+    ssl_mode_choice = questionary.select(
+        "SSL mode",
+        choices=[
+            questionary.Choice("prefer (recommended)", value="prefer"),
+            questionary.Choice("require", value="require"),
+            questionary.Choice("disable", value="disable"),
+        ],
+        instruction="(use arrow keys)",
+    ).ask()
+    if ssl_mode_choice is None:
+        print("\nAborted.")
+        sys.exit(1)
+    upsert_integration(
+        "postgresql",
+        {
+            "credentials": {
+                "host": host,
+                "port": int(port) if port.isdigit() else 5432,
+                "database": database,
+                "username": username or "postgres",
+                "password": password,
+                "ssl_mode": ssl_mode_choice,
             }
         },
     )
@@ -329,11 +403,11 @@ _HANDLERS: dict[str, Any] = {
     "github": _setup_github,
     "sentry": _setup_sentry,
     "mongodb": _setup_mongodb,
+    "postgresql": _setup_postgresql,
 }
 
 SUPPORTED = ", ".join(_HANDLERS)
 SUPPORTED_VERIFY = ", ".join(SUPPORTED_VERIFY_SERVICES)
-
 
 
 def cmd_setup(service: str | None) -> str:
