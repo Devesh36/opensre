@@ -68,12 +68,10 @@ def run_repl_session() -> int:
 
         try:
             if routed.kind == "alert" and routed.payload is not None:
-                with _console.status("[cyan]Investigating alert...[/cyan]", spinner="dots"):
-                    run_alert_investigation(state, routed.payload)
+                run_alert_investigation(state, routed.payload)
                 render_run_summary(state)
             else:
-                with _console.status("[cyan]Refining investigation...[/cyan]", spinner="dots"):
-                    run_followup(state, routed.text)
+                run_followup(state, routed.text)
                 render_run_summary(state)
         except KeyboardInterrupt:
             state.interruption_requested = True

@@ -154,7 +154,6 @@ def investigate_command(
         input_json=input_json,
         interactive=interactive,
     )
-    exit_code = ERROR
     try:
         if print_template:
             _write_result(build_alert_template(print_template), output)
@@ -168,11 +167,8 @@ def investigate_command(
         )
         result = run_investigation_cli_streaming(raw_alert=payload)
         _write_result(result, output)
-        exit_code = SUCCESS
+        capture_investigation_completed()
+        raise SystemExit(SUCCESS)
     except Exception:
         capture_investigation_failed()
         raise
-
-    if exit_code == SUCCESS:
-        capture_investigation_completed()
-    raise SystemExit(exit_code)
