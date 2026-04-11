@@ -52,10 +52,14 @@ def run_repl_session() -> int:
         except KeyboardInterrupt:
             if state.active_run:
                 state.interruption_requested = True
+        except KeyboardInterrupt:
+            if state.active_run:
+                state.interruption_requested = True
                 state.active_run = False
             else:
                 state.interruption_requested = False
             _console.print("\n[dim]Interrupted. Session still running.[/dim]")
+            continue
             continue
 
         routed = route_input(raw)
