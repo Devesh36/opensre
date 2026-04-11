@@ -331,11 +331,40 @@ def release_api_url() -> str:
 
 
 def test_opensre_landing_page_smoke(cli_sandbox: CliSandbox) -> None:
-    result = _run_cli(cli_sandbox)
+    result = _run_cli(cli_sandbox, extra_env={"OPENSRE_LEGACY_LANDING": "1"})
 
     assert result.exit_code == 0
     assert "Quick start:" in result.stdout
     assert "opensre investigate -i alert.json" in result.stdout
+
+
+@pytest.mark.skipif(os.name == "nt", reason="interactive smoke uses POSIX PTYs")
+def test_opensre_session_starts_and_quits(cli_sandbox: CliSandbox) -> None:
+    result = _run_cli_pty(
+        cli_sandbox,
+        actions=[PtyAction(expect="OpenSRE Session", send=b"/quit\r")],
+    )
+
+    assert result.exit_code == 0
+    assert "OpenSRE Session" in result.stdout
+    assert "Investigation terminal for alert triage and RCA" in result.stdout
+
+
+@pytest.mark.skipif(os.name == "nt", reason="interactive smoke uses POSIX PTYs")
+def test_opensre_session_multiline_json_routes_as_alert(cli_sandbox: CliSandbox) -> None:
+    result = _run_cli_pty(
+        cli_sandbox,
+        actions=[
+            PtyAction(
+                expect="opensre[trust:off]>",
+                send=(b'{\r  "alert_name": "example-alert",\r  "message": "synthetic test"\r}\r'),
+            ),
+            PtyAction(expect="opensre[trust:off]>", send=b"/quit\r"),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "No active alert context" not in result.stdout
 
 
 def test_opensre_help_smoke(cli_sandbox: CliSandbox) -> None:

@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import platform
 import time
+from pathlib import Path
+from typing import Any
 
 import click
 
@@ -20,26 +22,12 @@ from app.cli.exit_codes import ERROR, SUCCESS
 from app.version import get_version
 
 
-def _build_investigate_argv(
-    *,
-    input_path: str | None,
-    input_json: str | None,
-    interactive: bool,
-    print_template: str | None,
-    output: str | None,
-) -> list[str]:
-    argv: list[str] = []
-    if input_path is not None:
-        argv.extend(["--input", input_path])
-    if input_json is not None:
-        argv.extend(["--input-json", input_json])
-    if interactive:
-        argv.append("--interactive")
-    if print_template is not None:
-        argv.extend(["--print-template", print_template])
-    if output is not None:
-        argv.extend(["--output", output])
-    return argv
+def _write_result(payload: dict[str, Any], output: str | None) -> None:
+    encoded = json.dumps(payload, indent=2)
+    if output:
+        Path(output).write_text(encoded + "\n", encoding="utf-8")
+        return
+    click.echo(encoded)
 
 
 @click.command(name="update")
@@ -63,12 +51,16 @@ def version_command() -> None:
     """Print detailed version, Python and OS info."""
     capture_cli_invoked()
     if is_json_output():
-        click.echo(json.dumps({
-            "opensre": get_version(),
-            "python": platform.python_version(),
-            "os": platform.system().lower(),
-            "arch": platform.machine(),
-        }))
+        click.echo(
+            json.dumps(
+                {
+                    "opensre": get_version(),
+                    "python": platform.python_version(),
+                    "os": platform.system().lower(),
+                    "arch": platform.machine(),
+                }
+            )
+        )
         return
     click.echo(f"opensre {get_version()}")
     click.echo(f"Python  {platform.python_version()}")
@@ -77,7 +69,9 @@ def version_command() -> None:
 
 @click.command(name="health")
 @click.option("--watch", is_flag=True, help="Continuously refresh the health report.")
-@click.option("--rate", default=5, show_default=True, help="Refresh interval in seconds (with --watch).")
+@click.option(
+    "--rate", default=5, show_default=True, help="Refresh interval in seconds (with --watch)."
+)
 def health_command(watch: bool, rate: int) -> None:
     """Show a quick health summary of the local agent setup."""
     from app.cli.health_view import render_health_json, render_health_report
@@ -151,7 +145,9 @@ def investigate_command(
     output: str | None,
 ) -> None:
     """Run an RCA investigation against an alert payload."""
-    from app.main import main as investigate_main
+    from app.cli.alert_templates import build_alert_template
+    from app.cli.investigate import run_investigation_cli_streaming
+    from app.cli.payload import load_payload
 
     capture_investigation_started(
         input_path=input_path,
@@ -159,15 +155,19 @@ def investigate_command(
         interactive=interactive,
     )
     try:
-        exit_code = investigate_main(
-            _build_investigate_argv(
-                input_path=input_path,
-                input_json=input_json,
-                interactive=interactive,
-                print_template=print_template,
-                output=output,
-            )
+        if print_template:
+            _write_result(build_alert_template(print_template), output)
+            capture_investigation_completed()
+            raise SystemExit(SUCCESS)
+
+        payload = load_payload(
+            input_path=input_path,
+            input_json=input_json,
+            interactive=interactive,
         )
+        result = run_investigation_cli_streaming(raw_alert=payload)
+        _write_result(result, output)
+        exit_code = SUCCESS
     except Exception:
         capture_investigation_failed()
         raise

@@ -19,6 +19,7 @@ from app.analytics.provider import capture_first_run_if_needed, shutdown_analyti
 from app.cli.commands import register_commands
 from app.cli.layout import RichGroup, render_landing
 from app.cli.prompt_support import install_questionary_escape_cancel
+from app.cli.session import run_repl_session
 from app.version import get_version
 
 
@@ -28,7 +29,9 @@ from app.version import get_version
     invoke_without_command=True,
 )
 @click.version_option(version=get_version(), prog_name="opensre")
-@click.option("--json", "-j", "json_output", is_flag=True, help="Emit machine-readable JSON output.")
+@click.option(
+    "--json", "-j", "json_output", is_flag=True, help="Emit machine-readable JSON output."
+)
 @click.option("--verbose", is_flag=True, help="Print extra diagnostic information.")
 @click.option("--debug", is_flag=True, help="Print debug-level logs and traces.")
 @click.option("--yes", "-y", is_flag=True, help="Auto-confirm all interactive prompts.")
@@ -52,6 +55,8 @@ def cli(
 
     if ctx.invoked_subcommand is None:
         capture_cli_invoked()
+        if not os.getenv("OPENSRE_LEGACY_LANDING") and not json_output:
+            raise SystemExit(run_repl_session())
         render_landing()
         raise SystemExit(0)
 
