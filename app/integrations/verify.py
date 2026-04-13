@@ -72,7 +72,7 @@ _SUPPORTED_GRAFANA_TYPES = ("loki", "tempo", "prometheus")
 class MariaDBConfig:
     host: str
     port: int
-    database: str
+    password: str = field(repr=False)
     username: str
     password: str
     ssl: bool
