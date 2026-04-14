@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+[ -n "${BASH_VERSION:-}" ] || {
+  printf '%s\n' "Error: install.sh requires bash. Run 'bash install.sh' or pipe it into bash." >&2
+  exit 1
+}
+
 set -euo pipefail
 
 REPO="${OPENSRE_INSTALL_REPO:-Tracer-Cloud/opensre}"
@@ -246,16 +251,25 @@ verify_binary_version() {
   local binary_path="$1"
   local expected_version="$2"
   local version_output
+  local actual_version
 
   if ! version_output="$("$binary_path" --version 2>&1)"; then
     die "Failed to execute '${binary_path##*/} --version': ${version_output}"
   fi
 
+  actual_version="$(printf '%s\n' "$version_output" | sed -n 's/.*\([0-9][0-9][0-9][0-9]\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' | head -n 1)"
+
   case "$version_output" in
     *"$expected_version"*)
+      printf '%s\n' "$expected_version"
       ;;
     *)
-      die "Downloaded binary version mismatch. Expected '${expected_version}' but got: ${version_output}"
+      if [ -n "${OPENSRE_VERSION:-}" ] || [ -z "$actual_version" ]; then
+        die "Downloaded binary version mismatch. Expected '${expected_version}' but got: ${version_output}"
+      fi
+
+      warn "Latest release metadata reports v${expected_version}, but the downloaded binary reports v${actual_version}. Installing the verified binary anyway."
+      printf '%s\n' "$actual_version"
       ;;
   esac
 }
@@ -358,10 +372,10 @@ mkdir -p "$INSTALL_DIR"
 extract_archive "$archive_path" "$tmp_dir"
 
 binary_path="$(get_binary_path_from_archive "$tmp_dir" "$BIN_NAME")"
-verify_binary_version "$binary_path" "$version"
+installed_version="$(verify_binary_version "$binary_path" "$version")"
 install_binary "$binary_path" "${INSTALL_DIR}/${BIN_NAME}"
 
-log "Installed ${BIN_NAME} v${version} to ${INSTALL_DIR}/${BIN_NAME}"
+log "Installed ${BIN_NAME} v${installed_version} to ${INSTALL_DIR}/${BIN_NAME}"
 
 case ":$PATH:" in
   *":${INSTALL_DIR}:"*)
