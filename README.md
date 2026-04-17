@@ -496,13 +496,6 @@ Thanks goes to these amazing people:
 		</tr>
 		<tr>
             <td align="center">
-        <a href="https://github.com/fuleinist">
-            <img src="https://avatars.githubusercontent.com/u/1163738?v=4" width="100" alt="fuleinist"/>
-            <br />
-            <sub><b>fuleinist</b></sub>
-        </a>
-    </td>
-            <td align="center">
         <a href="https://github.com/aniruddhaadak80">
             <img src="https://avatars.githubusercontent.com/u/127435065?v=4" width="100" alt="aniruddhaadak80"/>
             <br />
