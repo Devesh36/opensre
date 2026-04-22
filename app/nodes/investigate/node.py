@@ -57,7 +57,9 @@ def node_investigate(state: InvestigationState) -> dict:
     # Execute actions and summarize results
     execution_results = execute_actions(planned_actions, available_actions, available_sources)
     raw_plan_audit = state.get("plan_audit")
-    plan_audit = cast(PlanAudit | None, raw_plan_audit if isinstance(raw_plan_audit, dict) else None)
+    plan_audit = cast(
+        PlanAudit | None, raw_plan_audit if isinstance(raw_plan_audit, dict) else None
+    )
     evidence, executed_hypotheses, evidence_summary = summarize_execution_results(
         execution_results=execution_results,
         current_evidence=input_data.evidence,
