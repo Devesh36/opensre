@@ -893,6 +893,13 @@ Thanks goes to these amazing people:
             <sub><b>0xDevNinja</b></sub>
         </a>
     </td>
+            <td align="center">
+        <a href="https://github.com/blut-agent">
+            <img src="https://avatars.githubusercontent.com/u/278569635?v=4" width="100" alt="blut-agent"/>
+            <br />
+            <sub><b>blut-agent</b></sub>
+        </a>
+    </td>
 		</tr>
 	</tbody>
 </table>
