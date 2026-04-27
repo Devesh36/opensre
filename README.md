@@ -953,6 +953,13 @@ Thanks goes to these amazing people:
             <sub><b>IBOCATA</b></sub>
         </a>
     </td>
+            <td align="center">
+        <a href="https://github.com/Jeel3011">
+            <img src="https://avatars.githubusercontent.com/u/166152117?v=4" width="100" alt="Jeel3011"/>
+            <br />
+            <sub><b>Jeel3011</b></sub>
+        </a>
+    </td>
 		</tr>
 	</tbody>
 </table>
