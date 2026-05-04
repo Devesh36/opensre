@@ -127,3 +127,30 @@ def test_analytics_disabled_when_do_not_track_opt_out(monkeypatch, tmp_path: Pat
     assert analytics._pending == 0
     assert analytics._queue.qsize() == 0
     assert client_inits == 0
+
+
+def test_shutdown_is_idempotent_and_capture_after_shutdown_is_noop(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("OPENSRE_ANALYTICS_DISABLED", raising=False)
+    monkeypatch.delenv("DO_NOT_TRACK", raising=False)
+    monkeypatch.setattr(provider, "_CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(provider, "_ANONYMOUS_ID_PATH", tmp_path / "anonymous_id")
+
+    analytics = provider.Analytics()
+
+    analytics.shutdown(flush=False)
+    analytics.shutdown(flush=False)
+    pending_before_capture = analytics._pending
+    analytics.capture(Event.INSTALL_DETECTED, {"install_source": "make_install"})
+
+    assert analytics._shutdown is True
+    assert analytics._pending == pending_before_capture == 0
+
+
+def test_shutdown_analytics_is_noop_when_singleton_not_initialized(monkeypatch) -> None:
+    monkeypatch.setattr(provider, "_instance", None)
+
+    provider.shutdown_analytics(flush=False)
+
+    assert provider._instance is None
