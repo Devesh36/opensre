@@ -136,16 +136,45 @@ def test_shutdown_is_idempotent_and_capture_after_shutdown_is_noop(
     monkeypatch.delenv("DO_NOT_TRACK", raising=False)
     monkeypatch.setattr(provider, "_CONFIG_DIR", tmp_path)
     monkeypatch.setattr(provider, "_ANONYMOUS_ID_PATH", tmp_path / "anonymous_id")
+    monkeypatch.setattr(provider.atexit, "register", lambda _func: None)
+
+    posted_payloads: list[dict[str, object]] = []
+
+    class _StubResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+    class _StubClient:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def __enter__(self) -> _StubClient:
+            return self
+
+        def __exit__(self, _exc_type, _exc, _tb) -> None:
+            return None
+
+        def post(self, url: str, json: dict[str, object]) -> _StubResponse:
+            posted_payloads.append({"url": url, "json": json})
+            return _StubResponse()
+
+    monkeypatch.setattr(provider.httpx, "Client", _StubClient)
 
     analytics = provider.Analytics()
+    analytics.capture(Event.INSTALL_DETECTED, {"install_source": "make_install"})
+
+    analytics.shutdown(flush=True)
+    sent_before_post_shutdown_capture = len(posted_payloads)
+    pending_before_capture = analytics._pending
+    queue_size_before_capture = analytics._queue.qsize()
 
     analytics.shutdown(flush=False)
-    analytics.shutdown(flush=False)
-    pending_before_capture = analytics._pending
     analytics.capture(Event.INSTALL_DETECTED, {"install_source": "make_install"})
 
     assert analytics._shutdown is True
     assert analytics._pending == pending_before_capture == 0
+    assert analytics._queue.qsize() == queue_size_before_capture
+    assert len(posted_payloads) == sent_before_post_shutdown_capture == 1
 
 
 def test_shutdown_analytics_is_noop_when_singleton_not_initialized(monkeypatch) -> None:
