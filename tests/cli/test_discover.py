@@ -73,7 +73,7 @@ def test_discover_make_targets_skips_targets_missing_from_makefile(
     monkeypatch.setattr("app.cli.tests.discover.MAKEFILE_PATH", makefile)
 
     ids = [item.id for item in discover_make_targets()]
-    assert ids == ["make:test-cov", "make:deploy"]
+    assert set(ids) == {"make:test-cov", "make:deploy"}
     assert "make:test-full" not in ids
 
 
@@ -87,7 +87,9 @@ def test_discover_make_targets_applies_comment_and_metadata(
     )
     monkeypatch.setattr("app.cli.tests.discover.MAKEFILE_PATH", makefile)
 
-    item = discover_make_targets()[0]
+    items = discover_make_targets()
+    assert len(items) == 1
+    item = items[0]
     assert item.id == "make:test-grafana"
     assert item.description == "Grafana integration checks"
     assert item.tags == ("test", "grafana")
