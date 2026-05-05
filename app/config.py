@@ -131,6 +131,8 @@ LLMProvider = Literal[
     "cursor",
     "claude-code",
     "gemini-cli",
+    "opencode",
+    "kimi",
 ]
 
 
@@ -183,6 +185,8 @@ class LLMSettings(StrictConfigModel):
             "cursor",
             "claude-code",
             "gemini-cli",
+            "opencode",
+            "kimi",
         )
         if provider in valid_providers:
             return provider
@@ -201,6 +205,16 @@ class LLMSettings(StrictConfigModel):
             return self  # ollama: local; bedrock: IAM; CLI providers use vendor auth
         if self.provider in ("ollama", "bedrock", "codex", "cursor", "claude-code"):
             return self  # ollama: local; bedrock: IAM; codex/cursor/claude-code: CLI auth
+        if self.provider in (
+            "ollama",
+            "bedrock",
+            "codex",
+            "cursor",
+            "claude-code",
+            "opencode",
+            "kimi",
+        ):
+            return self  # ollama: local; bedrock: IAM; CLI providers: vendor auth
         provider_to_key = {
             "anthropic": self.anthropic_api_key,
             "openai": self.openai_api_key,
