@@ -182,6 +182,16 @@ CODEX_MODELS = (
     ModelOption(value="gpt-5.1-codex-mini", label="gpt-5.1-codex-mini"),
 )
 
+# Empty value means "no --model" so Gemini CLI uses its configured/default model.
+GEMINI_CLI_MODELS = (
+    ModelOption(
+        value="",
+        label="CLI default (no --model; use Gemini CLI configured model)",
+    ),
+    ModelOption(value="gemini-2.5-pro", label="gemini-2.5-pro — strongest reasoning"),
+    ModelOption(value="gemini-2.5-flash", label="gemini-2.5-flash — fast and balanced"),
+)
+
 
 def _codex_adapter_factory() -> LLMCLIAdapter:
     from app.integrations.llm_cli.codex import CodexAdapter
@@ -193,6 +203,12 @@ def _claude_code_adapter_factory() -> LLMCLIAdapter:
     from app.integrations.llm_cli.claude_code import ClaudeCodeAdapter
 
     return ClaudeCodeAdapter()
+
+
+def _gemini_cli_adapter_factory() -> LLMCLIAdapter:
+    from app.integrations.llm_cli.gemini_cli import GeminiCLIAdapter
+
+    return GeminiCLIAdapter()
 
 
 SUPPORTED_PROVIDERS = (
@@ -284,6 +300,18 @@ SUPPORTED_PROVIDERS = (
         credential_kind="cli",
         credential_secret=False,
         adapter_factory=_claude_code_adapter_factory,
+    ),
+    ProviderOption(
+        value="gemini-cli",
+        label="Google Gemini CLI",
+        group="Local CLI providers",
+        api_key_env="",
+        model_env="GEMINI_CLI_MODEL",
+        default_model="",
+        models=GEMINI_CLI_MODELS,
+        credential_kind="cli",
+        credential_secret=False,
+        adapter_factory=_gemini_cli_adapter_factory,
     ),
     ProviderOption(
         value="ollama",

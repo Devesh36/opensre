@@ -73,3 +73,21 @@ def test_check_llm_provider_cli_branch_follows_registry_not_hardcoded_ids(monkey
     ok, detail = doctor._check_llm_provider()
     assert ok is True
     assert "CLI ready" in detail
+
+
+def test_check_llm_provider_gemini_cli_ready(monkeypatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "gemini-cli")
+    reg = MagicMock()
+    reg.adapter_factory.return_value.detect.return_value = MagicMock(
+        installed=True,
+        bin_path="/usr/bin/gemini",
+        logged_in=True,
+        detail="Authenticated via Gemini CLI.",
+    )
+    monkeypatch.setattr(
+        "app.integrations.llm_cli.registry.get_cli_provider_registration",
+        lambda provider: reg if provider == "gemini-cli" else None,
+    )
+    ok, detail = doctor._check_llm_provider()
+    assert ok is True
+    assert "CLI ready" in detail

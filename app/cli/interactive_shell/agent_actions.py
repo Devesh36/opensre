@@ -90,6 +90,8 @@ _LLM_PROVIDER_NAMES = frozenset(
         "nvidia",
         "ollama",
         "codex",
+        "claude-code",
+        "gemini-cli",
     }
 )
 _LLM_PROVIDER_RE = re.compile(
