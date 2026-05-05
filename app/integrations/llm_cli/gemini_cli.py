@@ -269,7 +269,7 @@ class GeminiCLIAdapter:
             if isinstance(err, dict):
                 message = err.get("message")
                 if isinstance(message, str) and message.strip():
-                    raise RuntimeError(f"Gemini Cli returned an error: {message.strip()}")
+                    raise RuntimeError(f"Gemini CLI returned an error: {message.strip()}")
         return text
 
     def explain_failure(self, *, stdout: str, stderr: str, returncode: int) -> str:

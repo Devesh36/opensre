@@ -190,6 +190,8 @@ GEMINI_CLI_MODELS = (
     ),
     ModelOption(value="gemini-2.5-pro", label="gemini-2.5-pro — strongest reasoning"),
     ModelOption(value="gemini-2.5-flash", label="gemini-2.5-flash — fast and balanced"),
+)
+
 OPENCODE_MODELS = (
     ModelOption(
         value="",
@@ -248,6 +250,8 @@ def _gemini_cli_adapter_factory() -> LLMCLIAdapter:
     from app.integrations.llm_cli.gemini_cli import GeminiCLIAdapter
 
     return GeminiCLIAdapter()
+
+
 def _opencode_adapter_factory() -> LLMCLIAdapter:
     from app.integrations.llm_cli.opencode import OpenCodeAdapter
 
@@ -384,6 +388,8 @@ SUPPORTED_PROVIDERS = (
         credential_kind="cli",
         credential_secret=False,
         adapter_factory=_gemini_cli_adapter_factory,
+    ),
+    ProviderOption(
         value="opencode",
         label="OpenCode CLI",
         group="Local CLI providers",
