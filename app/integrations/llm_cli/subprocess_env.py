@@ -49,7 +49,6 @@ _SAFE_SUBPROCESS_ENV_KEYS = frozenset(
     }
 )
 _SAFE_SUBPROCESS_ENV_PREFIXES = ("LC_", "CODEX_", "CLAUDE_", "GEMINI_", "GOOGLE_", "CURSOR_")
-_SAFE_SUBPROCESS_ENV_PREFIXES = ("LC_", "CODEX_", "CURSOR_", "CLAUDE_")
 
 
 def build_cli_subprocess_env(overrides: dict[str, str] | None) -> dict[str, str]:
