@@ -39,6 +39,8 @@ def _gemini_cli_factory() -> LLMCLIAdapter:
     from app.integrations.llm_cli.gemini_cli import GeminiCLIAdapter
 
     return GeminiCLIAdapter()
+
+
 def _opencode_factory() -> LLMCLIAdapter:
     from app.integrations.llm_cli.opencode import OpenCodeAdapter
 
