@@ -108,13 +108,13 @@ def _classify_gemini_auth(returncode: int, stdout: str, stderr: str) -> tuple[bo
                 ):
                     return False, f"Not authenticated. {_AUTH_HINT}"
     text = (stdout + "\n" + stderr).lower()
-    if "not authenticated" in text or "authentication" in text and "required" in text:
+    if "not authenticated" in text or ("authentication" in text and "required" in text):
         return False, f"Not authenticated. {_AUTH_HINT}"
     if "login required" in text or "please login" in text:
         return False, f"Not authenticated. {_AUTH_HINT}"
     if "please set an auth method" in text:
         return False, f"Not authenticated. {_AUTH_HINT}"
-    if "invalid api key" in text or "api key" in text and "missing" in text:
+    if "invalid api key" in text or ("api key" in text and "missing" in text):
         return False, "Gemini API key missing or invalid. Set GEMINI_API_KEY or login via `gemini`."
     if returncode == 0:
         return True, "Authenticated via Gemini CLI."
@@ -269,7 +269,7 @@ class GeminiCLIAdapter:
             if isinstance(err, dict):
                 message = err.get("message")
                 if isinstance(message, str) and message.strip():
-                    return message.strip()
+                    raise RuntimeError(f"Gemini Cli returned an error: {message.strip()}")
         return text
 
     def explain_failure(self, *, stdout: str, stderr: str, returncode: int) -> str:
