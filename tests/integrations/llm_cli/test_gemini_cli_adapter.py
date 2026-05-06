@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.integrations.llm_cli.binary_resolver import npm_prefix_bin_dirs
 from app.integrations.llm_cli.gemini_cli import (
     _PROBE_TIMEOUT_SEC,
@@ -253,6 +255,16 @@ def test_parse_non_json_falls_back_to_stdout() -> None:
     adapter = GeminiCLIAdapter()
     result = adapter.parse(stdout="plain text answer", stderr="", returncode=0)
     assert result == "plain text answer"
+
+
+def test_parse_raises_runtime_error_on_error_payload() -> None:
+    adapter = GeminiCLIAdapter()
+    with pytest.raises(RuntimeError, match="token expired"):
+        adapter.parse(
+            stdout=json.dumps({"error": {"message": "token expired"}}),
+            stderr="",
+            returncode=0,
+        )
 
 
 def test_explain_failure_includes_returncode_and_stderr() -> None:
