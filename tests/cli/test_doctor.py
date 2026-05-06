@@ -147,6 +147,8 @@ def test_check_llm_provider_gemini_cli_ready(monkeypatch) -> None:
     ok, detail = doctor._check_llm_provider()
     assert ok is True
     assert "CLI ready" in detail
+
+
 def test_check_integrations_store_missing(monkeypatch, tmp_path) -> None:
     store_path = tmp_path / "integrations.json"
     monkeypatch.setattr("app.integrations.store.STORE_PATH", store_path)
