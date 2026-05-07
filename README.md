@@ -1368,6 +1368,29 @@ Thanks goes to these amazing people:
             <sub><b>vivek41-glitch</b></sub>
         </a>
     </td>
+            <td align="center" width="8%">
+        <a href="https://github.com/nawneet77">
+            <img src="https://avatars.githubusercontent.com/u/87024784?v=4" width="45" alt="nawneet77"/>
+            <br />
+            <sub><b>nawneet77</b></sub>
+        </a>
+    </td>
+		</tr>
+		<tr>
+            <td align="center" width="8%">
+        <a href="https://github.com/Imsharad">
+            <img src="https://avatars.githubusercontent.com/u/19369042?v=4" width="45" alt="Imsharad"/>
+            <br />
+            <sub><b>Imsharad</b></sub>
+        </a>
+    </td>
+            <td align="center" width="8%">
+        <a href="https://github.com/Mohdtalibakhtar">
+            <img src="https://avatars.githubusercontent.com/u/66231998?v=4" width="45" alt="Mohdtalibakhtar"/>
+            <br />
+            <sub><b>Mohdtalibakhtar</b></sub>
+        </a>
+    </td>
 		</tr>
 	</tbody>
 </table>
