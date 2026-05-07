@@ -415,6 +415,7 @@ jobs:
           } > RELEASE_NOTES.md
 
       - name: Create GitHub release
+        id: github_release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -427,6 +428,7 @@ jobs:
           target_sha="$(git rev-parse "origin/$default_branch")"
 
           if gh release view "$TAG_NAME" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "created=false" >> "$GITHUB_OUTPUT"
             echo "Release $TAG_NAME already exists; nothing to do."
             exit 0
           fi
@@ -437,6 +439,66 @@ jobs:
             --target "$target_sha" \
             --title "Latest" \
             --notes-file RELEASE_NOTES.md
+
+          echo "created=true" >> "$GITHUB_OUTPUT"
+
+      - name: Announce on Discord
+        if: ${{ steps.github_release.outputs.created == 'true' && !github.event.repository.fork && !github.event.repository.private }}
+        env:
+          DISCORD_WEBHOOK_URL_UPDATE: ${{ secrets.DISCORD_WEBHOOK_URL_UPDATE }}
+          DISCORD_RELEASES_ROLE_ID: ${{ secrets.DISCORD_RELEASES_ROLE_ID }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag_name }}
+          RELEASE_URL: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ needs.prepare.outputs.tag_name }}
+          REPO_STARS: ${{ github.event.repository.stargazers_count }}
+          REPO_FORKS: ${{ github.event.repository.forks_count }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${DISCORD_WEBHOOK_URL_UPDATE:-}" ]; then
+            echo "DISCORD_WEBHOOK_URL_UPDATE is not set; skipping Discord announcement."
+            exit 0
+          fi
+
+          RELEASE_BODY="$(gh release view "$RELEASE_TAG" --repo "${{ github.repository }}" --json body -q .body)"
+
+          role_mention=""
+          if [ -n "${DISCORD_RELEASES_ROLE_ID:-}" ]; then
+            role_mention="<@&${DISCORD_RELEASES_ROLE_ID}>"$'\n'
+          fi
+
+          NOTES="${RELEASE_BODY:-No release notes provided.}"
+          NOTES="$(printf '%s' "$NOTES" | tr -d '\r')"
+          MAX_NOTES_LENGTH=1700
+          if [ "${#NOTES}" -gt "$MAX_NOTES_LENGTH" ]; then
+            NOTES="${NOTES:0:$((MAX_NOTES_LENGTH-3))}..."
+          fi
+
+          payload="$(jq -n \
+            --arg tag "$RELEASE_TAG" \
+            --arg notes "$NOTES" \
+            --arg url "$RELEASE_URL" \
+            --arg stars "${REPO_STARS:-0}" \
+            --arg forks "${REPO_FORKS:-0}" \
+            --arg mention "$role_mention" \
+            '{
+              content: (
+                $mention
+                + "🚀 **opensre `" + $tag + "` is live**\n"
+                + "🔗 " + $url + "\n"
+                + "⭐ " + $stars + " stars • 🍴 " + $forks + " forks\n\n"
+                + "**Release Notes**\n"
+                + $notes
+              )
+            }'
+          )"
+
+          curl --fail --silent --show-error --max-time 30 \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d "$payload" \
+            "$DISCORD_WEBHOOK_URL_UPDATE"
 
       - name: Sync Homebrew tap formula
         env:
