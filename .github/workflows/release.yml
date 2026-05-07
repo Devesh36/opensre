@@ -444,6 +444,7 @@ jobs:
 
       - name: Announce on Discord
         if: ${{ steps.github_release.outputs.created == 'true' && !github.event.repository.fork && !github.event.repository.private }}
+        continue-on-error: true
         env:
           DISCORD_WEBHOOK_URL_UPDATE: ${{ secrets.DISCORD_WEBHOOK_URL_UPDATE }}
           DISCORD_RELEASES_ROLE_ID: ${{ secrets.DISCORD_RELEASES_ROLE_ID }}
@@ -461,7 +462,7 @@ jobs:
             exit 0
           fi
 
-          RELEASE_BODY="$(gh release view "$RELEASE_TAG" --repo "${{ github.repository }}" --json body -q .body)"
+          RELEASE_BODY="$(cat RELEASE_NOTES.md)"
 
           role_mention=""
           if [ -n "${DISCORD_RELEASES_ROLE_ID:-}" ]; then
