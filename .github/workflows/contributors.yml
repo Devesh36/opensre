@@ -118,6 +118,7 @@ jobs:
 
           # Build markdown avatar links (10 per line)
           def avatar_with_size(url, size=48):
+              url = re.sub(r"[?&]s=\d+", "", url)
               sep = "&" if "?" in url else "?"
               return f"{url}{sep}s={size}"
 
