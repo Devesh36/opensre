@@ -757,6 +757,20 @@ _HANDLERS: dict[str, Any] = {
 }
 
 
+def _setup_linear() -> None:
+    api_key = _p("Personal API key", secret=True)
+    default_team_id = _p("Default team ID (optional)")
+    if not api_key:
+        _die("api_key is required.")
+    upsert_integration(
+        "linear",
+        {"credentials": {"api_key": api_key, "default_team_id": default_team_id}},
+    )
+
+
+_HANDLERS["linear"] = _setup_linear
+
+
 def _setup_azure_sql() -> None:
     server = _p("Server (e.g. myserver.database.windows.net)")
     database = _p("Database name")

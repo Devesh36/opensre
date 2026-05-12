@@ -440,6 +440,16 @@ def _classify_service_instance(
             return jira_config.model_dump(), "jira"
         return None, None
 
+    if key == "linear":
+        api_key = str(credentials.get("api_key", "")).strip()
+        if not api_key:
+            return None, None
+        return {
+            "api_key": api_key,
+            "default_team_id": str(credentials.get("default_team_id", "")).strip(),
+            "integration_id": record_id,
+        }, "linear"
+
     if key == "discord":
         try:
             discord_config = DiscordBotConfig.model_validate(
@@ -1253,6 +1263,42 @@ def load_env_integrations() -> list[dict[str, Any]]:
                     incident_io_config.model_dump(exclude={"integration_id"}),
                 )
             )
+
+    linear_api_key = os.getenv("LINEAR_API_KEY", "").strip()
+    linear_default_team_id = os.getenv("LINEAR_DEFAULT_TEAM_ID", "").strip()
+    if linear_api_key:
+        from app.integrations.config_models import LinearIntegrationConfig
+
+        linear_config = LinearIntegrationConfig.model_validate(
+            {
+                "api_key": linear_api_key,
+                "default_team_id": linear_default_team_id,
+            }
+        )
+        integrations.append(
+            _active_env_record(
+                "linear",
+                linear_config.model_dump(),
+            )
+        )
+
+    trello_api_key = os.getenv("TRELLO_API_KEY", "").strip()
+    trello_token = os.getenv("TRELLO_TOKEN", "").strip()
+    if trello_api_key and trello_token:
+        from app.integrations.config_models import TrelloIntegrationConfig
+
+        trello_config = TrelloIntegrationConfig.model_validate(
+            {
+                "api_key": trello_api_key,
+                "api_token": trello_token,
+            }
+        )
+        integrations.append(
+            _active_env_record(
+                "trello",
+                trello_config.model_dump(),
+            )
+        )
 
     jira_base_url = os.getenv("JIRA_BASE_URL", "").strip()
     jira_email = os.getenv("JIRA_EMAIL", "").strip()

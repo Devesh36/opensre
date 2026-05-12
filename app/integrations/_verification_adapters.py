@@ -494,6 +494,18 @@ def _validate_bitbucket_config(config: Any) -> Any:
     return validate_bitbucket_config(config)
 
 
+def _build_linear_config(raw: dict[str, Any]) -> Any:
+    from app.integrations.linear import build_linear_config
+
+    return build_linear_config(raw)
+
+
+def _validate_linear_config(config: Any) -> Any:
+    from app.integrations.linear import validate_linear_config
+
+    return validate_linear_config(config)
+
+
 _verify_kafka = build_validation_verifier(
     "kafka",
     build_config=_build_kafka_config,
@@ -508,6 +520,11 @@ _verify_bitbucket = build_validation_verifier(
     "bitbucket",
     build_config=_build_bitbucket_config,
     validate_config=_validate_bitbucket_config,
+)
+_verify_linear = build_validation_verifier(
+    "linear",
+    build_config=_build_linear_config,
+    validate_config=_validate_linear_config,
 )
 
 _verify_datadog = build_probe_verifier(
@@ -606,6 +623,7 @@ __all__ = [
     "_verify_helm",
     "_verify_incident_io",
     "_verify_kafka",
+    "_verify_linear",
     "_verify_mariadb",
     "_verify_mongodb",
     "_verify_mongodb_atlas",

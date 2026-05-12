@@ -25,6 +25,7 @@ from app.integrations._verification_adapters import (
     _verify_honeycomb,
     _verify_incident_io,
     _verify_kafka,
+    _verify_linear,
     _verify_mariadb,
     _verify_mongodb,
     _verify_mongodb_atlas,
@@ -326,6 +327,9 @@ INTEGRATION_SPECS: tuple[IntegrationSpec, ...] = (
     IntegrationSpec(service="prefect"),
     IntegrationSpec(service="posthog"),
     IntegrationSpec(service="trello"),
+    IntegrationSpec(
+        service="linear", verifier=_verify_linear, direct_effective=True, setup_order=30
+    ),
     IntegrationSpec(service="rds", setup_order=11),
     IntegrationSpec(
         service="supabase",

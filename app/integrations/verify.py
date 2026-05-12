@@ -31,6 +31,7 @@ _verify_helm = _adapters._verify_helm
 _verify_honeycomb = _adapters._verify_honeycomb
 _verify_incident_io = _adapters._verify_incident_io
 _verify_kafka = _adapters._verify_kafka
+_verify_linear = _adapters._verify_linear
 _verify_mariadb = _adapters._verify_mariadb
 _verify_mongodb = _adapters._verify_mongodb
 _verify_mongodb_atlas = _adapters._verify_mongodb_atlas
@@ -174,6 +175,7 @@ __all__ = [
     "_verify_honeycomb",
     "_verify_incident_io",
     "_verify_kafka",
+    "_verify_linear",
     "_verify_mariadb",
     "_verify_mongodb",
     "_verify_mongodb_atlas",

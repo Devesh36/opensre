@@ -1648,6 +1648,13 @@ def detect_sources(
             "connection_verified": True,
         }
 
+    linear_int = (resolved_integrations or {}).get("linear")
+    if linear_int and str(linear_int.get("api_key", "")).strip():
+        sources["linear"] = {
+            "api_key": str(linear_int.get("api_key", "")).strip(),
+            "default_team_id": str(linear_int.get("default_team_id", "")).strip(),
+        }
+
     mysql_int = (resolved_integrations or {}).get("mysql")
     if (
         mysql_int

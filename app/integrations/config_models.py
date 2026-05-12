@@ -622,6 +622,15 @@ class NotionIntegrationConfig(StrictConfigModel):
     _normalize_strs = field_validator("api_key", "database_id", mode="before")(normalize_str())
 
 
+class LinearIntegrationConfig(StrictConfigModel):
+    """Normalized Linear credentials."""
+
+    api_key: str
+    default_team_id: str | None = None
+
+    _normalize_strs = field_validator("api_key", "default_team_id", mode="before")(normalize_str())
+
+
 class TrelloIntegrationConfig(StrictConfigModel):
     """Normalized Trello credentials."""
 
