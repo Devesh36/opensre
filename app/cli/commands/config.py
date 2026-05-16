@@ -9,10 +9,12 @@ from typing import Any
 
 import click
 
+from app.cli.interactive_shell.ui.theme import list_theme_names
 from app.constants import OPENSRE_HOME_DIR
 
 _SUPPORTED_LAYOUTS = {"classic", "pinned"}
-_SUPPORTED_KEYS = ("interactive.enabled", "interactive.layout")
+_SUPPORTED_THEMES = set(list_theme_names())
+_SUPPORTED_KEYS = ("interactive.enabled", "interactive.layout", "interactive.theme")
 
 
 def _masked(value: str | None) -> str:
@@ -132,6 +134,12 @@ def _coerce_value(key: str, raw_value: str) -> bool | str:
                 "Invalid value for interactive.layout. Use 'classic' or 'pinned'."
             )
         return layout
+    if key == "interactive.theme":
+        theme = raw_value.strip().lower()
+        if theme not in _SUPPORTED_THEMES:
+            supported = ", ".join(sorted(_SUPPORTED_THEMES))
+            raise click.UsageError(f"Invalid value for interactive.theme. Use one of: {supported}.")
+        return theme
     raise click.UsageError(
         f"Unknown config key '{key}'. Supported keys: {', '.join(_SUPPORTED_KEYS)}"
     )

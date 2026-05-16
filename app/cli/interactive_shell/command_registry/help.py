@@ -6,7 +6,8 @@ from rich.console import Console
 
 from app.cli.interactive_shell.command_registry.types import ExecutionTier, SlashCommand
 from app.cli.interactive_shell.runtime import ReplSession
-from app.cli.interactive_shell.ui import BOLD_BRAND, DIM, HIGHLIGHT, repl_table
+from app.cli.interactive_shell.ui import repl_table
+from app.cli.interactive_shell.ui import theme as ui_theme
 
 
 def _cmd_help(_session: ReplSession, console: Console, _args: list[str]) -> bool:
@@ -22,6 +23,7 @@ def _cmd_help(_session: ReplSession, console: Console, _args: list[str]) -> bool
     from app.cli.interactive_shell.command_registry.session_cmds import COMMANDS as SESSION_CMDS
     from app.cli.interactive_shell.command_registry.system import COMMANDS as SYS_CMDS
     from app.cli.interactive_shell.command_registry.tasks_cmds import COMMANDS as TASK_CMDS
+    from app.cli.interactive_shell.command_registry.theme import COMMANDS as THEME_CMDS
     from app.cli.interactive_shell.command_registry.watch_cmds import COMMANDS as WATCH_CMDS
 
     sections: list[tuple[str, list[SlashCommand]]] = [
@@ -31,21 +33,22 @@ def _cmd_help(_session: ReplSession, console: Console, _args: list[str]) -> bool
         ("Investigation", list(INV_CMDS)),
         ("Privacy", list(PRIVACY_CMDS)),
         ("Tasks", list(TASK_CMDS) + list(WATCH_CMDS)),
+        ("Theme", list(THEME_CMDS)),
         ("Agents", list(AGENTS_CMDS)),
         ("Alerts", list(ALERTS_CMDS)),
         ("CLI (parity)", list(PARITY_COMMANDS)),
         ("System", list(SYS_CMDS)),
     ]
 
-    table = repl_table(title="Slash commands", title_style=BOLD_BRAND, show_header=False)
+    table = repl_table(title="Slash commands", title_style=ui_theme.BOLD_BRAND, show_header=False)
     table.add_column("name", no_wrap=True, min_width=18)
-    table.add_column("description", style=DIM)
+    table.add_column("description", style=ui_theme.DIM)
 
     for section_name, cmds in sections:
-        table.add_row(f"[{BOLD_BRAND}]{section_name}[/]", "")
+        table.add_row(f"[{ui_theme.BOLD_BRAND}]{section_name}[/]", "")
         for i, cmd in enumerate(cmds):
             table.add_row(
-                f"  [{HIGHLIGHT}]{cmd.name}[/]",
+                f"  [{ui_theme.HIGHLIGHT}]{cmd.name}[/]",
                 cmd.help_text,
                 end_section=(i == len(cmds) - 1),
             )

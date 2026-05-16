@@ -145,6 +145,12 @@ def _capture_accepted_cli_invocation(ctx: click.Context) -> None:
     default=None,
     help="Enable or disable interactive-shell hot reload. Defaults to enabled.",
 )
+@click.option(
+    "--theme",
+    type=str,
+    default=None,
+    help="Interactive-shell theme name. Overrides OPENSRE_THEME and config.yml.",
+)
 @click.pass_context
 def cli(
     ctx: click.Context,
@@ -155,6 +161,7 @@ def cli(
     interactive: bool,
     layout: str | None,
     reload_enabled: bool | None,
+    theme: str | None,
 ) -> None:
     """OpenSRE - open-source SRE agent for automated incident investigation and root cause analysis."""
     ctx.ensure_object(dict)
@@ -178,6 +185,7 @@ def cli(
                 cli_enabled=interactive,
                 cli_layout=layout,
                 cli_reload=reload_enabled,
+                cli_theme=theme,
             )
             if config.enabled:
                 raise SystemExit(run_repl(config=config))

@@ -261,6 +261,32 @@ def test_completion_menu_current_item_uses_highlight_style() -> None:
     assert attrs_menu.bold is True
 
 
+def test_prompt_style_tracks_active_theme() -> None:
+    from app.cli.interactive_shell.ui.theme import get_active_theme_name, set_active_theme
+
+    original = get_active_theme_name()
+    try:
+        set_active_theme("blue")
+        style = _build_prompt_style()
+        attrs = style.get_attrs_for_style_str("class:repl-slash-command")
+        assert (attrs.color or "").lower() == "a8d4ff"
+    finally:
+        set_active_theme(original)
+
+
+def test_prompt_style_sets_default_text_color_from_active_theme() -> None:
+    from app.cli.interactive_shell.ui.theme import get_active_theme_name, set_active_theme
+
+    original = get_active_theme_name()
+    try:
+        set_active_theme("amber")
+        style = _build_prompt_style()
+        attrs = style.get_attrs_for_style_str("")
+        assert (attrs.color or "").lower() == "e0e0e0"
+    finally:
+        set_active_theme(original)
+
+
 def test_shell_completer_path_completion_honors_mixed_case_prefix(tmp_path: Path) -> None:
     """Regression: path fragments must not be lowercased before PathCompleter.
 

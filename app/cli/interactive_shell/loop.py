@@ -74,6 +74,7 @@ from app.cli.interactive_shell.ui.streaming import (
     _CHARS_PER_TOKEN,
     format_token_count_short,
 )
+from app.cli.interactive_shell.ui.theme import set_active_theme
 from app.cli.support.errors import OpenSREError
 from app.cli.support.exception_reporting import report_exception
 from app.cli.support.prompt_support import repl_prompt_note_ctrl_c, repl_reset_ctrl_c_gate
@@ -183,6 +184,7 @@ _EXCLUSIVE_STDIN_MENU_COMMANDS: frozenset[str] = frozenset(
         "/mcp",
         "/model",
         "/template",
+        "/theme",
         "/trust",
         "/verbose",
     }
@@ -477,6 +479,7 @@ async def _repl_main(
     entrypoint.
     """
     cfg = _config or ReplConfig.load()
+    set_active_theme(cfg.theme)
     session = ReplSession()
     session.task_registry = TaskRegistry.persistent()
     pt_session = _build_prompt_session()
@@ -839,6 +842,10 @@ async def _run_interactive(
     # leaving the user staring at an idle one until they hit Enter.
     pt_app = pt_session.app
     main_loop = asyncio.get_running_loop()
+    # Store on the session so worker-thread slash commands (e.g. /theme)
+    # can update the prompt-toolkit application style via call_soon_threadsafe.
+    session.pt_style_app = pt_app
+    session.main_loop = main_loop
     # Bind the loop so :meth:`_ReplState.cancel_current_dispatch` can
     # route ``Task.cancel`` through ``call_soon_threadsafe`` when it's
     # invoked from a worker thread (see :func:`_request_exit`).

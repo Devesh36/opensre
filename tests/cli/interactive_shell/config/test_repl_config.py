@@ -22,6 +22,14 @@ class TestReplConfigDefaults:
         cfg = ReplConfig.load()
         assert cfg.reload is True
 
+    def test_default_theme_is_green(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("OPENSRE_THEME", raising=False)
+        import app.constants as const_module
+
+        monkeypatch.setattr(const_module, "OPENSRE_HOME_DIR", tmp_path)
+        cfg = ReplConfig.load()
+        assert cfg.theme == "green"
+
 
 class TestEnvVarResolution:
     def test_opensre_interactive_0_disables_repl(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -68,6 +76,14 @@ class TestEnvVarResolution:
         monkeypatch.setenv("OPENSRE_RELOAD", "1")
         assert ReplConfig.load().reload is True
 
+    def test_opensre_theme_env_sets_theme(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("OPENSRE_THEME", "blue")
+        assert ReplConfig.load().theme == "blue"
+
+    def test_invalid_theme_falls_back_to_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("OPENSRE_THEME", "nope")
+        assert ReplConfig.load().theme == "green"
+
 
 class TestCliOverride:
     def test_cli_enabled_false_wins_over_env_true(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -104,6 +120,11 @@ class TestCliOverride:
         monkeypatch.setenv("OPENSRE_RELOAD", "false")
         cfg = ReplConfig.load(cli_reload=None)
         assert cfg.reload is False
+
+    def test_cli_theme_wins_over_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("OPENSRE_THEME", "green")
+        cfg = ReplConfig.load(cli_theme="amber")
+        assert cfg.theme == "amber"
 
 
 class TestFileResolution:
@@ -170,6 +191,26 @@ class TestFileResolution:
 
         cfg = ReplConfig.load()
         assert cfg.reload is False
+
+    def test_file_theme_is_read(
+        self, tmp_path: pytest.FixtureDef, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        config_file = tmp_path / "config.yml"
+        config_file.write_text(
+            textwrap.dedent("""\
+                interactive:
+                  theme: mono
+            """),
+            encoding="utf-8",
+        )
+        monkeypatch.delenv("OPENSRE_THEME", raising=False)
+
+        import app.constants as const_module
+
+        monkeypatch.setattr(const_module, "OPENSRE_HOME_DIR", tmp_path)
+
+        cfg = ReplConfig.load()
+        assert cfg.theme == "mono"
 
     def test_env_overrides_file(
         self, tmp_path: pytest.FixtureDef, monkeypatch: pytest.MonkeyPatch

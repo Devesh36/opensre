@@ -27,6 +27,7 @@ from app.cli.interactive_shell.ui.theme import (
     ANSI_RESET,
     BG,
     BOLD_BRAND,
+    DEFAULT_THEME_NAME,
     DIM,
     DIM_COUNTER_ANSI,
     ERROR,
@@ -37,6 +38,10 @@ from app.cli.interactive_shell.ui.theme import (
     SECONDARY,
     TEXT,
     WARNING,
+    get_active_theme,
+    get_active_theme_name,
+    list_theme_names,
+    set_active_theme,
 )
 
 __all__ = [
@@ -46,6 +51,7 @@ __all__ = [
     "BOLD_BRAND",
     "DIM",
     "DIM_COUNTER_ANSI",
+    "DEFAULT_THEME_NAME",
     "ERROR",
     "HIGHLIGHT",
     "MCP_INTEGRATION_SERVICES",
@@ -53,6 +59,10 @@ __all__ = [
     "PROMPT_ACCENT_ANSI",
     "PROMPT_FRAME_ANSI",
     "SECONDARY",
+    "get_active_theme",
+    "get_active_theme_name",
+    "list_theme_names",
+    "set_active_theme",
     "STREAM_LABEL_ANSWER",
     "STREAM_LABEL_ASSISTANT",
     "TEXT",

@@ -4,6 +4,7 @@ import json
 import os
 from unittest.mock import MagicMock
 
+from app.cli.interactive_shell.ui.theme import get_active_theme_name, set_active_theme
 from app.cli.wizard import flow
 from app.cli.wizard import store as wizard_store
 from app.cli.wizard.env_sync import sync_provider_env
@@ -66,6 +67,45 @@ def test_run_wizard_advanced_remote_falls_back_to_local(monkeypatch, tmp_path, c
     output = capsys.readouterr().out
     assert "next" in output
     assert "Done." in output
+
+
+def test_run_wizard_applies_theme_from_repl_config(monkeypatch, tmp_path) -> None:
+    old_theme = get_active_theme_name()
+
+    class _Cfg:
+        theme = "mono"
+
+    monkeypatch.setattr(
+        "app.cli.interactive_shell.config.ReplConfig.load", classmethod(lambda _cls: _Cfg())
+    )
+
+    select_responses = iter(["quickstart", "anthropic", "skip"])
+
+    def _mock_select(*_args, **_kwargs):
+        m = MagicMock()
+        m.ask.return_value = next(select_responses)
+        return m
+
+    def _mock_password(*_args, **_kwargs):
+        m = MagicMock()
+        m.ask.return_value = "secret-key"
+        return m
+
+    monkeypatch.setattr(flow, "select_prompt", _mock_select)
+    monkeypatch.setattr(flow.questionary, "password", _mock_password)
+    monkeypatch.setattr(flow, "get_store_path", lambda: tmp_path / "opensre.json")
+    monkeypatch.setattr(flow, "probe_local_target", lambda _path: ProbeResult("local", True, "ok"))
+    monkeypatch.setattr(flow, "save_local_config", lambda **_kwargs: tmp_path / "opensre.json")
+    monkeypatch.setattr(flow, "sync_provider_env", lambda **_kwargs: tmp_path / ".env")
+    monkeypatch.setattr(flow, "save_llm_api_key", lambda *_args, **_kwargs: None)
+
+    set_active_theme("green")
+    try:
+        exit_code = flow.run_wizard()
+        assert exit_code == 0
+        assert get_active_theme_name() == "mono"
+    finally:
+        set_active_theme(old_theme)
 
 
 def test_run_wizard_no_saved_provider_shows_selection(monkeypatch, tmp_path) -> None:

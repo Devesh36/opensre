@@ -504,6 +504,9 @@ def test_default_no_args_enters_repl(monkeypatch) -> None:
     assert load_calls[0].get("cli_reload") is None, (
         f"default no-args run must leave reload env/config overridable, got {load_calls[0]}"
     )
+    assert load_calls[0].get("cli_theme") is None, (
+        f"default no-args run must leave theme env/config overridable, got {load_calls[0]}"
+    )
     assert landing_calls == [], "REPL should run, not landing page"
 
 
@@ -531,5 +534,5 @@ def test_no_reload_flag_passes_reload_disabled(monkeypatch) -> None:
 
     assert exit_code == 0
     assert load_calls == [
-        {"cli_enabled": True, "cli_layout": None, "cli_reload": False},
+        {"cli_enabled": True, "cli_layout": None, "cli_reload": False, "cli_theme": None},
     ]

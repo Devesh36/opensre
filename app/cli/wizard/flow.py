@@ -16,6 +16,7 @@ from rich.text import Text
 
 from app.cli.interactive_shell.ui.theme import (
     BRAND,
+    DEFAULT_THEME_NAME,
     DIM,
     ERROR,
     GLYPH_ERROR,
@@ -25,6 +26,8 @@ from app.cli.interactive_shell.ui.theme import (
     SECONDARY,
     TEXT,
     WARNING,
+    get_active_theme,
+    set_active_theme,
 )
 from app.cli.wizard.config import PROVIDER_BY_VALUE, SUPPORTED_PROVIDERS, ProviderOption
 from app.cli.wizard.env_sync import sync_env_values, sync_provider_env
@@ -211,20 +214,26 @@ def get_sentry_auth_recommendations():
     return _get()
 
 
-_STYLE = questionary.Style(
-    [
-        ("qmark", f"fg:{HIGHLIGHT} bold"),
-        ("question", f"fg:{TEXT} bold"),
-        ("answer", f"fg:{BRAND} bold"),
-        ("pointer", f"fg:{HIGHLIGHT} bold"),
-        ("highlighted", f"fg:{TEXT} bg:{HIGHLIGHT} bold"),
-        ("selected", f"fg:{TEXT} bg:default bold"),
-        ("separator", f"fg:{DIM}"),
-        ("text", f"fg:{TEXT} bg:default"),
-        ("disabled", f"fg:{SECONDARY} bg:default italic"),
-        ("instruction", f"fg:{SECONDARY} italic"),
-    ]
-)
+def _build_style() -> questionary.Style:
+    theme = get_active_theme()
+    return questionary.Style(
+        [
+            ("qmark", f"fg:{theme.HIGHLIGHT} bold"),
+            ("question", f"fg:{theme.TEXT} bold"),
+            ("answer", f"fg:{theme.BRAND} bold"),
+            ("pointer", f"fg:{theme.HIGHLIGHT} bold"),
+            ("highlighted", f"fg:{theme.TEXT} bg:{theme.HIGHLIGHT} bold"),
+            ("selected", f"fg:{theme.TEXT} bg:default bold"),
+            ("separator", f"fg:{theme.DIM}"),
+            ("text", f"fg:{theme.TEXT} bg:default"),
+            ("disabled", f"fg:{theme.SECONDARY} bg:default italic"),
+            ("instruction", f"fg:{theme.SECONDARY} italic"),
+        ]
+    )
+
+
+def _wizard_style() -> questionary.Style:
+    return _build_style()
 
 
 @dataclass(frozen=True)
@@ -331,7 +340,7 @@ def _choose(prompt: str, choices: list[Choice], *, default: str | None = None) -
         prompt,
         choices=q_choices,
         default=default,
-        style=_STYLE,
+        style=_wizard_style(),
         instruction="(Use arrows to move, Enter to choose)",
     ).ask()
 
@@ -341,7 +350,7 @@ def _choose(prompt: str, choices: list[Choice], *, default: str | None = None) -
 
 
 def _confirm(prompt: str, *, default: bool = True) -> bool:
-    result = questionary.confirm(prompt, default=default, style=_STYLE).ask()
+    result = questionary.confirm(prompt, default=default, style=_wizard_style()).ask()
     if result is None:
         raise KeyboardInterrupt
     return bool(result)
@@ -360,14 +369,14 @@ def _prompt_value(
             result = questionary.password(
                 label,
                 default=default,
-                style=_STYLE,
+                style=_wizard_style(),
                 instruction=instruction,
             ).ask()
         else:
             result = questionary.text(
                 label,
                 default=default,
-                style=_STYLE,
+                style=_wizard_style(),
                 instruction=instruction,
             ).ask()
 
@@ -2037,6 +2046,21 @@ def _run_cli_llm_onboarding(provider: ProviderOption) -> Literal["ok", "abort", 
 
 def run_wizard(_argv: list[str] | None = None) -> int:
     """Run the interactive wizard."""
+    from app.cli.interactive_shell.config import ReplConfig
+
+    cfg = ReplConfig.load()
+    set_active_theme(getattr(cfg, "theme", DEFAULT_THEME_NAME))
+    # Sync module-level colour references that were captured at import time
+    # so subsequent renders use the active theme.
+    th = get_active_theme()
+    global HIGHLIGHT, BRAND, DIM, ERROR, SECONDARY, TEXT, WARNING
+    HIGHLIGHT = th.HIGHLIGHT
+    BRAND = th.BRAND
+    DIM = th.DIM
+    ERROR = th.ERROR
+    SECONDARY = th.SECONDARY
+    TEXT = th.TEXT
+    WARNING = th.WARNING
     _render_header()
     defaults = _local_defaults()
     saved_provider_value = defaults["provider"] if isinstance(defaults["provider"], str) else None

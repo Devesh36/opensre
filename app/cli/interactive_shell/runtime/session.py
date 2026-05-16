@@ -103,6 +103,19 @@ class ReplSession:
     """Queued incoming alerts from the HTTP listener, capped at 256 entries.
     Shows up in /status and /history for user visibility."""
 
+    pt_style_app: Any = None
+    """The prompt-toolkit ``Application`` instance for this session.
+    Stored here (instead of accessed via ``get_app_or_none()``) so that
+    slash-command handlers running in a *worker thread* — where the
+    ``_current_app`` ContextVar is not set — can still update the
+    application's style on theme change. Set once in ``_run_interactive``
+    and mutated via ``call_soon_threadsafe``."""
+
+    main_loop: Any = None
+    """The asyncio event loop for the main REPL coroutine.
+    Set once in ``_run_interactive`` so worker-thread code can use
+    ``call_soon_threadsafe`` to run callbacks on the main thread."""
+
     _INCOMING_ALERTS_MAX: int = 256
     """Maximum number of incoming alerts to keep in session history."""
     # the next investigation.  Kept as a class-level tuple so any caller that
