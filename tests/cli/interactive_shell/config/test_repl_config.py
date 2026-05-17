@@ -84,6 +84,15 @@ class TestEnvVarResolution:
         monkeypatch.setenv("OPENSRE_THEME", "nope")
         assert ReplConfig.load().theme == "green"
 
+    def test_invalid_theme_logs_warning(self, monkeypatch: pytest.MonkeyPatch, caplog) -> None:
+        monkeypatch.setenv("OPENSRE_THEME", "chartreuse")
+
+        with caplog.at_level("WARNING"):
+            cfg = ReplConfig.load()
+
+        assert cfg.theme == "green"
+        assert "OPENSRE_THEME='chartreuse' is not a valid theme" in caplog.text
+
 
 class TestCliOverride:
     def test_cli_enabled_false_wins_over_env_true(self, monkeypatch: pytest.MonkeyPatch) -> None:

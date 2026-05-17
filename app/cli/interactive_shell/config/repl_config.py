@@ -7,7 +7,11 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-from app.cli.interactive_shell.ui.theme import DEFAULT_THEME_NAME, set_active_theme
+from app.cli.interactive_shell.ui.theme import (
+    DEFAULT_THEME_NAME,
+    list_theme_names,
+    set_active_theme,
+)
 
 _VALID_LAYOUTS = ("classic", "pinned")
 _FALSE_VALUES = ("", "0", "false", "off", "no")
@@ -152,6 +156,13 @@ class ReplConfig:
             theme = cli_theme.strip().lower()
         elif (env_val := os.getenv("OPENSRE_THEME")) is not None:
             theme = env_val.strip().lower()
+            if theme not in list_theme_names():
+                log.warning(
+                    "OPENSRE_THEME=%r is not a valid theme; defaulting to %r.",
+                    env_val,
+                    DEFAULT_THEME_NAME,
+                )
+                theme = DEFAULT_THEME_NAME
         else:
             theme = str(file_conf.get("theme", DEFAULT_THEME_NAME)).strip().lower()
 
