@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 from app.analytics.cli import build_cli_invoked_properties, capture_cli_invoked
 from app.analytics.provider import Properties, capture_first_run_if_needed, shutdown_analytics
 from app.cli.commands import register_commands
+from app.cli.interactive_shell.ui.theme import list_theme_names
 from app.cli.support.exception_reporting import report_exception, should_report_exception
 from app.cli.support.layout import RichGroup, render_landing
 from app.cli.support.prompt_support import (
@@ -147,7 +148,7 @@ def _capture_accepted_cli_invocation(ctx: click.Context) -> None:
 )
 @click.option(
     "--theme",
-    type=str,
+    type=click.Choice(list_theme_names(), case_sensitive=False),
     default=None,
     help="Interactive-shell theme name. Overrides OPENSRE_THEME and config.yml.",
 )

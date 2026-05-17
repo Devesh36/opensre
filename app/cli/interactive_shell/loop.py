@@ -60,15 +60,8 @@ from app.cli.interactive_shell.prompting import follow_up as _follow_up
 from app.cli.interactive_shell.prompting import prompt_surface as _prompt_surface
 from app.cli.interactive_shell.routing import router as _router
 from app.cli.interactive_shell.runtime import HotReloadCoordinator, ReplSession, TaskRegistry
-from app.cli.interactive_shell.ui import (
-    ANSI_DIM,
-    ANSI_RESET,
-    DIM,
-    ERROR,
-    PROMPT_ACCENT_ANSI,
-    WARNING,
-    render_banner,
-)
+from app.cli.interactive_shell.ui import render_banner
+from app.cli.interactive_shell.ui import theme as ui_theme
 from app.cli.interactive_shell.ui.choice_menu import repl_tty_interactive
 from app.cli.interactive_shell.ui.streaming import (
     _CHARS_PER_TOKEN,
@@ -316,20 +309,20 @@ def _run_new_alert(
     except KeyboardInterrupt:
         task.mark_cancelled()
         session.record_intervention("ctrl_c")
-        console.print(f"[{WARNING}]investigation cancelled.[/]")
+        console.print(f"[{ui_theme.WARNING}]investigation cancelled.[/]")
         session.record("alert", text, ok=False)
         return
     except OpenSREError as exc:
         task.mark_failed(str(exc))
-        console.print(f"[{ERROR}]investigation failed:[/] {escape(str(exc))}")
+        console.print(f"[{ui_theme.ERROR}]investigation failed:[/] {escape(str(exc))}")
         if exc.suggestion:
-            console.print(f"[{WARNING}]suggestion:[/] {escape(exc.suggestion)}")
+            console.print(f"[{ui_theme.WARNING}]suggestion:[/] {escape(exc.suggestion)}")
         session.record("alert", text, ok=False)
         return
     except Exception as exc:
         task.mark_failed(str(exc))
         report_exception(exc, context="interactive_shell.new_alert")
-        console.print(f"[{ERROR}]investigation failed:[/] {escape(str(exc))}")
+        console.print(f"[{ui_theme.ERROR}]investigation failed:[/] {escape(str(exc))}")
         session.record("alert", text, ok=False)
         return
 
@@ -380,8 +373,8 @@ def _dispatch_one_turn(
         except Exception as exc:
             report_exception(exc, context="interactive_shell.slash_dispatch")
             console.print(
-                f"[{ERROR}]command error:[/] {escape(str(exc))}"
-                f" [{DIM}](the REPL is still running)[/]"
+                f"[{ui_theme.ERROR}]command error:[/] {escape(str(exc))}"
+                f" [{ui_theme.DIM}](the REPL is still running)[/]"
             )
             should_continue = True
         if not should_continue:
@@ -508,7 +501,7 @@ async def _repl_main(
                 legacy_windows=False,
             )
             console.print(
-                f"[{DIM}]listening for alerts on http://{alert_listener_handle.bound_address}/alerts[/]"
+                f"[{ui_theme.DIM}]listening for alerts on http://{alert_listener_handle.bound_address}/alerts[/]"
             )
         except Exception as exc:
             log.warning("Alert listener could not start: %s — continuing without it.", exc)
@@ -731,7 +724,7 @@ class _SpinnerState:
             # — no None guard needed beyond the app-None check.
             if app is not None and app.current_buffer.text:
                 hint += "  ·  esc to clear"
-        return ANSI(f"{ANSI_DIM}{hint}{ANSI_RESET}")
+        return ANSI(f"{ui_theme.ANSI_DIM}{hint}{ui_theme.ANSI_RESET}")
 
     def inline_spinner_ansi(self) -> str:
         """Single-line ``⠋ thinking… (Ns · ↓ X tokens)`` indicator, or
@@ -747,8 +740,8 @@ class _SpinnerState:
         glyph = self._SPINNER_FRAMES[self._frame_idx % len(self._SPINNER_FRAMES)]
         self._frame_idx += 1
         return (
-            f"{PROMPT_ACCENT_ANSI}{glyph} {self._verb}…{ANSI_RESET}"
-            f"{ANSI_DIM} ({elapsed:.0f}s · ↓ {tokens_str} tokens){ANSI_RESET}"
+            f"{ui_theme.PROMPT_ACCENT_ANSI}{glyph} {self._verb}…{ui_theme.ANSI_RESET}"
+            f"{ui_theme.ANSI_DIM} ({elapsed:.0f}s · ↓ {tokens_str} tokens){ui_theme.ANSI_RESET}"
         )
 
 
@@ -896,7 +889,7 @@ async def _run_interactive(
                 confirm_fn=lambda prompt: _route_confirm_through_prompt(state, prompt),
             )
         except asyncio.CancelledError:
-            console.print(f"[{WARNING}]· interrupted[/]")
+            console.print(f"[{ui_theme.WARNING}]· interrupted[/]")
             raise
         except DispatchCancelled:
             # Worker raised mid-confirmation because the user pressed
@@ -908,10 +901,10 @@ async def _run_interactive(
             # ``Task.cancel`` (the two race), and re-raising here would
             # surface this as a generic dispatch error rather than the
             # clean ``· interrupted`` line.
-            console.print(f"[{WARNING}]· interrupted[/]")
+            console.print(f"[{ui_theme.WARNING}]· interrupted[/]")
         except Exception as exc:
             report_exception(exc, context="interactive_shell.dispatch_async")
-            console.print(f"[{ERROR}]dispatch error:[/] {escape(str(exc))}")
+            console.print(f"[{ui_theme.ERROR}]dispatch error:[/] {escape(str(exc))}")
         finally:
             if show_spinner:
                 spinner.stop()
@@ -1095,7 +1088,7 @@ async def _run_interactive(
                         state.deliver_confirmation(text or "")
                         continue
                     echo_console.print(
-                        f"[{DIM}](type y/N to confirm the pending action; "
+                        f"[{ui_theme.DIM}](type y/N to confirm the pending action; "
                         "your input has been queued for after)[/]"
                     )
                     stripped = (text or "").strip()

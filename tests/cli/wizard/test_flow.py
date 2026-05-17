@@ -4,7 +4,11 @@ import json
 import os
 from unittest.mock import MagicMock
 
-from app.cli.interactive_shell.ui.theme import get_active_theme_name, set_active_theme
+from app.cli.interactive_shell.ui.theme import (
+    get_active_theme,
+    get_active_theme_name,
+    set_active_theme,
+)
 from app.cli.wizard import flow
 from app.cli.wizard import store as wizard_store
 from app.cli.wizard.env_sync import sync_provider_env
@@ -104,6 +108,14 @@ def test_run_wizard_applies_theme_from_repl_config(monkeypatch, tmp_path) -> Non
         exit_code = flow.run_wizard()
         assert exit_code == 0
         assert get_active_theme_name() == "mono"
+        active = get_active_theme()
+        assert flow.HIGHLIGHT == active.HIGHLIGHT
+        assert flow.BRAND == active.BRAND
+        assert flow.DIM == active.DIM
+        assert flow.ERROR == active.ERROR
+        assert flow.SECONDARY == active.SECONDARY
+        assert flow.TEXT == active.TEXT
+        assert flow.WARNING == active.WARNING
     finally:
         set_active_theme(old_theme)
 

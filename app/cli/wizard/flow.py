@@ -208,6 +208,14 @@ def validate_splunk_integration(**kwargs):
     return _validate(**kwargs)
 
 
+def _sync_theme_globals() -> None:
+    """Refresh module-level theme tokens from the active interactive theme."""
+    active_theme = get_active_theme()
+    for attr_name, attr_value in vars(active_theme).items():
+        if attr_name.isupper():
+            globals()[attr_name] = attr_value
+
+
 def get_sentry_auth_recommendations():
     from app.integrations.sentry import get_sentry_auth_recommendations as _get
 
@@ -2050,17 +2058,7 @@ def run_wizard(_argv: list[str] | None = None) -> int:
 
     cfg = ReplConfig.load()
     set_active_theme(getattr(cfg, "theme", DEFAULT_THEME_NAME))
-    # Sync module-level colour references that were captured at import time
-    # so subsequent renders use the active theme.
-    th = get_active_theme()
-    global HIGHLIGHT, BRAND, DIM, ERROR, SECONDARY, TEXT, WARNING
-    HIGHLIGHT = th.HIGHLIGHT
-    BRAND = th.BRAND
-    DIM = th.DIM
-    ERROR = th.ERROR
-    SECONDARY = th.SECONDARY
-    TEXT = th.TEXT
-    WARNING = th.WARNING
+    _sync_theme_globals()
     _render_header()
     defaults = _local_defaults()
     saved_provider_value = defaults["provider"] if isinstance(defaults["provider"], str) else None

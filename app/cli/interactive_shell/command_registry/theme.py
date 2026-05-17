@@ -9,7 +9,7 @@ from rich.console import Console
 
 from app.cli.interactive_shell.command_registry.types import ExecutionTier, SlashCommand
 from app.cli.interactive_shell.runtime import ReplSession
-from app.cli.interactive_shell.ui import DIM, render_banner
+from app.cli.interactive_shell.ui import theme as ui_theme
 from app.cli.interactive_shell.ui.choice_menu import repl_choose_one, repl_tty_interactive
 from app.cli.interactive_shell.ui.theme import (
     get_active_theme,
@@ -63,15 +63,9 @@ def _refresh_prompt_style(session: ReplSession) -> None:
         session.main_loop.call_soon_threadsafe(_apply_new_prompt_style, session)
 
 
-def _repaint_terminal(console: Console) -> None:
-    """Clear and redraw shell chrome so the new theme is immediately visible."""
-    console.clear()
-    render_banner(console)
-
-
 def _cmd_theme(session: ReplSession, console: Console, _args: list[str]) -> bool:
     if not repl_tty_interactive():
-        console.print(f"[{DIM}]/theme requires an interactive TTY session.[/]")
+        console.print(f"[{ui_theme.DIM}]/theme requires an interactive TTY session.[/]")
         return True
 
     current = get_active_theme_name()
@@ -84,12 +78,11 @@ def _cmd_theme(session: ReplSession, console: Console, _args: list[str]) -> bool
     ]
     selected = repl_choose_one(title="theme", breadcrumb="/theme", choices=choices)
     if selected is None:
-        console.print(f"[{DIM}]theme unchanged.[/]")
+        console.print(f"[{ui_theme.DIM}]theme unchanged.[/]")
         return True
 
     active = set_active_theme(selected)
     _refresh_prompt_style(session)
-    _repaint_terminal(console)
 
     config_data = _load_config()
     updated = _set_nested_key(config_data, "interactive.theme", active.name)

@@ -7,6 +7,7 @@ import re
 import sys
 
 from app.cli.interactive_shell.ui import choice_menu
+from app.cli.interactive_shell.ui.theme import set_active_theme
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;:]*[A-Za-z]")
 
@@ -48,3 +49,25 @@ def test_erase_menu_block_resets_to_column_zero(monkeypatch) -> None:
     rendered = out.getvalue()
     assert rendered.startswith("\r\x1b[")
     assert "A\r\x1b[J" in rendered
+
+
+def test_draw_menu_uses_current_theme_tokens(monkeypatch) -> None:
+    out = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", out)
+    monkeypatch.setattr(choice_menu, "_cols", lambda: 80)
+
+    set_active_theme("blue")
+    try:
+        choice_menu._draw_menu(
+            title="theme",
+            crumb="/theme",
+            labels=["green", "blue"],
+            index=1,
+            erase_lines=0,
+        )
+    finally:
+        set_active_theme("green")
+
+    rendered = out.getvalue()
+    # Blue theme highlight RGB (A8 D4 FF) must be present in ANSI output.
+    assert "\x1b[38;2;168;212;255m" in rendered

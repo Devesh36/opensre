@@ -536,3 +536,43 @@ def test_no_reload_flag_passes_reload_disabled(monkeypatch) -> None:
     assert load_calls == [
         {"cli_enabled": True, "cli_layout": None, "cli_reload": False, "cli_theme": None},
     ]
+
+
+def test_invalid_theme_flag_returns_usage_error(monkeypatch, capsys) -> None:
+    monkeypatch.setattr("app.cli.__main__.capture_first_run_if_needed", lambda: None)
+    monkeypatch.setattr("app.cli.__main__.shutdown_analytics", lambda **_kw: None)
+    monkeypatch.setattr("app.cli.__main__.capture_cli_invoked", lambda *_args: None)
+
+    exit_code = main(["--theme", "chartreuse"])
+
+    assert exit_code == 2
+    err = capsys.readouterr().err
+    assert "Invalid value for '--theme'" in err
+    assert "chartreuse" in err
+
+
+def test_valid_theme_flag_passes_normalized_value(monkeypatch) -> None:
+    monkeypatch.setattr("app.cli.__main__.capture_first_run_if_needed", lambda: None)
+    monkeypatch.setattr("app.cli.__main__.shutdown_analytics", lambda **_kw: None)
+    monkeypatch.setattr("app.cli.__main__.capture_cli_invoked", lambda *_args: None)
+    monkeypatch.setattr("app.cli.__main__.sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("app.cli.__main__.sys.stdout.isatty", lambda: True)
+
+    load_calls: list[dict] = []
+
+    @classmethod  # type: ignore[misc]
+    def spy_load(_cls, **kw):  # type: ignore[no-untyped-def]
+        load_calls.append(kw)
+        return ReplConfig(enabled=True, layout="classic", theme="blue")
+
+    monkeypatch.setattr("app.cli.interactive_shell.config.ReplConfig.load", spy_load)
+
+    with (
+        patch("app.cli.interactive_shell.run_repl", return_value=0),
+        patch("app.cli.interactive_shell.loop.run_repl", return_value=0),
+    ):
+        exit_code = main(["--theme", "BLUE"])
+
+    assert exit_code == 0
+    assert len(load_calls) == 1
+    assert load_calls[0].get("cli_theme") == "blue"

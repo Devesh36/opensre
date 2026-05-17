@@ -6,7 +6,11 @@ from rich.console import Console
 
 from app.cli.interactive_shell.commands import SLASH_COMMANDS, dispatch_slash
 from app.cli.interactive_shell.runtime.session import ReplSession
-from app.cli.interactive_shell.ui.theme import get_active_theme_name, set_active_theme
+from app.cli.interactive_shell.ui.theme import (
+    get_active_theme,
+    get_active_theme_name,
+    set_active_theme,
+)
 
 
 def _capture() -> tuple[Console, io.StringIO]:
@@ -24,8 +28,6 @@ def test_theme_command_updates_active_theme_and_persists(monkeypatch) -> None:
     monkeypatch.setattr(theme_cmd, "repl_tty_interactive", lambda: True)
     monkeypatch.setattr(theme_cmd, "repl_choose_one", lambda **_kwargs: "blue")
     monkeypatch.setattr(theme_cmd, "_refresh_prompt_style", lambda _session: None)
-    repaint_calls: list[int] = []
-    monkeypatch.setattr(theme_cmd, "_repaint_terminal", lambda _console: repaint_calls.append(1))
 
     saved_payloads: list[dict[str, object]] = []
     monkeypatch.setattr(theme_cmd, "_load_config", lambda: {})
@@ -38,7 +40,6 @@ def test_theme_command_updates_active_theme_and_persists(monkeypatch) -> None:
     assert dispatch_slash("/theme", session, console) is True
     assert get_active_theme_name() == "blue"
     assert saved_payloads
-    assert repaint_calls == [1]
     interactive = saved_payloads[-1].get("interactive")
     assert isinstance(interactive, dict)
     assert interactive.get("theme") == "blue"
@@ -65,7 +66,6 @@ def test_theme_set_message_uses_active_theme_color(monkeypatch) -> None:
     monkeypatch.setattr(theme_cmd, "repl_tty_interactive", lambda: True)
     monkeypatch.setattr(theme_cmd, "repl_choose_one", lambda **_kwargs: "blue")
     monkeypatch.setattr(theme_cmd, "_refresh_prompt_style", lambda _session: None)
-    monkeypatch.setattr(theme_cmd, "_repaint_terminal", lambda _console: None)
     monkeypatch.setattr(theme_cmd, "_load_config", lambda: {})
     monkeypatch.setattr(theme_cmd, "_save_config", lambda _data: None)
 
@@ -77,3 +77,36 @@ def test_theme_set_message_uses_active_theme_color(monkeypatch) -> None:
     output = buf.getvalue()
     assert "theme set: blue" in output
     assert "#A8D4FF" not in output
+
+
+def test_theme_command_non_tty_message_uses_current_dim(monkeypatch) -> None:
+    from app.cli.interactive_shell.command_registry import theme as theme_cmd
+
+    monkeypatch.setattr(theme_cmd, "repl_tty_interactive", lambda: False)
+    set_active_theme("mono")
+
+    printed: list[str] = []
+
+    class _Console:
+        def print(self, msg: str) -> None:
+            printed.append(msg)
+
+    assert theme_cmd._cmd_theme(ReplSession(), _Console(), []) is True
+    assert printed == [f"[{get_active_theme().DIM}]/theme requires an interactive TTY session.[/]"]
+
+
+def test_theme_command_unchanged_message_uses_current_dim(monkeypatch) -> None:
+    from app.cli.interactive_shell.command_registry import theme as theme_cmd
+
+    monkeypatch.setattr(theme_cmd, "repl_tty_interactive", lambda: True)
+    monkeypatch.setattr(theme_cmd, "repl_choose_one", lambda **_kwargs: None)
+    set_active_theme("mono")
+
+    printed: list[str] = []
+
+    class _Console:
+        def print(self, msg: str) -> None:
+            printed.append(msg)
+
+    assert theme_cmd._cmd_theme(ReplSession(), _Console(), []) is True
+    assert printed == [f"[{get_active_theme().DIM}]theme unchanged.[/]"]

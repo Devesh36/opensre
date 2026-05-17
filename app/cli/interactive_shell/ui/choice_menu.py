@@ -19,14 +19,7 @@ from typing import Any, cast
 from rich.console import Console
 from rich.markup import escape
 
-from app.cli.interactive_shell.ui.theme import (
-    ANSI_RESET,
-    DIM,
-    DIM_COUNTER_ANSI,
-    MENU_SELECTION_ROW_ANSI,
-    PROMPT_ACCENT_ANSI,
-    SECONDARY,
-)
+from app.cli.interactive_shell.ui import theme as ui_theme
 
 _HINT = "↑↓  Enter  Esc"
 CRUMB_SEP = "  ›  "
@@ -43,7 +36,7 @@ def repl_tty_interactive() -> bool:
 def repl_section_break(console: Console) -> None:
     """Blank line + dim rule between an inline menu step and Rich output."""
     console.print()
-    console.rule(characters="─", style=DIM)
+    console.rule(characters="─", style=ui_theme.DIM)
     console.print()
 
 
@@ -148,12 +141,12 @@ def _draw_menu(
     for _ in range(_MENU_LEADING_LINES):
         _write_menu_line()
     # title
-    _write_menu_line(f"{PROMPT_ACCENT_ANSI}{title}{ANSI_RESET}")
+    _write_menu_line(f"{ui_theme.PROMPT_ACCENT_ANSI}{title}{ui_theme.ANSI_RESET}")
     # breadcrumb path
     if crumb:
-        _write_menu_line(f"{DIM_COUNTER_ANSI}{crumb}{ANSI_RESET}")
+        _write_menu_line(f"{ui_theme.DIM_COUNTER_ANSI}{crumb}{ui_theme.ANSI_RESET}")
     # separator below header
-    _write_menu_line(f"{DIM_COUNTER_ANSI}{_rule(w)}{ANSI_RESET}")
+    _write_menu_line(f"{ui_theme.DIM_COUNTER_ANSI}{_rule(w)}{ui_theme.ANSI_RESET}")
     _write_menu_line()
     # choices
     for i, label in enumerate(labels):
@@ -161,11 +154,11 @@ def _draw_menu(
         sym = ">" if here else " "
         padded = _pad(sym, label, w)
         if here:
-            _write_menu_line(f"{MENU_SELECTION_ROW_ANSI}{padded}{ANSI_RESET}")
+            _write_menu_line(f"{ui_theme.MENU_SELECTION_ROW_ANSI}{padded}{ui_theme.ANSI_RESET}")
         else:
-            _write_menu_line(f"{DIM_COUNTER_ANSI}{padded}{ANSI_RESET}")
+            _write_menu_line(f"{ui_theme.DIM_COUNTER_ANSI}{padded}{ui_theme.ANSI_RESET}")
     _write_menu_line()
-    _write_menu_line(f"{DIM_COUNTER_ANSI}{_HINT}{ANSI_RESET}")
+    _write_menu_line(f"{ui_theme.DIM_COUNTER_ANSI}{_HINT}{ui_theme.ANSI_RESET}")
     out.flush()
 
 
@@ -242,9 +235,9 @@ def print_valid_choice_list(
     """Print one choice per line for scan-friendly fallback/error messaging."""
     if not choices:
         return
-    console.print(f"[{SECONDARY}]{title}[/]")
+    console.print(f"[{ui_theme.SECONDARY}]{title}[/]")
     for choice in choices:
-        console.print(f"[{SECONDARY}]  - {escape(choice)}[/]")
+        console.print(f"[{ui_theme.SECONDARY}]  - {escape(choice)}[/]")
 
 
 __all__ = [
