@@ -68,9 +68,7 @@ def _cmd_trust(session: ReplSession, console: Console, args: list[str]) -> bool:
         console.print(f"[{DIM}]trust mode off[/]")
     else:
         session.trust_mode = True
-        console.print(
-            f"[{WARNING}]trust mode on[/] — future approval prompts will be skipped"
-        )
+        console.print(f"[{WARNING}]trust mode on[/] — future approval prompts will be skipped")
     return True
 
 
@@ -159,9 +157,7 @@ def _cmd_effort(session: ReplSession, console: Console, args: list[str]) -> bool
         return True
 
     session.reasoning_effort = effort
-    console.print(
-        f"[{HIGHLIGHT}]reasoning effort set to:[/] {display_reasoning_effort(effort)}"
-    )
+    console.print(f"[{HIGHLIGHT}]reasoning effort set to:[/] {display_reasoning_effort(effort)}")
     if not provider_supports_reasoning_effort(provider):
         console.print(
             f"[{DIM}]current provider {provider} ignores this setting; "
@@ -216,9 +212,7 @@ def _cmd_context(session: ReplSession, console: Console, _args: list[str]) -> bo
         console.print(f"[{DIM}]no infra context accumulated yet.[/]")
         return True
 
-    table = repl_table(
-        title="Accumulated context\n", title_style=BOLD_BRAND, show_header=False
-    )
+    table = repl_table(title="Accumulated context\n", title_style=BOLD_BRAND, show_header=False)
     table.add_column("key", style="bold")
     table.add_column("value")
     for k, v in sorted(session.accumulated_context.items()):

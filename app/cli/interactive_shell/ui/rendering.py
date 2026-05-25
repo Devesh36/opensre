@@ -213,8 +213,7 @@ def repl_clear_screen() -> None:
 def _theme_notice_line(theme_notice: str) -> str:
     """REPL-safe ``theme set: <name>`` using the active palette (not stale imports)."""
     return (
-        f"{ui_theme.HIGHLIGHT_ANSI}theme set: {escape(theme_notice)}"
-        f"{ui_theme.ANSI_RESET}\r\n\r\n"
+        f"{ui_theme.HIGHLIGHT_ANSI}theme set: {escape(theme_notice)}{ui_theme.ANSI_RESET}\r\n\r\n"
     )
 
 
@@ -352,8 +351,7 @@ def render_integrations_table(console: Console, results: list[dict[str, str]]) -
     rows = [r for r in results if r.get("service") not in MCP_INTEGRATION_SERVICES]
     if not rows:
         repl_print(
-            console,
-            f"[{DIM}]no integrations configured.  try `opensre onboard` to add one.[/]"
+            console, f"[{DIM}]no integrations configured.  try `opensre onboard` to add one.[/]"
         )
         return
     render_table(console, "Integrations", _INTEGRATION_COLS, [_integration_row(r) for r in rows])
@@ -369,10 +367,7 @@ def render_mcp_table(console: Console, results: list[dict[str, str]]) -> None:
 
 def render_models_table(console: Console, settings: Any) -> None:
     if settings is None:
-        repl_print(
-            console,
-            f"[{ERROR}]LLM settings unavailable[/] — check provider env vars."
-        )
+        repl_print(console, f"[{ERROR}]LLM settings unavailable[/] — check provider env vars.")
         return
     provider = str(getattr(settings, "provider", "unknown"))
     reasoning_model, toolcall_model = resolve_provider_models(settings, provider)
@@ -427,9 +422,7 @@ def print_planned_actions(console: Console, actions: list[PlannedAction]) -> Non
             "implementation": "implementation",
             "assistant_handoff": "assistant handoff",
         }[action.kind]
-        console.print(
-            f"[{DIM}]{index}.[/] [{BOLD_BRAND}]{label}[/] {escape(action.content)}"
-        )
+        console.print(f"[{DIM}]{index}.[/] [{BOLD_BRAND}]{label}[/] {escape(action.content)}")
 
 
 __all__ = [

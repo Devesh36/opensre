@@ -22,8 +22,11 @@ log = logging.getLogger(__name__)
 
 
 async def repl_main(initial_input: str | None = None, _config: ReplConfig | None = None) -> int:
+    from app.cli.interactive_shell.ui.theme import get_active_theme_name
+
     cfg = _config or ReplConfig.load()
     session = ReplSession()
+    session.active_theme_name = get_active_theme_name()
     session.task_registry = TaskRegistry.persistent()
     pt_session = _prompt_surface._build_prompt_session()
     session.prompt_history_backend = pt_session.history

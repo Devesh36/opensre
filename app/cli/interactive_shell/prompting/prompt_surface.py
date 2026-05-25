@@ -300,8 +300,7 @@ def _build_prompt_style() -> Style:
 
 def _placeholder_ansi() -> ANSI:
     return ANSI(
-        f"{ui_theme.DIM_ANSI}Type a message, /command, or paste an alert"
-        f"{ui_theme.ANSI_RESET}"
+        f"{ui_theme.DIM_ANSI}Type a message, /command, or paste an alert{ui_theme.ANSI_RESET}"
     )
 
 

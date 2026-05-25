@@ -63,28 +63,26 @@ def _persist_and_report_theme(
     updated = _set_nested_key(config_data, "interactive.theme", active.name)
     _save_config(updated)
 
-    from app.cli.interactive_shell.runtime.loop import _drain_stale_cpr_bytes
+    from app.cli.interactive_shell.runtime.loop import drain_stale_cpr_bytes
     from app.cli.interactive_shell.ui.banner import refresh_welcome_poster
 
-    _drain_stale_cpr_bytes()
+    drain_stale_cpr_bytes()
     refresh_welcome_poster(console, session=session, theme_notice=active.name)
-    _drain_stale_cpr_bytes()
+    drain_stale_cpr_bytes()
 
 
 def _cmd_theme(session: ReplSession, console: Console, args: list[str]) -> bool:
-    if not repl_tty_interactive():
-        console.print(f"[{ui_theme.DIM}]/theme requires an interactive TTY session.[/]")
-        return True
-
     if args:
         selected = args[0].strip().lower()
         if selected not in list_theme_names():
             supported = ", ".join(list_theme_names())
-            console.print(
-                f"[{ui_theme.ERROR}]unknown theme:[/] {selected}  (choose: {supported})"
-            )
+            console.print(f"[{ui_theme.ERROR}]unknown theme:[/] {selected}  (choose: {supported})")
             return True
         _persist_and_report_theme(session, console, selected)
+        return True
+
+    if not repl_tty_interactive():
+        console.print(f"[{ui_theme.DIM}]/theme requires an interactive TTY session.[/]")
         return True
 
     current = _current_theme_name(session)

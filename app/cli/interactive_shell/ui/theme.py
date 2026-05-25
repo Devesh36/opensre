@@ -180,13 +180,15 @@ class _LazyRichStyle(str):
 
     def __new__(cls, field: str, *, bold: bool = False) -> _LazyRichStyle:
         instance = str.__new__(cls, "")
-        instance._field = field
-        instance._bold = bold
+        object.__setattr__(instance, "_field", field)
+        object.__setattr__(instance, "_bold", bold)
         return instance
 
     def _resolve(self) -> str:
-        value = getattr(_ACTIVE_THEME, self._field)
-        return f"bold {value}" if self._bold else value
+        field = object.__getattribute__(self, "_field")
+        bold = object.__getattribute__(self, "_bold")
+        value = getattr(_ACTIVE_THEME, field)
+        return f"bold {value}" if bold else value
 
     def __str__(self) -> str:
         return self._resolve()

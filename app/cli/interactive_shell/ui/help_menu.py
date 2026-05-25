@@ -54,9 +54,7 @@ class HelpDisplayRow:
 
 def render_help_index(console: Console, sections: Sequence[HelpSection]) -> None:
     """Render the compact non-interactive help index."""
-    table = repl_table(
-        title="Slash commands", title_style=ui_theme.BOLD_BRAND, show_header=False
-    )
+    table = repl_table(title="Slash commands", title_style=ui_theme.BOLD_BRAND, show_header=False)
     table.add_column("command", no_wrap=True, min_width=18)
     table.add_column("description", style=ui_theme.DIM)
 
@@ -103,9 +101,7 @@ def render_section_detail(
 
 def render_command_detail(console: Console, command: SlashCommand) -> None:
     """Render detailed help for one slash command."""
-    table = Table(
-        title=command.name, title_style=ui_theme.BOLD_BRAND, show_header=False, box=None
-    )
+    table = Table(title=command.name, title_style=ui_theme.BOLD_BRAND, show_header=False, box=None)
     table.add_column("label", style="bold", no_wrap=True)
     table.add_column("value")
     table.add_row("description", escape(command.description))
@@ -409,7 +405,9 @@ def _draw_help_menu(
     write_menu_line(
         f"{ui_theme.PROMPT_ACCENT_ANSI}{_center('Slash commands', width)}{ui_theme.ANSI_RESET}"
     )
-    write_menu_line(f"{ui_theme.DIM_COUNTER_ANSI}{selected_count}/{total_count}{ui_theme.ANSI_RESET}")
+    write_menu_line(
+        f"{ui_theme.DIM_COUNTER_ANSI}{selected_count}/{total_count}{ui_theme.ANSI_RESET}"
+    )
     write_menu_line(f"{ui_theme.DIM_COUNTER_ANSI}{_separator_rule(width)}{ui_theme.ANSI_RESET}")
     for offset, row in enumerate(visible, start=start):
         write_menu_line(

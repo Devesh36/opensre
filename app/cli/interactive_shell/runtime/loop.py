@@ -55,7 +55,7 @@ _CPR_SEQUENCE_RE = re.compile(
 )
 
 
-def _drain_stale_cpr_bytes() -> None:
+def drain_stale_cpr_bytes() -> None:
     """Discard any CPR escape-sequence bytes left in stdin after a prompt_async teardown.
 
     When prompt_async returns (e.g. after the user types Y to confirm), the
@@ -245,7 +245,7 @@ async def run_interactive(
             # Investigation Rich Live + bottom-toolbar CPR can leave bytes in stdin;
             # drain before the next prompt_async so they are not typed into the field.
             await asyncio.sleep(0.05)
-            _drain_stale_cpr_bytes()
+            drain_stale_cpr_bytes()
 
     async def _alert_watcher() -> None:
         if inbox is None:
@@ -318,7 +318,7 @@ async def run_interactive(
                 # The brief sleep lets in-transit terminal responses land in the
                 # buffer before the non-blocking select drain runs.
                 await asyncio.sleep(0.05)
-                _drain_stale_cpr_bytes()
+                drain_stale_cpr_bytes()
                 try:
                     text = await pt_session.prompt_async(
                         message=_message_with_spinner,

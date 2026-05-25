@@ -147,9 +147,7 @@ def test_config_set_round_trips_theme(monkeypatch, tmp_path: Path) -> None:
     assert data["interactive"]["theme"] == "blue"
 
 
-def test_config_set_invalid_theme_value_returns_helpful_error(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_config_set_invalid_theme_value_returns_helpful_error(monkeypatch, tmp_path: Path) -> None:
     _patch_config_home(monkeypatch, tmp_path)
     runner = CliRunner()
 

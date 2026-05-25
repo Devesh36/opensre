@@ -183,9 +183,6 @@ def cli(
 
     from app.cli.interactive_shell.config import ReplConfig
 
-    # Apply interactive.theme / OPENSRE_THEME / --theme for all subcommands (onboard, etc.).
-    ReplConfig.load(cli_theme=theme)
-
     _capture_accepted_cli_invocation(ctx)
 
     if ctx.invoked_subcommand is None:
@@ -202,6 +199,9 @@ def cli(
         click.echo("🚧 OpenSRE is in Public Beta — features may change.", err=True)
         render_landing()
         raise SystemExit(0)
+
+    # Apply interactive.theme / OPENSRE_THEME / --theme for subcommands (onboard, etc.).
+    ReplConfig.load(cli_theme=theme)
 
 
 register_commands(cli)

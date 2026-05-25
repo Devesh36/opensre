@@ -1667,9 +1667,7 @@ class TestThemeCommand:
             session: object = None,
             theme_notice: str | None = None,
         ) -> None:
-            refreshed.append(
-                {"console": console, "session": session, "theme_notice": theme_notice}
-            )
+            refreshed.append({"console": console, "session": session, "theme_notice": theme_notice})
 
         monkeypatch.setattr(
             "app.cli.interactive_shell.ui.banner.refresh_welcome_poster",
