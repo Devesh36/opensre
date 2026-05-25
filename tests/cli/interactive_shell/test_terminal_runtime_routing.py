@@ -149,6 +149,13 @@ def test_dispatch_needs_exclusive_stdin_for_config(
 
     assert loop_dispatch.dispatch_needs_exclusive_stdin("/config", session) is True
     assert loop_dispatch.dispatch_needs_exclusive_stdin("/config show", session) is True
+    assert (
+        loop_dispatch.dispatch_needs_exclusive_stdin(
+            "/config set interactive.layout pinned",
+            session,
+        )
+        is True
+    )
 
 
 def test_dispatch_one_turn_routes_to_cli_help_for_help_questions(

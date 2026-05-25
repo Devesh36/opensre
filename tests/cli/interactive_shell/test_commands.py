@@ -1680,6 +1680,8 @@ class TestRunCliCommand:
         ) -> subprocess.CompletedProcess[str]:
             del check, timeout, text, encoding, errors
             assert capture_output is True
+            assert cmd[:3] == [sys.executable, "-m", "app.cli"]
+            assert cmd[3:] == ["config", "show"]
             return subprocess.CompletedProcess(
                 cmd,
                 0,
