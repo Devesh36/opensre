@@ -18,6 +18,7 @@ from rich.text import Text
 from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.interaction_models import (
     PlannedAction,
 )
+from app.cli.interactive_shell.ui import theme as ui_theme
 from app.cli.interactive_shell.ui.banner import resolve_provider_models
 from app.cli.interactive_shell.ui.theme import (
     BOLD_BRAND,
@@ -190,6 +191,68 @@ def repl_print(console: Console, *objects: Any, **kwargs: Any) -> None:
     _console_print_prepared(console, *objects, **kwargs)
 
 
+def _repl_write_buffer(rendered: str) -> None:
+    """Flush pre-rendered Rich output with CRLF line endings (patch_stdout safe)."""
+    normalized = rendered.replace("\r\n", "\n").replace("\n", "\r\n")
+    token = _REPL_OUTPUT_PREPARED.set(True)
+    try:
+        sys.stdout.write(normalized)
+        sys.stdout.flush()
+    finally:
+        _REPL_OUTPUT_PREPARED.reset(token)
+
+
+def repl_clear_screen() -> None:
+    """Clear the terminal scrollback when the REPL runs under patch_stdout."""
+    if not sys.stdout.isatty():
+        return
+    sys.stdout.write("\x1b[2J\x1b[H")
+    sys.stdout.flush()
+
+
+def _theme_notice_line(theme_notice: str) -> str:
+    """REPL-safe ``theme set: <name>`` using the active palette (not stale imports)."""
+    return (
+        f"{ui_theme.HIGHLIGHT_ANSI}theme set: {escape(theme_notice)}"
+        f"{ui_theme.ANSI_RESET}\r\n\r\n"
+    )
+
+
+def repl_render_launch_poster(
+    console: Console,
+    *,
+    session: object = None,
+    theme_notice: str | None = None,
+) -> None:
+    """Render splash + welcome panel using REPL-safe CRLF writes."""
+    from app.cli.interactive_shell.ui import banner as banner_module
+
+    if console.file is sys.stdout and sys.stdout.isatty():
+        width = _prepare_tty_for_rich(console)
+        buf = io.StringIO()
+        buf_console = Console(
+            file=buf,
+            force_terminal=True,
+            highlight=False,
+            color_system="truecolor",
+            legacy_windows=False,
+            width=width,
+        )
+        banner_module.render_splash(buf_console, first_run=False)
+        banner_module.render_ready_box(buf_console, session=session)
+        prefix = _theme_notice_line(theme_notice) if theme_notice else ""
+        _repl_write_buffer(prefix + buf.getvalue())
+        return
+
+    if theme_notice:
+        _console_print_prepared(
+            console,
+            f"[{ui_theme.HIGHLIGHT}]theme set:[/] {escape(theme_notice)}",
+        )
+    banner_module.render_splash(console, first_run=False)
+    banner_module.render_ready_box(console, session=session)
+
+
 # ---------------------------------------------------------------------------
 # Generic table abstraction
 # ---------------------------------------------------------------------------
@@ -213,7 +276,7 @@ def render_table(
     columns: list[ColumnDef],
     rows: list[tuple[str | Text, ...]],
     *,
-    title_style: str = BOLD_BRAND,
+    title_style: str | None = None,
     show_lines: bool = False,
 ) -> None:
     """TTY-safe generic table renderer.
@@ -229,7 +292,11 @@ def render_table(
         fixed_budget = sum(14 for c in columns if not c.flex)
         flex_width = max(20, (width - fixed_budget) // flex_count)
 
-    table = repl_table(title=f"{title}\n", title_style=title_style, show_lines=show_lines)
+    table = repl_table(
+        title=f"{title}\n",
+        title_style=title_style or BOLD_BRAND,
+        show_lines=show_lines,
+    )
     for col in columns:
         col_kwargs: dict[str, Any] = {
             "no_wrap": col.no_wrap,
@@ -285,7 +352,8 @@ def render_integrations_table(console: Console, results: list[dict[str, str]]) -
     rows = [r for r in results if r.get("service") not in MCP_INTEGRATION_SERVICES]
     if not rows:
         repl_print(
-            console, f"[{DIM}]no integrations configured.  try `opensre onboard` to add one.[/]"
+            console,
+            f"[{DIM}]no integrations configured.  try `opensre onboard` to add one.[/]"
         )
         return
     render_table(console, "Integrations", _INTEGRATION_COLS, [_integration_row(r) for r in rows])
@@ -301,7 +369,10 @@ def render_mcp_table(console: Console, results: list[dict[str, str]]) -> None:
 
 def render_models_table(console: Console, settings: Any) -> None:
     if settings is None:
-        repl_print(console, f"[{ERROR}]LLM settings unavailable[/] — check provider env vars.")
+        repl_print(
+            console,
+            f"[{ERROR}]LLM settings unavailable[/] — check provider env vars."
+        )
         return
     provider = str(getattr(settings, "provider", "unknown"))
     reasoning_model, toolcall_model = resolve_provider_models(settings, provider)
@@ -356,7 +427,9 @@ def print_planned_actions(console: Console, actions: list[PlannedAction]) -> Non
             "implementation": "implementation",
             "assistant_handoff": "assistant handoff",
         }[action.kind]
-        console.print(f"[{DIM}]{index}.[/] [{BOLD_BRAND}]{label}[/] {escape(action.content)}")
+        console.print(
+            f"[{DIM}]{index}.[/] [{BOLD_BRAND}]{label}[/] {escape(action.content)}"
+        )
 
 
 __all__ = [
@@ -368,7 +441,9 @@ __all__ = [
     "print_repl_json",
     "print_repl_table",
     "render_table",
+    "repl_clear_screen",
     "repl_print",
+    "repl_render_launch_poster",
     "repl_table",
     "render_integrations_table",
     "render_tools_table",

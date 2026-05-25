@@ -51,6 +51,7 @@ _EXCLUSIVE_STDIN_MENU_COMMANDS: frozenset[str] = frozenset(
         "/mcp",
         "/model",
         "/template",
+        "/theme",
         "/trust",
         "/verbose",
         "/?",
@@ -124,6 +125,8 @@ def dispatch_needs_exclusive_stdin(text: str, session: ReplSession) -> bool:
     args = [arg.lower() for arg in parts[1:]]
 
     if name in _WAIT_FOR_COMPLETION_COMMANDS:
+        return True
+    if name == "/theme":
         return True
     if name in _EXCLUSIVE_STDIN_MENU_COMMANDS and not args:
         return True

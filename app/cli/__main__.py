@@ -139,6 +139,26 @@ def _capture_accepted_cli_invocation(ctx: click.Context) -> None:
     help="Interactive-shell layout: 'classic' (scrolling) or 'pinned' (fixed "
     "input bar). Overrides OPENSRE_LAYOUT env var and ~/.opensre/config.yml.",
 )
+@click.option(
+    "--theme",
+    type=click.Choice(
+        [
+            "green",
+            "blue",
+            "amber",
+            "mono",
+            "red",
+            "pink",
+            "purple",
+            "orange",
+            "teal",
+        ],
+        case_sensitive=False,
+    ),
+    default=None,
+    help="Interactive-shell color palette. Overrides OPENSRE_THEME env var "
+    "and ~/.opensre/config.yml interactive.theme.",
+)
 @click.pass_context
 def cli(
     ctx: click.Context,
@@ -148,6 +168,7 @@ def cli(
     yes: bool,
     interactive: bool,
     layout: str | None,
+    theme: str | None,
 ) -> None:
     """OpenSRE - open-source SRE agent for automated incident investigation and root cause analysis."""
     ctx.ensure_object(dict)
@@ -160,16 +181,21 @@ def cli(
     if verbose or debug:
         os.environ["TRACER_VERBOSE"] = "1"
 
+    from app.cli.interactive_shell.config import ReplConfig
+
+    # Apply interactive.theme / OPENSRE_THEME / --theme for all subcommands (onboard, etc.).
+    ReplConfig.load(cli_theme=theme)
+
     _capture_accepted_cli_invocation(ctx)
 
     if ctx.invoked_subcommand is None:
         if sys.stdin.isatty() and sys.stdout.isatty():
             from app.cli.interactive_shell import run_repl
-            from app.cli.interactive_shell.config import ReplConfig
 
             config = ReplConfig.load(
                 cli_enabled=interactive,
                 cli_layout=layout,
+                cli_theme=theme,
             )
             if config.enabled:
                 raise SystemExit(run_repl(config=config))

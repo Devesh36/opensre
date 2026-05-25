@@ -1,0 +1,128 @@
+"""Slash command: interactive theme selection and persistence."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from rich.console import Console
+
+from app.cli.interactive_shell.command_registry.types import ExecutionTier, SlashCommand
+from app.cli.interactive_shell.runtime import ReplSession
+from app.cli.interactive_shell.ui import theme as ui_theme
+from app.cli.interactive_shell.ui.choice_menu import repl_choose_one, repl_tty_interactive
+from app.cli.interactive_shell.ui.theme import (
+    get_active_theme_name,
+    list_theme_names,
+    set_active_theme,
+)
+
+
+def _load_config() -> dict[str, Any]:
+    from app.cli.commands.config import _load_config
+
+    return _load_config()
+
+
+def _save_config(data: dict[str, Any]) -> None:
+    from app.cli.commands.config import _save_config
+
+    _save_config(data)
+
+
+def _set_nested_key(data: dict[str, Any], dotted_key: str, value: Any) -> dict[str, Any]:
+    from app.cli.commands.config import _set_nested_key
+
+    return _set_nested_key(data, dotted_key, value)
+
+
+def _refresh_prompt_style(session: ReplSession) -> None:
+    """Schedule a prompt-toolkit style refresh on the main thread."""
+    from app.cli.interactive_shell.prompting.prompt_surface import refresh_prompt_theme
+
+    if session.main_loop is not None:
+        session.main_loop.call_soon_threadsafe(refresh_prompt_theme, session)
+
+
+def _current_theme_name(session: ReplSession) -> str:
+    """Return the palette applied in this REPL (session + module globals)."""
+    current = get_active_theme_name()
+    session.active_theme_name = current
+    return current
+
+
+def _persist_and_report_theme(
+    session: ReplSession,
+    console: Console,
+    selected: str,
+) -> None:
+    active = set_active_theme(selected)
+    session.active_theme_name = active.name
+    _refresh_prompt_style(session)
+
+    config_data = _load_config()
+    updated = _set_nested_key(config_data, "interactive.theme", active.name)
+    _save_config(updated)
+
+    from app.cli.interactive_shell.runtime.loop import _drain_stale_cpr_bytes
+    from app.cli.interactive_shell.ui.banner import refresh_welcome_poster
+
+    _drain_stale_cpr_bytes()
+    refresh_welcome_poster(console, session=session, theme_notice=active.name)
+    _drain_stale_cpr_bytes()
+
+
+def _cmd_theme(session: ReplSession, console: Console, args: list[str]) -> bool:
+    if not repl_tty_interactive():
+        console.print(f"[{ui_theme.DIM}]/theme requires an interactive TTY session.[/]")
+        return True
+
+    if args:
+        selected = args[0].strip().lower()
+        if selected not in list_theme_names():
+            supported = ", ".join(list_theme_names())
+            console.print(
+                f"[{ui_theme.ERROR}]unknown theme:[/] {selected}  (choose: {supported})"
+            )
+            return True
+        _persist_and_report_theme(session, console, selected)
+        return True
+
+    current = _current_theme_name(session)
+    choices = [
+        (
+            name,
+            f"{name}{' (current)' if name == current else ''}",
+        )
+        for name in list_theme_names()
+    ]
+    picked = repl_choose_one(
+        title="theme",
+        breadcrumb="/theme",
+        choices=choices,
+        initial_value=current,
+    )
+    if picked is None:
+        console.print(f"[{ui_theme.DIM}]theme unchanged.[/]")
+        return True
+
+    _persist_and_report_theme(session, console, picked)
+    return True
+
+
+_THEME_FIRST_ARGS: tuple[tuple[str, str], ...] = tuple(
+    (name, "interactive palette") for name in list_theme_names()
+)
+
+COMMANDS: list[SlashCommand] = [
+    SlashCommand(
+        "/theme",
+        "Choose and persist the interactive shell color theme.",
+        _cmd_theme,
+        usage=("/theme", "/theme <name>"),
+        examples=("/theme blue", "/theme green"),
+        first_arg_completions=_THEME_FIRST_ARGS,
+        execution_tier=ExecutionTier.SAFE,
+    )
+]
+
+__all__ = ["COMMANDS"]

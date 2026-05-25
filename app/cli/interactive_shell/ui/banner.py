@@ -10,7 +10,7 @@ render_ready_box(console, session=None)
     DIM-bordered two-column welcome panel:
       left  → ◉ OpenSRE · provider · model · mode · cwd
       right → "Tips for getting started" + "What's new"
-    Called after the splash and on /clear, /welcome, and greeting aliases.
+    Called after startup; refreshed (with splash) on /clear, /theme, /welcome, and aliases.
 
 render_banner(console)
     Backward-compatible shim: render_splash + render_ready_box in one call.
@@ -41,14 +41,7 @@ from rich.table import Table
 from rich.text import Text
 
 from app.cli.interactive_shell.config import WHATS_NEW
-from app.cli.interactive_shell.ui.theme import (
-    BRAND,
-    DIM,
-    HIGHLIGHT,
-    SECONDARY,
-    TEXT,
-    WARNING,
-)
+from app.cli.interactive_shell.ui import theme as ui_theme
 from app.config import LLMSettings
 from app.version import get_version
 
@@ -198,50 +191,53 @@ def render_splash(console: Console | None = None, *, first_run: bool | None = No
     art = _render_art(console.width)
 
     console.print()
-    console.print(Rule(style=DIM))
+    console.print(Rule(style=ui_theme.DIM))
     console.print()
 
     for line in art.splitlines():
         t = Text()
         t.append("  ")
         for ch in line:
-            t.append(ch, style=f"bold {HIGHLIGHT}" if ch == "█" else f"bold {BRAND}")
+            t.append(
+                ch,
+                style=f"bold {ui_theme.HIGHLIGHT}" if ch == "█" else f"bold {ui_theme.BRAND}",
+            )
         console.print(t)
 
     console.print()
 
     subtitle = Text()
     subtitle.append("  ")
-    subtitle.append("opensre", style=SECONDARY)
-    subtitle.append("  ·  ", style=DIM)
-    subtitle.append(f"v{version}", style=BRAND)
+    subtitle.append("opensre", style=ui_theme.SECONDARY)
+    subtitle.append("  ·  ", style=ui_theme.DIM)
+    subtitle.append(f"v{version}", style=ui_theme.BRAND)
     console.print(subtitle)
 
     desc = Text()
     desc.append(
         "  open-source SRE agent for automated incident investigation and root cause analysis",
-        style=DIM,
+        style=ui_theme.DIM,
     )
     console.print(desc)
     console.print()
-    console.print(Rule(style=DIM))
+    console.print(Rule(style=ui_theme.DIM))
 
     if first_run:
         console.print()
         notice = Text()
         notice.append("  ")
-        notice.append("⚠  ", style=f"bold {WARNING}")
+        notice.append("⚠  ", style=f"bold {ui_theme.WARNING}")
         notice.append(
             "This tool executes AI-powered commands against your infrastructure.\n"
             "     Review the documentation before connecting production systems.\n"
             "     Source: https://github.com/opensre-dev/opensre",
-            style=SECONDARY,
+            style=ui_theme.SECONDARY,
         )
         console.print(notice)
         console.print()
         if sys.stdin.isatty():
             try:
-                console.print(f"  [{SECONDARY}]Press Enter to continue…[/]", end="")
+                console.print(f"  [{ui_theme.SECONDARY}]Press Enter to continue…[/]", end="")
                 sys.stdin.readline()
             except (EOFError, KeyboardInterrupt, OSError):
                 # Non-interactive stdin or user abort — skip blocking and continue startup.
@@ -293,7 +289,7 @@ def _build_logo_mark() -> Text:
     for index, (body, _echo) in enumerate(_LOGO_MARK_ROWS):
         if index:
             logo.append("\n")
-        logo.append(body, style=f"bold {HIGHLIGHT}")
+        logo.append(body, style=f"bold {ui_theme.HIGHLIGHT}")
     return logo
 
 
@@ -310,30 +306,30 @@ def _build_identity_block(provider: str, model: str, *, trust_mode: bool) -> Tex
     logo = _build_logo_mark()
 
     greeting = Text()
-    greeting.append(f"Welcome back {_get_username()}!", style=f"bold {TEXT}")
+    greeting.append(f"Welcome back {_get_username()}!", style=f"bold {ui_theme.TEXT}")
 
     # Single flowing line: model · tier · workspace
     cwd = _format_cwd(os.getcwd())
     tier = "trust mode" if trust_mode else provider
     identity = Text(overflow="fold")
-    identity.append(model, style=f"bold {BRAND}")
-    identity.append("  ·  ", style=DIM)
+    identity.append(model, style=f"bold {ui_theme.BRAND}")
+    identity.append("  ·  ", style=ui_theme.DIM)
     if trust_mode:
-        identity.append(tier, style=f"bold {WARNING}")
-        identity.append("  ·  ", style=DIM)
+        identity.append(tier, style=f"bold {ui_theme.WARNING}")
+        identity.append("  ·  ", style=ui_theme.DIM)
     else:
-        identity.append(tier, style=SECONDARY)
-        identity.append("  ·  ", style=DIM)
-    identity.append(cwd, style=SECONDARY)
+        identity.append(tier, style=ui_theme.SECONDARY)
+        identity.append("  ·  ", style=ui_theme.DIM)
+    identity.append(cwd, style=ui_theme.SECONDARY)
 
     return Text("\n").join([logo, Text(), Text(), greeting, Text(), Text(), identity])
 
 
 def _build_notes_block(header_text: str, items: tuple[str, ...]) -> Text:
     """Right column section: bold header followed by dim list items."""
-    parts: list[Text] = [Text(header_text, style=f"bold {BRAND}")]
+    parts: list[Text] = [Text(header_text, style=f"bold {ui_theme.BRAND}")]
     for item in items:
-        parts.append(Text(item, style=SECONDARY, overflow="fold"))
+        parts.append(Text(item, style=ui_theme.SECONDARY, overflow="fold"))
     return Text("\n").join(parts)
 
 
@@ -348,7 +344,7 @@ def _visual_line_count(block: Text, width: int) -> int:
 
 def _vertical_divider(height: int) -> Text:
     """Build a padded vertical rule with ``height`` lines."""
-    return Text("\n".join(" │ " for _ in range(max(height, 1))), style=DIM, no_wrap=True)
+    return Text("\n".join(" │ " for _ in range(max(height, 1))), style=ui_theme.DIM, no_wrap=True)
 
 
 def _two_column_widths(console_width: int) -> tuple[int, int]:
@@ -380,15 +376,15 @@ def build_ready_panel(
     trust_mode: bool = bool(getattr(session, "trust_mode", False))
 
     panel_title = Text()
-    panel_title.append(" OpenSRE", style=f"bold {HIGHLIGHT}")
-    panel_title.append(" · ", style=DIM)
-    panel_title.append(f"v{version} ", style=BRAND)
+    panel_title.append(" OpenSRE", style=f"bold {ui_theme.HIGHLIGHT}")
+    panel_title.append(" · ", style=ui_theme.DIM)
+    panel_title.append(f"v{version} ", style=ui_theme.BRAND)
 
     left = _build_identity_block(provider, model, trust_mode=trust_mode)
     right = Text("\n").join(
         [
             _build_notes_block("Tips for getting started", _TIPS),
-            Text("───", style=DIM),
+            Text("───", style=ui_theme.DIM),
             _build_notes_block("What's new", WHATS_NEW),
         ]
     )
@@ -411,7 +407,7 @@ def build_ready_panel(
     else:
         body = Group(
             left,
-            Rule(style=DIM),
+            Rule(style=ui_theme.DIM),
             right,
         )
 
@@ -419,11 +415,24 @@ def build_ready_panel(
         body,
         title=panel_title,
         title_align="left",
-        border_style=DIM,
+        border_style=ui_theme.DIM,
         padding=(1, _PANEL_PADDING_X),
         expand=True,
         box=box.ROUNDED,
     )
+
+
+def refresh_welcome_poster(
+    console: Console,
+    *,
+    session: object = None,
+    theme_notice: str | None = None,
+) -> None:
+    """Clear scrollback and redraw splash art + welcome panel with the active theme."""
+    from app.cli.interactive_shell.ui.rendering import repl_clear_screen, repl_render_launch_poster
+
+    repl_clear_screen()
+    repl_render_launch_poster(console, session=session, theme_notice=theme_notice)
 
 
 def render_ready_box(

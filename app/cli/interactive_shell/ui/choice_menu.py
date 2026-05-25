@@ -19,14 +19,7 @@ from typing import Any, Literal, cast
 from rich.console import Console
 from rich.markup import escape
 
-from app.cli.interactive_shell.ui.theme import (
-    ANSI_RESET,
-    DIM,
-    DIM_COUNTER_ANSI,
-    MENU_SELECTION_ROW_ANSI,
-    PROMPT_ACCENT_ANSI,
-    SECONDARY,
-)
+from app.cli.interactive_shell.ui import theme as ui_theme
 
 _HINT = "↑↓/j/k  Enter/Space  Esc/q"
 CRUMB_SEP = "  ›  "
@@ -58,7 +51,7 @@ def repl_section_break(console: Console) -> None:
     """Blank line + dim rule between an inline menu step and Rich output."""
     prepare_repl_output_line()
     console.print()
-    console.rule(characters="─", style=DIM)
+    console.rule(characters="─", style=ui_theme.DIM)
     console.print()
 
 
@@ -123,15 +116,23 @@ def _read_action() -> MenuAction:
             if select.select([fd], [], [], 0.05)[0]:
                 seq = os.read(fd, 1)
                 if seq == b"[":
-                    arrow = os.read(fd, 1)
-                    if arrow == b"A":
+                    ch = os.read(fd, 1)
+                    if ch == b"A":
                         return "up"
-                    if arrow == b"B":
+                    if ch == b"B":
                         return "down"
-                    if arrow == b"C":
+                    if ch == b"C":
                         return "enter"
-                    if arrow == b"D":
+                    if ch == b"D":
                         return "ignore"
+                    # CPR (ESC [ row ; col R) and other CSI — consume, do not treat as Esc.
+                    while ch:
+                        if ch[0] in range(0x40, 0x7E):
+                            return "ignore"
+                        if not select.select([fd], [], [], 0.05)[0]:
+                            return "ignore"
+                        ch = os.read(fd, 1)
+                    return "ignore"
             return "cancel"
         return "ignore"
     finally:
@@ -220,12 +221,12 @@ def _draw_menu(
     for _ in range(_MENU_LEADING_LINES):
         _write_menu_line()
     # title
-    _write_menu_line(f"{PROMPT_ACCENT_ANSI}{title}{ANSI_RESET}")
+    _write_menu_line(f"{ui_theme.PROMPT_ACCENT_ANSI}{title}{ui_theme.ANSI_RESET}")
     # breadcrumb path
     if crumb:
-        _write_menu_line(f"{DIM_COUNTER_ANSI}{crumb}{ANSI_RESET}")
+        _write_menu_line(f"{ui_theme.DIM_COUNTER_ANSI}{crumb}{ui_theme.ANSI_RESET}")
     # separator below header
-    _write_menu_line(f"{DIM_COUNTER_ANSI}{_rule(w)}{ANSI_RESET}")
+    _write_menu_line(f"{ui_theme.DIM_COUNTER_ANSI}{_rule(w)}{ui_theme.ANSI_RESET}")
     _write_menu_line()
     # choices
     for i, label in enumerate(labels):
@@ -233,11 +234,11 @@ def _draw_menu(
         sym = ">" if here else " "
         padded = _pad(sym, label, w)
         if here:
-            _write_menu_line(f"{MENU_SELECTION_ROW_ANSI}{padded}{ANSI_RESET}")
+            _write_menu_line(f"{ui_theme.MENU_SELECTION_ROW_ANSI}{padded}{ui_theme.ANSI_RESET}")
         else:
-            _write_menu_line(f"{DIM_COUNTER_ANSI}{padded}{ANSI_RESET}")
+            _write_menu_line(f"{ui_theme.DIM_COUNTER_ANSI}{padded}{ui_theme.ANSI_RESET}")
     _write_menu_line()
-    _write_menu_line(f"{DIM_COUNTER_ANSI}{_HINT}{ANSI_RESET}")
+    _write_menu_line(f"{ui_theme.DIM_COUNTER_ANSI}{_HINT}{ui_theme.ANSI_RESET}")
     out.flush()
 
 
@@ -251,11 +252,17 @@ def _erase_menu(crumb: str, labels: list[str]) -> None:
 # ── picker loop ──────────────────────────────────────────────────────────────
 
 
-def _pick(*, title: str, crumb: str, labels: list[str]) -> int | None:
+def _pick(
+    *,
+    title: str,
+    crumb: str,
+    labels: list[str],
+    initial_index: int = 0,
+) -> int | None:
     """Draw an inline menu, let user navigate, erase on exit. Returns index or None."""
     if not labels:
         return None
-    idx = 0
+    idx = initial_index % len(labels)
     height = _menu_height(crumb, labels)
     first = True
     while True:
@@ -285,11 +292,26 @@ def _pick(*, title: str, crumb: str, labels: list[str]) -> int | None:
 # ── public API ───────────────────────────────────────────────────────────────
 
 
+def _drain_stale_stdin_bytes() -> None:
+    """Discard bytes left in stdin before an inline menu (e.g. CPR responses)."""
+    if os.name == "nt" or not sys.stdin.isatty():
+        return
+    try:
+        fd = sys.stdin.fileno()
+        while select.select([fd], [], [], 0)[0]:
+            chunk = os.read(fd, 256)
+            if not chunk:
+                break
+    except OSError:
+        pass
+
+
 def repl_choose_one(
     *,
     title: str,
     choices: list[tuple[str, str]],
     breadcrumb: str = "",
+    initial_value: str | None = None,
 ) -> str | None:
     """Show an inline erasing arrow-key menu; return selected value or None on Esc.
 
@@ -298,9 +320,16 @@ def repl_choose_one(
     """
     if not choices or not repl_tty_interactive():
         return None
+    _drain_stale_stdin_bytes()
     crumb = breadcrumb
     labels = [label for _value, label in choices]
-    picked = _pick(title=title, crumb=crumb, labels=labels)
+    initial_index = 0
+    if initial_value is not None:
+        for index, (value, _label) in enumerate(choices):
+            if value == initial_value:
+                initial_index = index
+                break
+    picked = _pick(title=title, crumb=crumb, labels=labels, initial_index=initial_index)
     if picked is None:
         return None
     value = choices[picked][0]
@@ -316,9 +345,9 @@ def print_valid_choice_list(
     """Print one choice per line for scan-friendly fallback/error messaging."""
     if not choices:
         return
-    console.print(f"[{SECONDARY}]{title}[/]")
+    console.print(f"[{ui_theme.SECONDARY}]{title}[/]")
     for choice in choices:
-        console.print(f"[{SECONDARY}]  - {escape(choice)}[/]")
+        console.print(f"[{ui_theme.SECONDARY}]  - {escape(choice)}[/]")
 
 
 __all__ = [

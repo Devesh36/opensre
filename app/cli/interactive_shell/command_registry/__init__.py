@@ -36,6 +36,7 @@ from app.cli.interactive_shell.command_registry.session_cmds import COMMANDS as 
 from app.cli.interactive_shell.command_registry.suggestions import closest_choice
 from app.cli.interactive_shell.command_registry.system import COMMANDS as SYSTEM_COMMANDS
 from app.cli.interactive_shell.command_registry.tasks_cmds import COMMANDS as TASK_COMMANDS
+from app.cli.interactive_shell.command_registry.theme import COMMANDS as THEME_COMMANDS
 from app.cli.interactive_shell.command_registry.types import SlashCommand
 from app.cli.interactive_shell.command_registry.watch_cmds import COMMANDS as WATCH_COMMANDS
 from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.execution_policy import (
@@ -50,6 +51,7 @@ _MERGED_SEQUENCE = tuple(
     chain(
         HELP_COMMANDS,
         SESSION_COMMANDS,
+        THEME_COMMANDS,
         INTEGRATIONS_COMMANDS,
         MODEL_COMMANDS,
         INVESTIGATION_COMMANDS,

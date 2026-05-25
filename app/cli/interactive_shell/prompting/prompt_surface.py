@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from contextlib import suppress
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.application.current import get_app
@@ -21,17 +22,7 @@ from app.cli.interactive_shell.commands import SLASH_COMMANDS
 from app.cli.interactive_shell.history import load_prompt_history
 from app.cli.interactive_shell.routing.resolve_cli_command.catalog import BARE_COMMAND_ALIASES
 from app.cli.interactive_shell.runtime import ReplSession
-from app.cli.interactive_shell.ui import (
-    ANSI_DIM,
-    ANSI_RESET,
-    BG,
-    DIM,
-    DIM_COUNTER_ANSI,
-    HIGHLIGHT,
-    PROMPT_ACCENT_ANSI,
-    PROMPT_FRAME_ANSI,
-    TEXT,
-)
+from app.cli.interactive_shell.ui import theme as ui_theme
 
 _PROMPT_RULE_CHAR = "─"
 # Keystroke escape (xterm modifyOtherKeys for Shift+Enter), not a colour code.
@@ -47,7 +38,7 @@ def _prompt_rule_ansi() -> str:
         width = get_app().output.get_size().columns
     except Exception:
         width = 80
-    return f"{PROMPT_FRAME_ANSI}{_prompt_rule_line(width)}{ANSI_RESET}"
+    return f"{ui_theme.PROMPT_FRAME_ANSI}{_prompt_rule_line(width)}{ui_theme.ANSI_RESET}"
 
 
 def _prompt_counter_text(session: ReplSession) -> str:
@@ -61,10 +52,10 @@ def _prompt_prefix_text(session: ReplSession) -> str:
 def _prompt_line_ansi(session: ReplSession) -> ANSI:
     counter = _prompt_counter_text(session)
     if counter:
-        prefix = f"{DIM_COUNTER_ANSI}{counter}{ANSI_RESET}"
+        prefix = f"{ui_theme.DIM_COUNTER_ANSI}{counter}{ui_theme.ANSI_RESET}"
     else:
         prefix = ""
-    return ANSI(f"{prefix}{PROMPT_ACCENT_ANSI}❯{ANSI_RESET} ")
+    return ANSI(f"{prefix}{ui_theme.PROMPT_ACCENT_ANSI}❯{ui_theme.ANSI_RESET} ")
 
 
 def _prompt_message(session: ReplSession) -> ANSI:
@@ -79,13 +70,13 @@ def render_submitted_prompt(console: Console, session: ReplSession, text: str) -
     rendered = Text()
     counter = _prompt_counter_text(session)
     if counter:
-        rendered.append(counter, style=DIM)
-    rendered.append("❯ ", style=f"bold {HIGHLIGHT}")
-    rendered.append(lines[0])
+        rendered.append(counter, style=ui_theme.DIM)
+    rendered.append("❯ ", style=f"bold {ui_theme.HIGHLIGHT}")
+    rendered.append(lines[0], style=ui_theme.TEXT)
     for line in lines[1:]:
         rendered.append("\n")
-        rendered.append(continuation_prefix, style=DIM)
-        rendered.append(line)
+        rendered.append(continuation_prefix, style=ui_theme.DIM)
+        rendered.append(line, style=ui_theme.TEXT)
     console.print(rendered)
 
 
@@ -280,18 +271,22 @@ def _build_prompt_key_bindings() -> KeyBindings:
 
 
 def _build_prompt_style() -> Style:
+    theme = ui_theme.get_active_theme()
+    text_fg = f"fg:{theme.TEXT}"
     return Style.from_dict(
         {
-            "prompt-frame-line": f"bold {HIGHLIGHT}",
-            "repl-slash-command": f"bold {HIGHLIGHT} bg:{BG}",
-            "completion-menu": f"bg:{BG}",
-            "completion-menu.completion": f"{TEXT} bg:{BG}",
-            "completion-menu.completion.current": f"bold {HIGHLIGHT} bg:{BG}",
-            "completion-menu.meta.completion": f"{DIM} bg:{BG}",
-            "completion-menu.meta.completion.current": f"{HIGHLIGHT} bg:{BG}",
-            "completion-menu.border": DIM,
-            "scrollbar.background": f"bg:{BG}",
-            "scrollbar.button": f"bg:{DIM}",
+            "prompt-frame-line": f"bold {theme.HIGHLIGHT}",
+            "": text_fg,
+            "default": text_fg,
+            "repl-slash-command": f"bold {theme.HIGHLIGHT} bg:{theme.BG}",
+            "completion-menu": f"bg:{theme.BG}",
+            "completion-menu.completion": f"{theme.TEXT} bg:{theme.BG}",
+            "completion-menu.completion.current": f"bold {theme.HIGHLIGHT} bg:{theme.BG}",
+            "completion-menu.meta.completion": f"{theme.DIM} bg:{theme.BG}",
+            "completion-menu.meta.completion.current": f"{theme.HIGHLIGHT} bg:{theme.BG}",
+            "completion-menu.border": theme.DIM,
+            "scrollbar.background": f"bg:{theme.BG}",
+            "scrollbar.button": f"bg:{theme.DIM}",
             # prompt_toolkit defaults the ``bottom-toolbar`` style to
             # ``reverse:noinherit``, which paints the toolbar as a dark
             # highlighted band across the terminal. Clear the reverse
@@ -303,7 +298,24 @@ def _build_prompt_style() -> Style:
     )
 
 
-_PLACEHOLDER_ANSI = ANSI(f"{ANSI_DIM}Type a message, /command, or paste an alert{ANSI_RESET}")
+def _placeholder_ansi() -> ANSI:
+    return ANSI(
+        f"{ui_theme.DIM_ANSI}Type a message, /command, or paste an alert"
+        f"{ui_theme.ANSI_RESET}"
+    )
+
+
+def refresh_prompt_theme(session: ReplSession) -> None:
+    """Apply the active palette to the running prompt (input text + placeholder)."""
+    app = session.pt_style_app
+    if app is None:
+        return
+    app.style = _build_prompt_style()
+    app.placeholder = _placeholder_ansi()
+    if app.renderer is not None:
+        with suppress(Exception):
+            app.renderer.clear()
+    app.invalidate()
 
 
 def _build_prompt_session(_session: ReplSession | None = None) -> PromptSession[str]:
@@ -318,7 +330,7 @@ def _build_prompt_session(_session: ReplSession | None = None) -> PromptSession[
             key_bindings=_build_prompt_key_bindings(),
             style=_build_prompt_style(),
             erase_when_done=True,
-            placeholder=_PLACEHOLDER_ANSI,
+            placeholder=_placeholder_ansi(),
         )
     )
 
@@ -329,6 +341,7 @@ __all__ = [
     "_build_prompt_key_bindings",
     "_build_prompt_session",
     "_build_prompt_style",
+    "refresh_prompt_theme",
     "_prompt_message",
     "_prompt_rule_ansi",
     "_tab_expand_or_menu",

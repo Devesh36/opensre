@@ -171,6 +171,8 @@ async def run_interactive(
 
     pt_app = pt_session.app
     main_loop = asyncio.get_running_loop()
+    session.pt_style_app = pt_app
+    session.main_loop = main_loop
     state.bind_loop(main_loop)
 
     def _invalidate_prompt() -> None:
