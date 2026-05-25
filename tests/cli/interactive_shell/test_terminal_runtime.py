@@ -1670,7 +1670,7 @@ class TestThemeCommand:
             refreshed.append({"console": console, "session": session, "theme_notice": theme_notice})
 
         monkeypatch.setattr(
-            "app.cli.interactive_shell.ui.banner.refresh_welcome_poster",
+            "app.cli.interactive_shell.ui.rendering.refresh_welcome_poster",
             _refresh,
         )
 

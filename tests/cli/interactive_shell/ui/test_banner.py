@@ -7,6 +7,7 @@ import io
 from rich.console import Console
 
 from app.cli.interactive_shell.ui import banner as banner_module
+from app.cli.interactive_shell.ui import rendering as rendering_module
 
 
 def test_banner_shows_ollama_model(monkeypatch: object) -> None:
@@ -60,7 +61,7 @@ def test_refresh_welcome_poster_uses_repl_safe_render(monkeypatch: object) -> No
         _fake_render,
     )
 
-    banner_module.refresh_welcome_poster(console, session="sess", theme_notice="pink")
+    rendering_module.refresh_welcome_poster(console, session="sess", theme_notice="pink")
 
     assert render_calls == [{"session": "sess", "theme_notice": "pink"}]
 

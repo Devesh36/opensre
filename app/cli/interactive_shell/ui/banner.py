@@ -10,7 +10,7 @@ render_ready_box(console, session=None)
     DIM-bordered two-column welcome panel:
       left  → ◉ OpenSRE · provider · model · mode · cwd
       right → "Tips for getting started" + "What's new"
-    Called after startup; refreshed (with splash) on /clear, /theme, /welcome, and aliases.
+    Called after startup; refreshed (with splash) on /clear, /theme, /welcome via rendering.
 
 render_banner(console)
     Backward-compatible shim: render_splash + render_ready_box in one call.
@@ -42,6 +42,7 @@ from rich.text import Text
 
 from app.cli.interactive_shell.config import WHATS_NEW
 from app.cli.interactive_shell.ui import theme as ui_theme
+from app.cli.interactive_shell.ui.provider_models import resolve_provider_models
 from app.config import LLMSettings
 from app.version import get_version
 
@@ -111,29 +112,6 @@ def _render_art(console_width: int = 80) -> str:
 
 
 # ── Provider detection ────────────────────────────────────────────────────────
-
-
-def resolve_provider_models(settings: object, provider: str) -> tuple[str, str]:
-    """Return the active (reasoning_model, toolcall_model) for a provider."""
-    if provider in {"codex", "claude-code", "gemini-cli", "cursor", "kimi", "opencode"}:
-        env_key = {
-            "codex": "CODEX_MODEL",
-            "claude-code": "CLAUDE_CODE_MODEL",
-            "gemini-cli": "GEMINI_CLI_MODEL",
-            "cursor": "CURSOR_MODEL",
-            "kimi": "KIMI_MODEL",
-            "opencode": "OPENCODE_MODEL",
-        }.get(provider, "")
-        cli_model = (os.getenv(env_key, "").strip() if env_key else "") or "CLI default"
-        return (cli_model, cli_model)
-
-    single_model = str(getattr(settings, f"{provider}_model", "")).strip()
-    if single_model:
-        return (single_model, single_model)
-
-    reasoning_model = str(getattr(settings, f"{provider}_reasoning_model", "")).strip()
-    toolcall_model = str(getattr(settings, f"{provider}_toolcall_model", "")).strip()
-    return (reasoning_model or "default", toolcall_model or reasoning_model or "default")
 
 
 def detect_provider_model() -> tuple[str, str]:
@@ -420,19 +398,6 @@ def build_ready_panel(
         expand=True,
         box=box.ROUNDED,
     )
-
-
-def refresh_welcome_poster(
-    console: Console,
-    *,
-    session: object = None,
-    theme_notice: str | None = None,
-) -> None:
-    """Clear scrollback and redraw splash art + welcome panel with the active theme."""
-    from app.cli.interactive_shell.ui.rendering import repl_clear_screen, repl_render_launch_poster
-
-    repl_clear_screen()
-    repl_render_launch_poster(console, session=session, theme_notice=theme_notice)
 
 
 def render_ready_box(

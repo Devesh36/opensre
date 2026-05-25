@@ -303,6 +303,7 @@ def _drain_stale_stdin_bytes() -> None:
             if not chunk:
                 break
     except OSError:
+        # Best-effort drain: skip when stdin is not readable or os.read fails.
         pass
 
 

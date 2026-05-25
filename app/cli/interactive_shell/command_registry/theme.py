@@ -64,7 +64,7 @@ def _persist_and_report_theme(
     _save_config(updated)
 
     from app.cli.interactive_shell.runtime.loop import drain_stale_cpr_bytes
-    from app.cli.interactive_shell.ui.banner import refresh_welcome_poster
+    from app.cli.interactive_shell.ui.rendering import refresh_welcome_poster
 
     drain_stale_cpr_bytes()
     refresh_welcome_poster(console, session=session, theme_notice=active.name)

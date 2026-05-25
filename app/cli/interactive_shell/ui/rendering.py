@@ -19,7 +19,7 @@ from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.i
     PlannedAction,
 )
 from app.cli.interactive_shell.ui import theme as ui_theme
-from app.cli.interactive_shell.ui.banner import resolve_provider_models
+from app.cli.interactive_shell.ui.provider_models import resolve_provider_models
 from app.cli.interactive_shell.ui.theme import (
     BOLD_BRAND,
     DIM,
@@ -252,6 +252,17 @@ def repl_render_launch_poster(
     banner_module.render_ready_box(console, session=session)
 
 
+def refresh_welcome_poster(
+    console: Console,
+    *,
+    session: object = None,
+    theme_notice: str | None = None,
+) -> None:
+    """Clear scrollback and redraw splash art + welcome panel with the active theme."""
+    repl_clear_screen()
+    repl_render_launch_poster(console, session=session, theme_notice=theme_notice)
+
+
 # ---------------------------------------------------------------------------
 # Generic table abstraction
 # ---------------------------------------------------------------------------
@@ -433,6 +444,7 @@ __all__ = [
     "print_planned_actions",
     "print_repl_json",
     "print_repl_table",
+    "refresh_welcome_poster",
     "render_table",
     "repl_clear_screen",
     "repl_print",

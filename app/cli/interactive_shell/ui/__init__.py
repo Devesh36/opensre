@@ -1,18 +1,14 @@
 from __future__ import annotations
 
 from app.cli.interactive_shell.ui.agents_view import _build_agents_table, render_agents_table
-from app.cli.interactive_shell.ui.banner import (
-    refresh_welcome_poster,
-    render_banner,
-    render_ready_box,
-    resolve_provider_models,
-)
+from app.cli.interactive_shell.ui.banner import render_banner, render_ready_box
 from app.cli.interactive_shell.ui.choice_menu import (
     print_valid_choice_list,
     repl_choose_one,
     repl_section_break,
     repl_tty_interactive,
 )
+from app.cli.interactive_shell.ui.provider_models import resolve_provider_models
 from app.cli.interactive_shell.ui.rendering import (
     MCP_INTEGRATION_SERVICES,
     ColumnDef,
@@ -20,6 +16,7 @@ from app.cli.interactive_shell.ui.rendering import (
     print_planned_actions,
     print_repl_json,
     print_repl_table,
+    refresh_welcome_poster,
     render_integrations_table,
     render_mcp_table,
     render_models_table,
