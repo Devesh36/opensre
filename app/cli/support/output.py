@@ -662,10 +662,6 @@ class _EventLogDisplay:
         global _live_console, _active_display
         if self._live.is_started:
             self._live.stop()
-        # Belt-and-suspenders: some terminals / patch_stdout paths may leave the
-        # last Live frame (phase footer) visible even after transient stop.
-        with contextlib.suppress(Exception):
-            self._console.clear_live()
         if _live_console is self._console:
             _live_console = None
         if _active_display is self:

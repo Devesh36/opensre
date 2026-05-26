@@ -252,6 +252,34 @@ def test_stop_display_clears_stale_investigation_footer(
     assert "FINDINGS" in out
 
 
+def test_stop_display_clears_stale_footer_via_tracker_path(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Regression for #2117 on the ``_tracker``-owned display branch."""
+    monkeypatch.setattr(output, "get_output_format", lambda: "rich")
+    monkeypatch.setattr(output, "_repl_progress_active", lambda: False)
+    monkeypatch.setattr(output, "_tracker", None)
+    monkeypatch.setattr(output, "_active_display", None)
+    monkeypatch.setattr(output, "_live_console", None)
+
+    tracker = output.ProgressTracker()
+    monkeypatch.setattr(output, "_tracker", tracker)
+    try:
+        tracker.start("diagnose_root_cause")
+        assert tracker._display is not None
+        tracker._display._live.refresh()
+        output.stop_display()
+        print("FINDINGS: payments_etl could not be confirmed")
+    finally:
+        output.stop_display()
+
+    out = _strip_ansi(capsys.readouterr().out)
+    before_findings, _, _after = out.partition("FINDINGS")
+    assert "esc to cancel" not in before_findings
+    assert "FINDINGS" in out
+
+
 @pytest.mark.usefixtures("force_text_mode")
 def test_tracker_start_prints_node_label_in_text_mode(
     capsys: pytest.CaptureFixture[str],
