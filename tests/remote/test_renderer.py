@@ -482,6 +482,28 @@ class TestStreamRendererCleanupOnException:
         )
         assert renderer.final_state.get("alert_name") == "interrupted-alert"
 
+    @patch("app.remote.renderer.Live")
+    @patch("app.cli.support.output._EventLogDisplay")
+    @patch.dict(os.environ, {"TRACER_OUTPUT_FORMAT": "rich"})
+    def test_render_stream_prints_completed_footer_below_report(
+        self, _mock_display, _mock_live, capfd: pytest.CaptureFixture[str]
+    ) -> None:
+        """Regression for #2117: footer must appear after the report, not be dropped."""
+        renderer = StreamRenderer(local=True)
+        renderer._tracker.start("correlate_upstream")
+        renderer._final_state = {
+            "slack_message": "RCA REPORT HEADLINE\n\n  Findings\n    · one",
+        }
+
+        renderer.render_stream(iter([_make_event("end")]))
+
+        out, _ = capfd.readouterr()
+        report_pos = out.find("RCA REPORT HEADLINE")
+        footer_pos = out.rfind("●")
+        assert report_pos >= 0
+        assert footer_pos > report_pos
+        assert "esc to cancel" not in out[report_pos:footer_pos]
+
 
 def _diagnose_streaming_events() -> Iterator[StreamEvent]:
     """Simulate the diagnose node emitting token deltas before chain end."""

@@ -132,6 +132,10 @@ def render_report(slack_message: str, root_cause_category: str | None = None) ->
     else:
         _render_plain_report(slack_message, root_cause_category=root_cause_category)
 
+    from app.cli.support.output import render_completed_investigation_footer
+
+    render_completed_investigation_footer()
+
 
 def _render_rich_report(slack_message: str, root_cause_category: str | None = None) -> None:
     _ = root_cause_category

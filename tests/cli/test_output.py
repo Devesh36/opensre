@@ -34,6 +34,7 @@ def _isolate_output_state(monkeypatch: pytest.MonkeyPatch) -> None:
     # The module-level ``_tracker`` is a session-scoped singleton; without resetting it
     # a tracker created in an earlier test would leak its ``_rich`` flag into later ones.
     monkeypatch.setattr(output, "_tracker", None)
+    monkeypatch.setattr(output, "_pending_completed_footer", None)
     monkeypatch.setattr(output, "_stdin_watcher_suppression_depth", 0)
     monkeypatch.setattr(output, "_tool_detail_toggle_callbacks", [])
 
@@ -278,6 +279,59 @@ def test_stop_display_clears_stale_footer_via_tracker_path(
     before_findings, _, _after = out.partition("FINDINGS")
     assert "esc to cancel" not in before_findings
     assert "FINDINGS" in out
+
+
+def test_tracker_stop_preserves_footer_for_completed_render(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """StreamRenderer stops the tracker after printing; capture must happen in stop()."""
+    monkeypatch.setattr(output, "get_output_format", lambda: "rich")
+    monkeypatch.setattr(output, "_repl_progress_active", lambda: False)
+
+    tracker = output.ProgressTracker()
+    monkeypatch.setattr(output, "_tracker", tracker)
+    tracker.start("correlate_upstream")
+    tracker.stop()
+
+    output.render_completed_investigation_footer()
+
+    out = _strip_ansi(capsys.readouterr().out)
+    assert "●" in out
+    assert "CORRELATE" in out or "DIAGNOSE" in out
+    assert "ctrl+o tool details" in out
+    assert "esc to cancel" not in out
+
+
+def test_render_report_prints_completed_footer_below_report(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Footer belongs below the RCA report after investigation completes."""
+    monkeypatch.setattr(output, "get_output_format", lambda: "rich")
+    monkeypatch.setattr(output, "_repl_progress_active", lambda: False)
+
+    tracker = output.ProgressTracker()
+    monkeypatch.setattr(output, "_tracker", tracker)
+    tracker.start("correlate_upstream")
+    tracker.complete(
+        "correlate_upstream",
+        output.ProgressEvent(node_name="correlate_upstream", elapsed_ms=1),
+    )
+
+    from app.delivery.publish_findings.renderers.terminal import render_report
+
+    render_report("REPORT HEADLINE\n\n  Findings\n    · one")
+
+    out = _strip_ansi(capsys.readouterr().out)
+    report_pos = out.find("REPORT HEADLINE")
+    footer_pos = out.rfind("●")
+    assert report_pos >= 0
+    assert footer_pos > report_pos
+    after_report = out[report_pos:footer_pos]
+    assert "esc to cancel" not in after_report
+    assert "CORRELATE" in out[footer_pos:] or "DIAGNOSE" in out[footer_pos:]
+    assert "ctrl+o tool details" in out[footer_pos:]
 
 
 @pytest.mark.usefixtures("force_text_mode")

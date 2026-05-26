@@ -451,9 +451,10 @@ class StreamRenderer:
             # report the user has been watching stream live would be
             # silently discarded before the exception propagates.
             self._finish_active_node()
-            self._tracker.stop()
             if not _interrupted:
                 self._print_report()
+            else:
+                self._tracker.stop()
         return dict(self._final_state)
 
     def _handle_event(self, event: StreamEvent) -> None:
@@ -781,6 +782,11 @@ class StreamRenderer:
     def _print_report(self) -> None:
         from app.cli.support.output import stop_display
 
+        # StreamRenderer owns its own ProgressTracker instance (not the module-level
+        # singleton used by stop_display). Stop it here so the live footer is torn
+        # down before printing the report, while still capturing a footer snapshot
+        # that the report renderer can re-print at the absolute bottom.
+        self._tracker.stop()
         stop_display()
 
         slack_message = self._final_state.get("slack_message") or self._final_state.get(
