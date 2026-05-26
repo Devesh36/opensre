@@ -18,7 +18,12 @@ def deliver(state: InvestigationState) -> dict[str, Any]:
 
     Returns state updates with slack_message and report fields.
     """
+    from app.cli.support.output import stop_display
     from app.delivery.publish_findings.node import generate_report
+
+    # CLI deliver() does not pass through tracker.start("publish_findings"), so
+    # tear down the live progress footer before formatting the final report.
+    stop_display()
 
     state_dict = dict(state)
 

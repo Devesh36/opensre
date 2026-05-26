@@ -279,11 +279,14 @@ def unregister_live_console(expected: Console | None) -> None:
 
 def stop_display() -> None:
     """Stop any running live display. Call before printing final report output."""
-    global _active_display
+    global _active_display, _tracker
+    if _tracker is not None:
+        _tracker._stop_toggle_watcher()
+        if _tracker.has_active_display:
+            _tracker.stop()
+            return
     if _active_display is not None:
         _active_display.stop()
-    if "_tracker" in globals() and _tracker is not None:
-        _tracker._stop_toggle_watcher()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -644,6 +647,9 @@ class _EventLogDisplay:
             console=self._console,
             refresh_per_second=10,
             auto_refresh=True,
+            # Remove the live region (phase footer, active-step spinners) on stop so
+            # the final RCA report does not sit below a stale "esc to cancel" line.
+            transient=True,
             # Clip the live area to the terminal height so Rich never tries to
             # scroll back past more lines than it rendered.
             vertical_overflow="ellipsis",
@@ -656,6 +662,10 @@ class _EventLogDisplay:
         global _live_console, _active_display
         if self._live.is_started:
             self._live.stop()
+        # Belt-and-suspenders: some terminals / patch_stdout paths may leave the
+        # last Live frame (phase footer) visible even after transient stop.
+        with contextlib.suppress(Exception):
+            self._console.clear_live()
         if _live_console is self._console:
             _live_console = None
         if _active_display is self:
