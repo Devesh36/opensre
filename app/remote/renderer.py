@@ -173,7 +173,7 @@ class _DiagnoseStreamRenderer:
 
         # Shrink the gap: stop previous display immediately before starting new one
         if self._tracker is not None:
-            self._tracker.stop()
+            self._tracker.stop(capture_footer=False)
         else:
             stop_display()
 
@@ -454,7 +454,7 @@ class StreamRenderer:
             if not _interrupted:
                 self._print_report()
             else:
-                self._tracker.stop()
+                self._tracker.stop(capture_footer=False)
         return dict(self._final_state)
 
     def _handle_event(self, event: StreamEvent) -> None:

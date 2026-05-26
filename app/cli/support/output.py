@@ -205,7 +205,6 @@ def _elapsed_hms(seconds: float) -> str:
 
 _live_console: Console | None = None
 _active_display: _EventLogDisplay | None = None  # forward-declared below
-_pending_completed_footer: InvestigationFooterSnapshot | None = None
 _stdin_watcher_suppression_depth = 0
 _stdin_watcher_lock = threading.Lock()
 _tool_detail_toggle_callbacks: list[Callable[[], None]] = []
@@ -278,12 +277,16 @@ def unregister_live_console(expected: Console | None) -> None:
         _live_console = None
 
 
+def clear_pending_completed_footer() -> None:
+    """Drop any captured footer snapshot (e.g. after cancel without a final report)."""
+    _completed_footer_pending.snapshot = None
+
+
 def _capture_completed_footer_snapshot(
     display: _EventLogDisplay | _ReplEventLogDisplay,
 ) -> None:
     """Remember footer metadata so it can be re-printed below the final report."""
-    global _pending_completed_footer
-    _pending_completed_footer = InvestigationFooterSnapshot(
+    _completed_footer_pending.snapshot = InvestigationFooterSnapshot(
         phase=display._current_phase,
         elapsed_total=time.monotonic() - display._t0,
         model=display._model,
@@ -293,11 +296,10 @@ def _capture_completed_footer_snapshot(
 
 def render_completed_investigation_footer() -> None:
     """Print the investigation status footer below the RCA report (absolute bottom)."""
-    global _pending_completed_footer
-    snap = _pending_completed_footer
+    snap = _completed_footer_pending.snapshot
     if snap is None or _is_silent_output():
         return
-    _pending_completed_footer = None
+    _completed_footer_pending.snapshot = None
     render_divider()
     render_footer(
         snap.phase,
@@ -314,10 +316,7 @@ def stop_display() -> None:
     if _tracker is not None:
         _tracker._stop_toggle_watcher()
         if _tracker.has_active_display:
-            display = _tracker._display
-            if display is not None:
-                _capture_completed_footer_snapshot(display)
-            _tracker.stop()
+            _tracker.stop(capture_footer=True)
             return
     if _active_display is not None:
         _capture_completed_footer_snapshot(_active_display)
@@ -936,6 +935,16 @@ class InvestigationFooterSnapshot:
 
 
 @dataclass
+class _CompletedFooterPending:
+    """Holder for the post-report footer snapshot (avoids module-level global churn)."""
+
+    snapshot: InvestigationFooterSnapshot | None = None
+
+
+_completed_footer_pending = _CompletedFooterPending()
+
+
+@dataclass
 class ProgressEvent:
     node_name: str
     elapsed_ms: int
@@ -976,13 +985,18 @@ class ProgressTracker:
         """Return True if the live display is currently running."""
         return self._display is not None
 
-    def stop(self) -> None:
+    def stop(self, *, capture_footer: bool = True) -> None:
         """Stop the active live display if running."""
         self._stop_toggle_watcher()
         if self._display:
-            _capture_completed_footer_snapshot(self._display)
+            if capture_footer:
+                _capture_completed_footer_snapshot(self._display)
+            else:
+                clear_pending_completed_footer()
             self._display.stop()
             self._display = None
+        elif not capture_footer:
+            clear_pending_completed_footer()
 
     def _stop_toggle_watcher(self) -> None:
         if self._toggle_watcher is not None:
@@ -1283,7 +1297,7 @@ def get_tracker(*, reset: bool = False) -> ProgressTracker:
     global _tracker
     if _tracker is None or reset:
         if reset and _tracker is not None:
-            _tracker.stop()
+            _tracker.stop(capture_footer=False)
         _tracker = ProgressTracker()
     return _tracker
 
@@ -1302,7 +1316,8 @@ def set_silent_tracker() -> None:
     """
     global _tracker
     if _tracker is not None:
-        _tracker.stop()
+        _tracker.stop(capture_footer=False)
+    clear_pending_completed_footer()
     _tracker = ProgressTracker.__new__(ProgressTracker)
     _tracker.events = []
     _tracker._start_times = {}

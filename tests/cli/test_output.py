@@ -34,7 +34,7 @@ def _isolate_output_state(monkeypatch: pytest.MonkeyPatch) -> None:
     # The module-level ``_tracker`` is a session-scoped singleton; without resetting it
     # a tracker created in an earlier test would leak its ``_rich`` flag into later ones.
     monkeypatch.setattr(output, "_tracker", None)
-    monkeypatch.setattr(output, "_pending_completed_footer", None)
+    monkeypatch.setattr(output, "_completed_footer_pending", output._CompletedFooterPending())
     monkeypatch.setattr(output, "_stdin_watcher_suppression_depth", 0)
     monkeypatch.setattr(output, "_tool_detail_toggle_callbacks", [])
 
@@ -281,6 +281,22 @@ def test_stop_display_clears_stale_footer_via_tracker_path(
     assert "FINDINGS" in out
 
 
+def test_tracker_stop_without_capture_clears_pending_footer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cancelled runs must not leave a footer snapshot for the next investigation."""
+    monkeypatch.setattr(output, "get_output_format", lambda: "rich")
+    monkeypatch.setattr(output, "_repl_progress_active", lambda: False)
+
+    tracker = output.ProgressTracker()
+    tracker.start("correlate_upstream")
+    tracker.stop(capture_footer=True)
+    assert output._completed_footer_pending.snapshot is not None
+
+    tracker.stop(capture_footer=False)
+    assert output._completed_footer_pending.snapshot is None
+
+
 def test_tracker_stop_preserves_footer_for_completed_render(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -314,10 +330,7 @@ def test_render_report_prints_completed_footer_below_report(
     tracker = output.ProgressTracker()
     monkeypatch.setattr(output, "_tracker", tracker)
     tracker.start("correlate_upstream")
-    tracker.complete(
-        "correlate_upstream",
-        output.ProgressEvent(node_name="correlate_upstream", elapsed_ms=1),
-    )
+    tracker.complete("correlate_upstream")
 
     from app.delivery.publish_findings.renderers.terminal import render_report
 

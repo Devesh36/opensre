@@ -453,6 +453,27 @@ class TestStreamRendererCleanupOnException:
             "accumulated state from before the failure must be retained"
         )
 
+    @patch("app.remote.renderer.Live")
+    @patch("app.cli.support.output._EventLogDisplay")
+    @patch.dict(os.environ, {"TRACER_OUTPUT_FORMAT": "rich"})
+    def test_interrupt_clears_pending_footer_snapshot(
+        self, _mock_display, _mock_live
+    ) -> None:
+        """Regression: Ctrl+C must not leave a footer snapshot for the next RCA."""
+        from app.cli.support import output as output_mod
+
+        renderer = StreamRenderer(local=True)
+        renderer._tracker.start("investigation_agent")
+
+        def stream_raises_keyboard_interrupt() -> Iterator[StreamEvent]:
+            yield _make_event("metadata", data={"run_id": "r-ki-footer"})
+            raise KeyboardInterrupt
+
+        with pytest.raises(KeyboardInterrupt):
+            renderer.render_stream(stream_raises_keyboard_interrupt())
+
+        assert output_mod._completed_footer_pending.snapshot is None
+
     @patch.dict(os.environ, {"TRACER_OUTPUT_FORMAT": "text"})
     def test_print_report_skipped_on_keyboard_interrupt(self) -> None:
         """_print_report must NOT run when the user presses Ctrl+C."""
