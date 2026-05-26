@@ -456,9 +456,7 @@ class TestStreamRendererCleanupOnException:
     @patch("app.remote.renderer.Live")
     @patch("app.cli.support.output._EventLogDisplay")
     @patch.dict(os.environ, {"TRACER_OUTPUT_FORMAT": "rich"})
-    def test_interrupt_clears_pending_footer_snapshot(
-        self, _mock_display, _mock_live
-    ) -> None:
+    def test_interrupt_clears_pending_footer_snapshot(self, _mock_display, _mock_live) -> None:
         """Regression: Ctrl+C must not leave a footer snapshot for the next RCA."""
         from app.cli.support import output as output_mod
 
