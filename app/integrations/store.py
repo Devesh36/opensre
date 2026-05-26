@@ -255,6 +255,9 @@ def _load_raw() -> dict[str, Any]:
     Lock-free for the common v2 path; acquires the store lock only when a
     legacy move or v1 migration needs to be persisted.
     """
+    from app.constants.home_migration import migrate_opensre_home_from_config
+
+    migrate_opensre_home_from_config()
     # Legacy store migration check — cheap path when nothing to do
     if not STORE_PATH.exists() and LEGACY_STORE_PATH.exists():
         try:
