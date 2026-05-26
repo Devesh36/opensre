@@ -1,21 +1,36 @@
-"""Google Gemini CLI adapter (``gemini -p``, non-interactive headless mode).
+"""Google Antigravity CLI adapter (``agy -p``, non-interactive headless mode).
+
+Antigravity CLI is the successor to Gemini CLI. Gemini CLI stops serving Pro/Ultra
+and free users on 2026-06-18; paid Gemini Code Assist users keep Gemini CLI.
 
 Env vars
 --------
-GEMINI_CLI_BIN   Optional explicit path to the ``gemini`` binary.
-GEMINI_CLI_MODEL Optional model override passed as ``--model``.
-GEMINI_CLI_TIMEOUT_SECONDS Optional invocation timeout override for long prompts.
+ANTIGRAVITY_CLI_BIN              Optional explicit path to the ``agy`` binary.
+ANTIGRAVITY_CLI_TIMEOUT_SECONDS  Optional invocation timeout override (clamped 30–600s).
+
+``ANTIGRAVITY_CLI_MODEL`` is registered for forward-compat on the registry but is
+**no-op** today: ``agy`` v1.0.2 does not expose ``--model`` in headless ``-p`` mode
+(verified locally). Each invocation uses whatever model is persisted in agy's
+local config; users change it interactively with ``/models`` inside the REPL.
+Once Google ships ``--model`` in headless, ``build()`` can forward the env var
+in a one-line change (see TODO near ``del model``).
 
 Auth
 ----
-Gemini CLI supports multiple auth modes (cached login sessions, ``GEMINI_API_KEY``,
-Vertex env credentials). Probe classification uses a short headless call and
-maps outcomes to ``logged_in``: True / False / None.
+Google Sign-In via browser OAuth on first interactive ``agy`` run; the token is
+cached by the OS keyring. No documented ``ANTIGRAVITY_API_KEY``. As a best-effort
+fallback, the probe treats explicit ``GEMINI_API_KEY`` / ``GOOGLE_API_KEY`` /
+Vertex env credentials as authenticated, mirroring ``gemini_cli.py``.
+
+Stateless invocation
+--------------------
+``build()`` never passes ``--continue`` / ``--conversation`` / ``--sandbox`` /
+``--dangerously-skip-permissions``; each opensre call is ephemeral. ``--output-format``
+was removed between Gemini CLI and Antigravity CLI — stdout is plain text now.
 """
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 
@@ -39,30 +54,28 @@ from app.integrations.llm_cli.constants import (
     MIN_EXEC_TIMEOUT_SEC as _MIN_EXEC_TIMEOUT_SEC,
 )
 from app.integrations.llm_cli.probe_utils import run_version_probe
-from app.integrations.llm_cli.semver_utils import parse_semver_three_part
+from app.integrations.llm_cli.semver_utils import parse_semver_three_part, semver_to_tuple
 from app.integrations.llm_cli.subprocess_env import build_cli_subprocess_env
 from app.integrations.llm_cli.timeout_utils import resolve_timeout_from_env
 
 _PROBE_TIMEOUT_SEC = 20.0
-_AUTH_HINT = "Run: gemini (interactive login) or set GEMINI_API_KEY."
-# Source: https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/
-_SUNSET_NOTE = (
-    " Note: Gemini CLI stops serving Pro/Ultra and free users on 2026-06-18; "
-    "paid Gemini Code Assist remains supported. Consider antigravity-cli (agy)."
-)
+_AUTH_HINT = "Run: agy (interactive Google Sign-In) or set GEMINI_API_KEY for keyless fallback."
+# Buffer so the Python-side subprocess timeout sits above ``agy --print-timeout``
+# and lets the CLI emit its own clean timeout message instead of being SIGKILL'd.
+_SUBPROCESS_TIMEOUT_BUFFER_SEC = 10.0
 
 
 def _resolve_exec_timeout_seconds() -> float:
     return resolve_timeout_from_env(
-        env_key="GEMINI_CLI_TIMEOUT_SECONDS",
+        env_key="ANTIGRAVITY_CLI_TIMEOUT_SECONDS",
         default=_DEFAULT_EXEC_TIMEOUT_SEC,
         minimum=_MIN_EXEC_TIMEOUT_SEC,
         maximum=_MAX_EXEC_TIMEOUT_SEC,
     )
 
 
-def _gemini_auth_env_overrides() -> dict[str, str]:
-    """Build Gemini subprocess auth/config overrides used by probe and invoke."""
+def _antigravity_auth_env_overrides() -> dict[str, str]:
+    """Build agy subprocess auth/config overrides used by probe and invoke."""
     env: dict[str, str] = {"NO_COLOR": "1"}
     keys = (
         "GEMINI_API_KEY",
@@ -79,8 +92,8 @@ def _gemini_auth_env_overrides() -> dict[str, str]:
     return env
 
 
-def _has_explicit_gemini_auth_env() -> str | None:
-    env = _gemini_auth_env_overrides()
+def _has_explicit_antigravity_auth_env() -> str | None:
+    env = _antigravity_auth_env_overrides()
     for key in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_APPLICATION_CREDENTIALS"):
         if env.get(key):
             return key
@@ -89,38 +102,23 @@ def _has_explicit_gemini_auth_env() -> str | None:
     return None
 
 
-def _classify_gemini_auth(returncode: int, stdout: str, stderr: str) -> tuple[bool | None, str]:
-    raw = (stdout or "").strip()
-    if raw.startswith("{"):
-        try:
-            payload = json.loads(raw)
-        except json.JSONDecodeError:
-            payload = None
-        if isinstance(payload, dict):
-            err = payload.get("error")
-            if isinstance(err, dict):
-                message = str(err.get("message", "")).strip()
-                code = err.get("code")
-                msg_lower = message.lower()
-                if (
-                    "please set an auth method" in msg_lower
-                    or "gemini_api_key" in msg_lower
-                    or "not authenticated" in msg_lower
-                    or "login required" in msg_lower
-                    or code == 41
-                ):
-                    return False, f"Not authenticated. {_AUTH_HINT}"
+def _classify_antigravity_auth(
+    returncode: int, stdout: str, stderr: str
+) -> tuple[bool | None, str]:
     text = (stdout + "\n" + stderr).lower()
     if "not authenticated" in text or ("authentication" in text and "required" in text):
         return False, f"Not authenticated. {_AUTH_HINT}"
-    if "login required" in text or "please login" in text:
+    if "login required" in text or "please login" in text or "please sign in" in text:
         return False, f"Not authenticated. {_AUTH_HINT}"
     if "please set an auth method" in text:
         return False, f"Not authenticated. {_AUTH_HINT}"
     if "invalid api key" in text or ("api key" in text and "missing" in text):
-        return False, "Gemini API key missing or invalid. Set GEMINI_API_KEY or login via `gemini`."
+        return (
+            False,
+            "Antigravity API key missing or invalid. Set GEMINI_API_KEY or run `agy` to sign in.",
+        )
     if returncode == 0:
-        return True, "Authenticated via Gemini CLI."
+        return True, "Authenticated via Antigravity CLI."
     if "network" in text or "timeout" in text or "unreachable" in text or "connection" in text:
         return None, "Network error while checking auth; will retry at invocation."
     tail = (stderr or stdout).strip()[:200]
@@ -129,25 +127,26 @@ def _classify_gemini_auth(returncode: int, stdout: str, stderr: str) -> tuple[bo
     return None, f"Auth status unclear (exit {returncode})."
 
 
-def _fallback_gemini_cli_paths() -> list[str]:
-    return _default_cli_fallback_paths("gemini")
+def _fallback_antigravity_cli_paths() -> list[str]:
+    return _default_cli_fallback_paths("agy")
 
 
-class GeminiCLIAdapter:
-    """Non-interactive Gemini CLI (``gemini -p`` headless mode)."""
+class AntigravityCLIAdapter:
+    """Non-interactive Antigravity CLI (``agy -p`` headless mode)."""
 
-    name = "gemini-cli"
-    binary_env_key = "GEMINI_CLI_BIN"
-    install_hint = "npm i -g @google/gemini-cli"
+    name = "antigravity-cli"
+    binary_env_key = "ANTIGRAVITY_CLI_BIN"
+    install_hint = "curl -fsSL https://antigravity.google/cli/install.sh | bash"
     auth_hint = _AUTH_HINT.removesuffix(".")
-    min_version: str | None = None
+    # 1.0.0 had OAuth-hang bugs fixed in 1.0.1; flag older installs at probe time.
+    min_version: str | None = "1.0.1"
     default_exec_timeout_sec = _DEFAULT_EXEC_TIMEOUT_SEC
 
     def _resolve_binary(self) -> str | None:
         return resolve_cli_binary(
-            explicit_env_key="GEMINI_CLI_BIN",
-            binary_names=_candidate_binary_names("gemini"),
-            fallback_paths=_fallback_gemini_cli_paths,
+            explicit_env_key="ANTIGRAVITY_CLI_BIN",
+            binary_names=_candidate_binary_names("agy"),
+            fallback_paths=_fallback_antigravity_cli_paths,
         )
 
     def _probe_binary(self, binary_path: str) -> CLIProbe:
@@ -165,10 +164,21 @@ class GeminiCLIAdapter:
             )
 
         version = parse_semver_three_part(version_output or "")
-        probe_env = build_cli_subprocess_env(_gemini_auth_env_overrides())
+        upgrade_note = ""
+        if (
+            self.min_version
+            and version
+            and semver_to_tuple(version) < semver_to_tuple(self.min_version)
+        ):
+            upgrade_note = (
+                f" Antigravity CLI {version} is below tested minimum {self.min_version}; "
+                "upgrade: agy update"
+            )
+
+        probe_env = build_cli_subprocess_env(_antigravity_auth_env_overrides())
         try:
             auth_proc = subprocess.run(
-                [binary_path, "-p", "respond with: ok", "--output-format", "json"],
+                [binary_path, "-p", "respond with: ok", "--print-timeout", "15s"],
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
@@ -178,36 +188,30 @@ class GeminiCLIAdapter:
                 env=probe_env,
             )
         except subprocess.TimeoutExpired:
-            logged_in = None
+            logged_in: bool | None = None
             auth_detail = (
-                f"Gemini auth probe timed out after {_PROBE_TIMEOUT_SEC:.0f}s; auth status unknown."
+                f"Antigravity auth probe timed out after {_PROBE_TIMEOUT_SEC:.0f}s; "
+                "auth status unknown."
             )
         except OSError as exc:
             logged_in = None
-            auth_detail = f"Could not spawn gemini for auth probe: {exc}"
+            auth_detail = f"Could not spawn agy for auth probe: {exc}"
         else:
-            logged_in, auth_detail = _classify_gemini_auth(
+            logged_in, auth_detail = _classify_antigravity_auth(
                 auth_proc.returncode, auth_proc.stdout, auth_proc.stderr
             )
 
-        auth_env_source = _has_explicit_gemini_auth_env()
+        auth_env_source = _has_explicit_antigravity_auth_env()
         if logged_in is not True and auth_env_source:
             logged_in = True
             auth_detail = f"Authenticated via {auth_env_source} fallback."
-
-        # Gate the sunset notice on ``logged_in is not False`` so a user mid
-        # auth-failure isn't shown the migration ad next to the actual error
-        # they need to read. Authenticated (True) and ambiguous (None) probes
-        # still surface it — those are the cohorts whose CLI is operational
-        # today and who need to plan for 2026-06-18.
-        detail = auth_detail + _SUNSET_NOTE if logged_in is not False else auth_detail
 
         return CLIProbe(
             installed=True,
             version=version,
             logged_in=logged_in,
             bin_path=binary_path,
-            detail=detail,
+            detail=auth_detail + upgrade_note,
         )
 
     def detect(self) -> CLIProbe:
@@ -219,8 +223,8 @@ class GeminiCLIAdapter:
                 logged_in=None,
                 bin_path=None,
                 detail=(
-                    "Gemini CLI not found on PATH or known install locations. "
-                    f"Install with: {self.install_hint} or set GEMINI_CLI_BIN."
+                    "Antigravity CLI (`agy`) not found on PATH or known install locations. "
+                    f"Install with: {self.install_hint} or set ANTIGRAVITY_CLI_BIN."
                 ),
             )
         return self._probe_binary(binary)
@@ -233,55 +237,52 @@ class GeminiCLIAdapter:
         workspace: str,
         reasoning_effort: str | None = None,
     ) -> CLIInvocation:
-        _ = reasoning_effort
+        # ``model`` and ``reasoning_effort`` are accepted for protocol compatibility
+        # but ignored: agy 1.0.2 does not expose ``--model`` or reasoning knobs in
+        # headless ``-p`` mode (verified locally). Each invocation uses whatever
+        # model is persisted in agy's local config; users change it via ``/models``
+        # inside the REPL.
+        # TODO(antigravity-cli): once agy supports ``--model`` in headless, replace
+        # the ``del`` with a conditional ``argv.extend(["--model", model])`` block
+        # and lock the catalog into ``app/cli/wizard/config.py:ANTIGRAVITY_CLI_MODELS``.
+        del model, reasoning_effort
+
         binary = self._resolve_binary()
         if not binary:
             raise RuntimeError(
-                f"Gemini CLI not found. {self.install_hint} "
-                "or set GEMINI_CLI_BIN to the full binary path."
+                f"Antigravity CLI not found. {self.install_hint} "
+                "or set ANTIGRAVITY_CLI_BIN to the full binary path."
             )
 
-        argv: list[str] = [binary, "-p", prompt, "--output-format", "json"]
-        resolved_model = (model or "").strip()
-        if resolved_model:
-            argv.extend(["--model", resolved_model])
+        resolved_timeout = _resolve_exec_timeout_seconds()
+        argv: list[str] = [
+            binary,
+            "-p",
+            prompt,
+            "--print-timeout",
+            f"{int(resolved_timeout)}s",
+        ]
 
         ws = (workspace or "").strip()
         cwd = ws or os.getcwd()
-        env = _gemini_auth_env_overrides()
+        env = _antigravity_auth_env_overrides()
 
         return CLIInvocation(
             argv=tuple(argv),
             stdin=None,
             cwd=cwd,
             env=env,
-            timeout_sec=_resolve_exec_timeout_seconds(),
+            timeout_sec=resolved_timeout + _SUBPROCESS_TIMEOUT_BUFFER_SEC,
         )
 
     def parse(self, *, stdout: str, stderr: str, returncode: int) -> str:
         del stderr, returncode
-        text = (stdout or "").strip()
-        if not text:
-            return ""
-        try:
-            payload = json.loads(text)
-        except json.JSONDecodeError:
-            return text
-        if isinstance(payload, dict):
-            response = payload.get("response")
-            if isinstance(response, str):
-                return response.strip()
-            err = payload.get("error")
-            if isinstance(err, dict):
-                message = err.get("message")
-                if isinstance(message, str) and message.strip():
-                    raise RuntimeError(f"Gemini CLI returned an error: {message.strip()}")
-        return text
+        return (stdout or "").strip()
 
     def explain_failure(self, *, stdout: str, stderr: str, returncode: int) -> str:
         err = (stderr or "").strip()
         out = (stdout or "").strip()
-        bits = [f"gemini -p exited with code {returncode}"]
+        bits = [f"agy -p exited with code {returncode}"]
         if err:
             bits.append(err[:2000])
         elif out:
