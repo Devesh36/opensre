@@ -281,6 +281,29 @@ def test_stop_display_clears_stale_footer_via_tracker_path(
     assert "FINDINGS" in out
 
 
+def test_capture_footer_snapshot_does_not_overwrite_existing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """First capture wins so a later stop_display cannot clobber StreamRenderer metadata."""
+    monkeypatch.setattr(output, "get_output_format", lambda: "rich")
+    monkeypatch.setattr(output, "_repl_progress_active", lambda: False)
+
+    output._completed_footer_pending.snapshot = output.InvestigationFooterSnapshot(
+        phase="INVESTIGATE",
+        elapsed_total=12.0,
+        model="m",
+        mode="local",
+    )
+    tracker = output.ProgressTracker()
+    monkeypatch.setattr(output, "_tracker", tracker)
+    tracker.start("correlate_upstream")
+    output.stop_display()
+
+    snap = output._completed_footer_pending.snapshot
+    assert snap is not None
+    assert snap.phase == "INVESTIGATE"
+
+
 def test_tracker_stop_without_capture_clears_pending_footer(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

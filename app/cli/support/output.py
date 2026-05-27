@@ -286,6 +286,8 @@ def _capture_completed_footer_snapshot(
     display: _EventLogDisplay | _ReplEventLogDisplay,
 ) -> None:
     """Remember footer metadata so it can be re-printed below the final report."""
+    if _completed_footer_pending.snapshot is not None:
+        return
     _completed_footer_pending.snapshot = InvestigationFooterSnapshot(
         phase=display._current_phase,
         elapsed_total=time.monotonic() - display._t0,
@@ -310,16 +312,17 @@ def render_completed_investigation_footer() -> None:
     )
 
 
-def stop_display() -> None:
+def stop_display(*, capture_footer: bool = True) -> None:
     """Stop any running live display. Call before printing final report output."""
     global _active_display, _tracker
     if _tracker is not None:
         _tracker._stop_toggle_watcher()
         if _tracker.has_active_display:
-            _tracker.stop(capture_footer=True)
+            _tracker.stop(capture_footer=capture_footer)
             return
     if _active_display is not None:
-        _capture_completed_footer_snapshot(_active_display)
+        if capture_footer:
+            _capture_completed_footer_snapshot(_active_display)
         _active_display.stop()
 
 

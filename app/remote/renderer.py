@@ -782,12 +782,11 @@ class StreamRenderer:
     def _print_report(self) -> None:
         from app.cli.support.output import stop_display
 
-        # StreamRenderer owns its own ProgressTracker instance (not the module-level
-        # singleton used by stop_display). Stop it here so the live footer is torn
-        # down before printing the report, while still capturing a footer snapshot
-        # that the report renderer can re-print at the absolute bottom.
-        self._tracker.stop()
-        stop_display()
+        # StreamRenderer owns its own ProgressTracker (not the module singleton).
+        # Capture footer metadata from this tracker first; then tear down any
+        # module-level display without overwriting that snapshot.
+        self._tracker.stop(capture_footer=True)
+        stop_display(capture_footer=False)
 
         slack_message = self._final_state.get("slack_message") or self._final_state.get(
             "report", ""
