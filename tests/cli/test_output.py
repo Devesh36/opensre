@@ -307,7 +307,7 @@ def test_capture_footer_snapshot_does_not_overwrite_existing(
 def test_tracker_stop_without_capture_clears_pending_footer(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Cancelled runs must not leave a footer snapshot for the next investigation."""
+    """Cancelled runs explicitly opt in to clearing the pending snapshot."""
     monkeypatch.setattr(output, "get_output_format", lambda: "rich")
     monkeypatch.setattr(output, "_repl_progress_active", lambda: False)
 
@@ -318,6 +318,32 @@ def test_tracker_stop_without_capture_clears_pending_footer(
 
     tracker.stop(capture_footer=False, clear_pending_footer=True)
     assert output._completed_footer_pending.snapshot is None
+
+
+def test_stop_display_without_capture_does_not_clear_other_tracker_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tearing down a *different* tracker via stop_display must not silently
+    erase the pending snapshot owned by the caller (REPL two-tracker bug)."""
+    monkeypatch.setattr(output, "get_output_format", lambda: "rich")
+    monkeypatch.setattr(output, "_repl_progress_active", lambda: False)
+
+    output._completed_footer_pending.snapshot = output.InvestigationFooterSnapshot(
+        phase="CORRELATE_UP",
+        elapsed_total=5.5,
+        model="m",
+        mode="local",
+    )
+
+    module_tracker = output.ProgressTracker()
+    monkeypatch.setattr(output, "_tracker", module_tracker)
+    module_tracker.start("investigation_agent")
+
+    output.stop_display(capture_footer=False)
+
+    snap = output._completed_footer_pending.snapshot
+    assert snap is not None, "stop_display(capture_footer=False) must preserve pending snapshot"
+    assert snap.phase == "CORRELATE_UP"
 
 
 def test_tracker_stop_preserves_footer_for_completed_render(

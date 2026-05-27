@@ -312,21 +312,37 @@ def render_completed_investigation_footer() -> None:
     )
 
 
-def stop_display(*, capture_footer: bool = True) -> None:
-    """Stop any running live display. Call before printing final report output."""
+def stop_display(
+    *,
+    capture_footer: bool = True,
+    clear_pending_footer: bool = False,
+) -> None:
+    """Stop any running live display. Call before printing final report output.
+
+    ``capture_footer`` decides whether to snapshot the *current* display so a
+    later report can re-print it below. ``clear_pending_footer`` is a separate,
+    opt-in switch used by cancel paths to drop any *previously* captured
+    snapshot — it never fires automatically, so tearing down a secondary
+    display (e.g. a module singleton during streaming) does not erase a
+    snapshot owned by a different tracker.
+    """
     global _active_display, _tracker
     if _tracker is not None:
         _tracker._stop_toggle_watcher()
         if _tracker.has_active_display:
             _tracker.stop(
                 capture_footer=capture_footer,
-                clear_pending_footer=not capture_footer,
+                clear_pending_footer=clear_pending_footer,
             )
             return
     if _active_display is not None:
         if capture_footer:
             _capture_completed_footer_snapshot(_active_display)
+        elif clear_pending_footer:
+            clear_pending_completed_footer()
         _active_display.stop()
+    elif clear_pending_footer:
+        clear_pending_completed_footer()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -995,9 +1011,14 @@ class ProgressTracker:
         self,
         *,
         capture_footer: bool = True,
-        clear_pending_footer: bool = True,
+        clear_pending_footer: bool = False,
     ) -> None:
-        """Stop the active live display if running."""
+        """Stop the active live display if running.
+
+        ``clear_pending_footer`` defaults to ``False`` so tearing down one
+        tracker never silently drops a snapshot owned by another tracker.
+        Cancel paths set it explicitly to clean up after an interrupted run.
+        """
         self._stop_toggle_watcher()
         if self._display:
             if capture_footer:
@@ -1006,7 +1027,7 @@ class ProgressTracker:
                 clear_pending_completed_footer()
             self._display.stop()
             self._display = None
-        elif not capture_footer and clear_pending_footer:
+        elif clear_pending_footer:
             clear_pending_completed_footer()
 
     def _stop_toggle_watcher(self) -> None:
@@ -1308,7 +1329,7 @@ def get_tracker(*, reset: bool = False) -> ProgressTracker:
     global _tracker
     if _tracker is None or reset:
         if reset and _tracker is not None:
-            _tracker.stop(capture_footer=False)
+            _tracker.stop(capture_footer=False, clear_pending_footer=True)
         _tracker = ProgressTracker()
     return _tracker
 

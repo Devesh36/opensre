@@ -476,15 +476,21 @@ class TestStreamRendererCleanupOnException:
     @patch("app.cli.support.output._EventLogDisplay")
     @patch.dict(os.environ, {"TRACER_OUTPUT_FORMAT": "rich"})
     def test_print_report_preserves_stream_footer_when_singleton_display_active(
-        self, _mock_display, _mock_live
+        self, _mock_display, _mock_live, capfd: pytest.CaptureFixture[str]
     ) -> None:
-        """stop_display(capture_footer=False) must not clear StreamRenderer snapshot."""
+        """REPL scenario: stop_display(capture_footer=False) must not erase the snapshot
+        StreamRenderer's tracker just captured. Verify the footer actually renders below
+        the report rather than only asserting snapshot is None (which the cleared-and-dropped
+        bug path would also satisfy).
+        """
         from app.cli.support import output as output_mod
 
         renderer = StreamRenderer(local=True)
         renderer._tracker.start("correlate_upstream")
 
-        # Simulate an independent module-level tracker that still has a display.
+        # Simulate an independent module-level tracker that still has a display
+        # (this mirrors the REPL keeping a singleton tracker alive while
+        # StreamRenderer owns its own tracker for the current investigation).
         output_mod._tracker = output_mod.ProgressTracker()
         output_mod._tracker.start("investigation_agent")
         renderer._final_state = {
@@ -493,8 +499,19 @@ class TestStreamRendererCleanupOnException:
 
         renderer._print_report()
 
-        # Footer renderer consumes the captured snapshot; it should not be dropped
-        # before rendering due to the singleton tracker shutdown.
+        out, _ = capfd.readouterr()
+        report_pos = out.find("RCA REPORT HEADLINE")
+        footer_pos = out.rfind("●")
+        assert report_pos >= 0, "report body must be rendered"
+        assert footer_pos > report_pos, (
+            "completed footer must be rendered AFTER the report — "
+            "if this fails, the module singleton tracker erased the captured snapshot"
+        )
+        assert "ctrl+o tool details" in out[footer_pos:]
+        assert "esc to cancel" not in out[report_pos:footer_pos]
+        # Snapshot is consumed (set to None) by render_completed_investigation_footer
+        # only as a side effect of *rendering* — combined with the footer text check
+        # above, that closes the false-positive gap from the previous assertion.
         assert output_mod._completed_footer_pending.snapshot is None
 
     @patch.dict(os.environ, {"TRACER_OUTPUT_FORMAT": "text"})
