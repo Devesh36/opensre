@@ -454,7 +454,7 @@ class StreamRenderer:
             if not _interrupted:
                 self._print_report()
             else:
-                self._tracker.stop(capture_footer=False)
+                self._tracker.stop(capture_footer=False, clear_pending_footer=True)
         return dict(self._final_state)
 
     def _handle_event(self, event: StreamEvent) -> None:

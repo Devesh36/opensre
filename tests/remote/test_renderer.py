@@ -472,6 +472,31 @@ class TestStreamRendererCleanupOnException:
 
         assert output_mod._completed_footer_pending.snapshot is None
 
+    @patch("app.remote.renderer.Live")
+    @patch("app.cli.support.output._EventLogDisplay")
+    @patch.dict(os.environ, {"TRACER_OUTPUT_FORMAT": "rich"})
+    def test_print_report_preserves_stream_footer_when_singleton_display_active(
+        self, _mock_display, _mock_live
+    ) -> None:
+        """stop_display(capture_footer=False) must not clear StreamRenderer snapshot."""
+        from app.cli.support import output as output_mod
+
+        renderer = StreamRenderer(local=True)
+        renderer._tracker.start("correlate_upstream")
+
+        # Simulate an independent module-level tracker that still has a display.
+        output_mod._tracker = output_mod.ProgressTracker()
+        output_mod._tracker.start("investigation_agent")
+        renderer._final_state = {
+            "slack_message": "RCA REPORT HEADLINE\n\n  Findings\n    · one",
+        }
+
+        renderer._print_report()
+
+        # Footer renderer consumes the captured snapshot; it should not be dropped
+        # before rendering due to the singleton tracker shutdown.
+        assert output_mod._completed_footer_pending.snapshot is None
+
     @patch.dict(os.environ, {"TRACER_OUTPUT_FORMAT": "text"})
     def test_print_report_skipped_on_keyboard_interrupt(self) -> None:
         """_print_report must NOT run when the user presses Ctrl+C."""

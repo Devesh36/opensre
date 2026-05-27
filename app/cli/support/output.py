@@ -318,7 +318,10 @@ def stop_display(*, capture_footer: bool = True) -> None:
     if _tracker is not None:
         _tracker._stop_toggle_watcher()
         if _tracker.has_active_display:
-            _tracker.stop(capture_footer=capture_footer)
+            _tracker.stop(
+                capture_footer=capture_footer,
+                clear_pending_footer=not capture_footer,
+            )
             return
     if _active_display is not None:
         if capture_footer:
@@ -988,17 +991,22 @@ class ProgressTracker:
         """Return True if the live display is currently running."""
         return self._display is not None
 
-    def stop(self, *, capture_footer: bool = True) -> None:
+    def stop(
+        self,
+        *,
+        capture_footer: bool = True,
+        clear_pending_footer: bool = True,
+    ) -> None:
         """Stop the active live display if running."""
         self._stop_toggle_watcher()
         if self._display:
             if capture_footer:
                 _capture_completed_footer_snapshot(self._display)
-            else:
+            elif clear_pending_footer:
                 clear_pending_completed_footer()
             self._display.stop()
             self._display = None
-        elif not capture_footer:
+        elif not capture_footer and clear_pending_footer:
             clear_pending_completed_footer()
 
     def _stop_toggle_watcher(self) -> None:

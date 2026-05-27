@@ -297,7 +297,7 @@ def test_capture_footer_snapshot_does_not_overwrite_existing(
     tracker = output.ProgressTracker()
     monkeypatch.setattr(output, "_tracker", tracker)
     tracker.start("correlate_upstream")
-    output.stop_display()
+    output.stop_display(capture_footer=True)
 
     snap = output._completed_footer_pending.snapshot
     assert snap is not None
@@ -316,7 +316,7 @@ def test_tracker_stop_without_capture_clears_pending_footer(
     tracker.stop(capture_footer=True)
     assert output._completed_footer_pending.snapshot is not None
 
-    tracker.stop(capture_footer=False)
+    tracker.stop(capture_footer=False, clear_pending_footer=True)
     assert output._completed_footer_pending.snapshot is None
 
 
