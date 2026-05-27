@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterator
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -27,6 +28,31 @@ def _make_event(
         kind=kind,
         tags=tags or [],
     )
+
+
+def _stub_footer_fields(
+    display: Any,
+    *,
+    phase: str = "INVESTIGATE",
+    model: str = "test-model",
+    mode: str = "remote",
+) -> None:
+    """Pin a mocked ``_EventLogDisplay``'s footer-related fields to short strings.
+
+    ``_capture_completed_footer_snapshot`` reads ``_current_phase``, ``_t0``,
+    ``_model`` and ``_mode`` straight off the display. When the test patches
+    ``_EventLogDisplay`` with a ``MagicMock`` and leaves these attributes as
+    auto-spec'd ``MagicMock`` children, their reprs contain the platform's
+    object IDs and Rich wraps the resulting footer line on narrow terminals
+    (capfd defaults to 80 columns). That wrap silently broke contiguous-text
+    assertions like ``"ctrl+o tool details" in footer_slice``.
+    """
+    import time as _time
+
+    display._current_phase = phase
+    display._t0 = _time.monotonic()
+    display._model = model
+    display._mode = mode
 
 
 def _investigation_events() -> Iterator[StreamEvent]:
@@ -487,6 +513,16 @@ class TestStreamRendererCleanupOnException:
 
         renderer = StreamRenderer(local=True)
         renderer._tracker.start("correlate_upstream")
+        # Pin the mocked display's footer fields to deterministic short strings
+        # so the rendered footer line stays short enough to fit on one row at
+        # the default 80-column console width that pytest's capfd uses. Without
+        # this pin, the MagicMock attribute reprs (containing long platform-
+        # specific object IDs) push "ctrl+o tool details" off the right edge
+        # and Rich wraps it onto its own line, breaking the contiguous-text
+        # assertion below. Patching ``_EventLogDisplay`` makes every constructor
+        # call return the *same* MagicMock instance, so this single stub also
+        # pins the module-singleton tracker's display fields below.
+        _stub_footer_fields(renderer._tracker._display)
 
         # Simulate an independent module-level tracker that still has a display
         # (this mirrors the REPL keeping a singleton tracker alive while
@@ -512,6 +548,59 @@ class TestStreamRendererCleanupOnException:
         # Snapshot is consumed (set to None) by render_completed_investigation_footer
         # only as a side effect of *rendering* — combined with the footer text check
         # above, that closes the false-positive gap from the previous assertion.
+        assert output_mod._completed_footer_pending.snapshot is None
+
+    @patch("app.remote.renderer.Live")
+    @patch("app.cli.support.output._EventLogDisplay")
+    @patch.dict(os.environ, {"TRACER_OUTPUT_FORMAT": "rich"})
+    def test_print_report_noise_alert_does_not_leak_footer_to_next_run(
+        self, _mock_display, _mock_live
+    ) -> None:
+        """REPL regression: a noise-classified investigation must not leave a
+        stale footer snapshot that the *next* investigation's report would
+        carry — the first-capture-wins guard in
+        ``_capture_completed_footer_snapshot`` would otherwise pin the wrong
+        phase / elapsed_time below a real RCA report (Greptile P1 on PR #2538).
+        """
+        from app.cli.support import output as output_mod
+
+        renderer = StreamRenderer(local=True)
+        renderer._tracker.start("extract_alert")
+        _stub_footer_fields(renderer._tracker._display, phase="LOAD")
+
+        # First investigation: classified as noise → no slack_message → early
+        # return path inside ``_print_report``. Prior to the fix this path
+        # still captured a snapshot and left it in ``_completed_footer_pending``.
+        renderer._final_state = {"is_noise": True, "alert_name": "noise-alert"}
+        renderer._print_report()
+
+        assert output_mod._completed_footer_pending.snapshot is None, (
+            "noise-classified early return must not leave a stale footer "
+            "snapshot for the next investigation to inherit"
+        )
+
+    @patch("app.remote.renderer.Live")
+    @patch("app.cli.support.output._EventLogDisplay")
+    @patch.dict(os.environ, {"TRACER_OUTPUT_FORMAT": "rich"})
+    def test_print_report_no_events_does_not_leak_footer_to_next_run(
+        self, _mock_display, _mock_live
+    ) -> None:
+        """REPL regression: a zero-events investigation must also clear its
+        own pending snapshot — sibling case to the noise-alert path. Together
+        these two paths close the early-return leak flagged by Greptile P1.
+        """
+        from app.cli.support import output as output_mod
+
+        renderer = StreamRenderer(local=True)
+        renderer._tracker.start("investigation_agent")
+        _stub_footer_fields(renderer._tracker._display)
+        # No slack_message, no is_noise — falls into the "No events received"
+        # branch. The bug was that this branch returned without clearing the
+        # snapshot captured at the top of ``_print_report``.
+        renderer._final_state = {}
+
+        renderer._print_report()
+
         assert output_mod._completed_footer_pending.snapshot is None
 
     @patch.dict(os.environ, {"TRACER_OUTPUT_FORMAT": "text"})

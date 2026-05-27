@@ -782,23 +782,30 @@ class StreamRenderer:
     def _print_report(self) -> None:
         from app.cli.support.output import stop_display
 
-        # StreamRenderer owns its own ProgressTracker (not the module singleton).
-        # Capture footer metadata from this tracker first; then tear down any
-        # module-level display without overwriting that snapshot.
-        self._tracker.stop(capture_footer=True)
-        stop_display(capture_footer=False)
-
         slack_message = self._final_state.get("slack_message") or self._final_state.get(
             "report", ""
         )
         root_cause_category = self._final_state.get("root_cause_category")
 
         if not slack_message:
+            # No report to print → nothing to anchor a footer below. Tear down
+            # this run's displays *without* capturing, and explicitly clear any
+            # pending snapshot so a noise-classified or zero-event investigation
+            # in a REPL session does not leak its captured phase / elapsed time
+            # into the next investigation's footer (Greptile P1 on PR #2538).
+            self._tracker.stop(capture_footer=False, clear_pending_footer=True)
+            stop_display(capture_footer=False, clear_pending_footer=True)
             if self._final_state.get("is_noise"):
                 _print_info("Alert classified as noise — no investigation needed.")
             elif self._events_received == 0:
                 _print_info("No events received from the remote agent.")
             return
+
+        # StreamRenderer owns its own ProgressTracker (not the module singleton).
+        # Capture footer metadata from this tracker first; then tear down any
+        # module-level display without overwriting that snapshot.
+        self._tracker.stop(capture_footer=True)
+        stop_display(capture_footer=False)
 
         from app.delivery.publish_findings.renderers.terminal import render_report as _render
 
