@@ -380,9 +380,6 @@ jobs:
             echo
           } > GENERATED_CHANGELOG.md
 
-          bash .github/scripts/build-discord-release-narrative.sh \
-            "$RANGE_SPEC" > DISCORD_NARRATIVE.md
-
           CB='```'
           {
             printf '## Install\n\n'
