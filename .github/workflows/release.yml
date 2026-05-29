@@ -500,6 +500,7 @@ jobs:
 
       - name: Sync Homebrew tap formula
         if: steps.github_release.outputs.created == 'true'
+        continue-on-error: true
         env:
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
           VERSION: ${{ needs.prepare.outputs.tag_name }}
@@ -507,6 +508,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [ -z "${HOMEBREW_TAP_GITHUB_TOKEN:-}" ]; then
+            echo "HOMEBREW_TAP_GITHUB_TOKEN is not set; skipping Homebrew tap sync."
+            exit 0
+          fi
           export VERSION="${VERSION#v}"
           bash .github/scripts/sync-homebrew-tap-formula.sh
 
