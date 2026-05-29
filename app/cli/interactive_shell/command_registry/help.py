@@ -19,6 +19,23 @@ from app.cli.interactive_shell.ui.help_menu import (
     render_section_detail,
 )
 
+QUICK_ACCESS_COMMANDS: list[str] = [
+    "/investigate",
+    "/integrations",
+    "/model",
+    "/health",
+    "/watch",
+    "/status",
+    "/help",
+]
+
+
+def _quick_access_section() -> HelpSection:
+    from app.cli.interactive_shell.command_registry import SLASH_COMMANDS
+
+    cmds = [SLASH_COMMANDS[n] for n in QUICK_ACCESS_COMMANDS if n in SLASH_COMMANDS]
+    return ("Quick Access", cmds)
+
 
 def _raw_help_sections() -> list[HelpSection]:
     from app.cli.interactive_shell.command_registry.agents import COMMANDS as AGENTS_CMDS
@@ -36,6 +53,7 @@ def _raw_help_sections() -> list[HelpSection]:
     from app.cli.interactive_shell.command_registry.watch_cmds import COMMANDS as WATCH_CMDS
 
     return [
+        _quick_access_section(),
         ("Help", list(COMMANDS)),
         ("Session", list(SESSION_CMDS)),
         ("Integrations & Models", list(INT_CMDS) + list(MODEL_CMDS)),
@@ -142,4 +160,4 @@ COMMANDS: list[SlashCommand] = [
     SlashCommand("/?", "Shortcut for /help.", _cmd_help, execution_tier=ExecutionTier.EXEMPT),
 ]
 
-__all__ = ["COMMANDS"]
+__all__ = ["COMMANDS", "QUICK_ACCESS_COMMANDS"]
