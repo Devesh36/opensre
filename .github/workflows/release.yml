@@ -363,6 +363,7 @@ jobs:
           TAG_NAME: ${{ needs.prepare.outputs.tag_name }}
           RANGE_SPEC: ${{ steps.release_ctx.outputs.range_spec }}
           PREVIOUS_TAG: ${{ steps.release_ctx.outputs.previous_tag }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
@@ -379,6 +380,38 @@ jobs:
             git log "$RANGE_SPEC" --no-merges --pretty='- %s (%h) — %an'
             echo
           } > GENERATED_CHANGELOG.md
+
+          # Summarize commits into prose via GitHub Models (gpt-4o-mini).
+          # Falls back to raw changelog if the API is unavailable.
+          raw_commits="$(git log "$RANGE_SPEC" --no-merges --pretty='%s' | head -40)"
+          if [ -n "$raw_commits" ]; then
+            api_body="$(jq -n --arg commits "$raw_commits" '{
+              model: "gpt-4o-mini",
+              messages: [
+                {
+                  role: "system",
+                  content: "You are writing a Discord release announcement for an open-source SRE CLI tool called opensre. Summarize the git commits into 2-4 short, punchy prose sentences — no bullet points, no headers, no markdown. Write in present tense, active voice. Focus on what users will notice: new features, fixes, performance, integrations. Be specific but concise."
+                },
+                {role: "user", content: ("Commits:\n" + $commits)}
+              ],
+              max_tokens: 300,
+              temperature: 0.4
+            }')"
+            curl -sS --max-time 20 \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Content-Type: application/json" \
+              "https://models.inference.ai.azure.com/chat/completions" \
+              -d "$api_body" 2>/dev/null \
+              | jq -r '.choices[0].message.content // empty' 2>/dev/null \
+              | tr -d '\r' > DISCORD_NARRATIVE.md || true
+
+            if [ -s DISCORD_NARRATIVE.md ]; then
+              echo "LLM narrative generated ($(wc -c < DISCORD_NARRATIVE.md) bytes)."
+            else
+              echo "LLM summary unavailable; Discord will use raw changelog."
+              rm -f DISCORD_NARRATIVE.md
+            fi
+          fi
 
           CB='```'
           {
@@ -448,119 +481,34 @@ jobs:
             exit 0
           fi
 
-          role_mention=""
-          allowed_mentions='{"parse":[]}'
-          if [ -n "${DISCORD_RELEASES_ROLE_ID:-}" ]; then
-            role_mention="<@&${DISCORD_RELEASES_ROLE_ID}>"$'\n'
-            allowed_mentions="$(jq -n --arg r "${DISCORD_RELEASES_ROLE_ID}" '{parse:[], roles:[$r]}')"
+          # Prefer LLM-generated narrative; fall back to raw changelog.
+          if [ -f DISCORD_NARRATIVE.md ] && [ -s DISCORD_NARRATIVE.md ]; then
+            changelog_file="DISCORD_NARRATIVE.md"
+          elif [ -f GENERATED_CHANGELOG.md ]; then
+            changelog_file="GENERATED_CHANGELOG.md"
+          else
+            echo "No changelog available." > /tmp/discord_fallback.md
+            changelog_file="/tmp/discord_fallback.md"
           fi
 
-          logo_prefix=""
-          if [ -n "${DISCORD_RELEASE_LOGO_EMOJI:-}" ]; then
-            logo_prefix="${DISCORD_RELEASE_LOGO_EMOJI} "
-          fi
-
-          # Extract only the changelog section (skip install instructions)
-          CHANGELOG=""
-          if [ -f GENERATED_CHANGELOG.md ]; then
-            CHANGELOG="$(tr -d '\r' < GENERATED_CHANGELOG.md)"
-          fi
-
-          CHANGELOG="${CHANGELOG:-No changelog available.}"
-          if [ "${#CHANGELOG}" -gt 1400 ]; then
-            CHANGELOG="${CHANGELOG:0:1397}..."
-          fi
-
-          logo_url="${DISCORD_RELEASE_LOGO_URL:-}"
-
-          payload="$(jq -n \
-            --arg mention "$role_mention" \
-            --arg logo "$logo_prefix" \
-            --arg tag "$RELEASE_TAG" \
-            --arg url "$RELEASE_URL" \
-            --arg stars "${REPO_STARS:-0}" \
-            --arg changelog "$CHANGELOG" \
-            --argjson allowed "$allowed_mentions" \
-            --arg avatar "$logo_url" \
-            '{
-              content: (
-                $mention
-                + $logo + "🚀 **opensre `" + $tag + "` is live**\n"
-                + "🔗 " + $url + "\n"
-                + "⭐ " + $stars + " stars\n\n"
-                + $changelog
-              ),
-              allowed_mentions: $allowed
-            } + (if $avatar != "" then {username: "OpenSRE", avatar_url: $avatar} else {} end)'
-          )"
+          # Use an external Python script to build the JSON payload.
+          # This avoids jq issues with multiline LLM output containing control characters.
+          payload="$(CHANGELOG_FILE="$changelog_file" python3 .github/scripts/build-discord-payload.py)"
 
           curl --fail -sS --max-time 30 -X POST -H "Content-Type: application/json" \
             -d "$payload" "$DISCORD_WEBHOOK_URL_UPDATE"
 
-      # - name: Sync Homebrew tap formula
-      #   env:
-      #     HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
-      #   shell: bash
-      #   run: |
-      #     set -euo pipefail
-      #
-      #     if [ -z "${HOMEBREW_TAP_GITHUB_TOKEN:-}" ]; then
-      #       echo "::error::HOMEBREW_TAP_GITHUB_TOKEN is required to sync Tracer-Cloud/homebrew-tap."
-      #       exit 1
-      #     fi
-      #
-      #     TAG_NAME="${{ needs.prepare.outputs.tag_name }}"
-      #     VERSION="${TAG_NAME#v}"
-      #     ASSET_DIR="release-assets"
-      #
-      #     linux_x64_sha="$(awk '{print $1}' "${ASSET_DIR}/opensre_${VERSION}_linux-x64.tar.gz.sha256")"
-      #     linux_arm64_sha="$(awk '{print $1}' "${ASSET_DIR}/opensre_${VERSION}_linux-arm64.tar.gz.sha256")"
-      #     darwin_x64_sha="$(awk '{print $1}' "${ASSET_DIR}/opensre_${VERSION}_darwin-x64.tar.gz.sha256")"
-      #     darwin_arm64_sha="$(awk '{print $1}' "${ASSET_DIR}/opensre_${VERSION}_darwin-arm64.tar.gz.sha256")"
-      #
-      #     tap_dir="$(mktemp -d)/homebrew-tap"
-      #     git clone "https://x-access-token:${HOMEBREW_TAP_GITHUB_TOKEN}@github.com/Tracer-Cloud/homebrew-tap.git" "$tap_dir"
-      #
-      #     python - "$tap_dir/Formula/opensre.rb" "$VERSION" "$darwin_arm64_sha" "$darwin_x64_sha" "$linux_arm64_sha" "$linux_x64_sha" <<'PY'
-      #     from __future__ import annotations
-      #
-      #     import re
-      #     import sys
-      #     from pathlib import Path
-      #
-      #     formula_path = Path(sys.argv[1])
-      #     version = sys.argv[2]
-      #     darwin_arm64_sha = sys.argv[3]
-      #     darwin_x64_sha = sys.argv[4]
-      #     linux_arm64_sha = sys.argv[5]
-      #     linux_x64_sha = sys.argv[6]
-      #
-      #     text = formula_path.read_text()
-      #     text = re.sub(r'version "[^"]+"', f'version "{version}"', text, count=1)
-      #     replacements = {
-      #         r'(opensre_#\{version\}_darwin-arm64\.tar\.gz"\n\s*sha256 ")[^"]+(")': darwin_arm64_sha,
-      #         r'(opensre_#\{version\}_darwin-x64\.tar\.gz"\n\s*sha256 ")[^"]+(")': darwin_x64_sha,
-      #         r'(opensre_#\{version\}_linux-arm64\.tar\.gz"\n\s*sha256 ")[^"]+(")': linux_arm64_sha,
-      #         r'(opensre_#\{version\}_linux-x64\.tar\.gz"\n\s*sha256 ")[^"]+(")': linux_x64_sha,
-      #     }
-      #     for pattern, sha in replacements.items():
-      #         text, count = re.subn(pattern, rf'\g<1>{sha}\g<2>', text, count=1)
-      #         if count != 1:
-      #             raise SystemExit(f"Failed to update checksum with pattern: {pattern}")
-      #     formula_path.write_text(text)
-      #     PY
-      #
-      #     cd "$tap_dir"
-      #     if git diff --quiet -- Formula/opensre.rb; then
-      #       echo "Homebrew tap formula already up to date."
-      #       exit 0
-      #     fi
-      #
-      #     git config user.name "github-actions[bot]"
-      #     git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-      #     git add Formula/opensre.rb
-      #     git commit -m "chore: update opensre formula to ${VERSION}"
-      #     git push origin HEAD:main
+      - name: Sync Homebrew tap formula
+        if: steps.github_release.outputs.created == 'true'
+        env:
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          VERSION: ${{ needs.prepare.outputs.tag_name }}
+          ASSET_DIR: release-assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          export VERSION="${VERSION#v}"
+          bash .github/scripts/sync-homebrew-tap-formula.sh
 
   publish-main-release:
     if: needs.prepare.outputs.channel == 'main'
