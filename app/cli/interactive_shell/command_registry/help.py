@@ -67,17 +67,27 @@ def _raw_help_sections() -> list[HelpSection]:
     ]
 
 
+_QUICK_ACCESS_SECTION_NAME = "Quick Access"
+
+
 def _help_sections() -> list[HelpSection]:
-    """Return user-visible help sections with duplicate command names hidden."""
+    """Return user-visible help sections with duplicate command names hidden.
+
+    The "Quick Access" section is intentionally exempted from the dedup set so
+    its curated commands remain visible in their canonical sections too (e.g.
+    ``/help investigation`` still contains ``/investigate``).
+    """
     seen: set[str] = set()
     sections: list[HelpSection] = []
     for section_name, commands in _raw_help_sections():
         visible: list[SlashCommand] = []
+        is_quick_access = section_name == _QUICK_ACCESS_SECTION_NAME
         for command in commands:
             if command.name in seen:
                 continue
-            seen.add(command.name)
             visible.append(command)
+            if not is_quick_access:
+                seen.add(command.name)
         sections.append((section_name, visible))
     return sections
 
