@@ -31,6 +31,7 @@ on:
 permissions:
   contents: write
   actions: read
+  models: read
 
 concurrency:
   group: release-${{ github.event_name == 'push' && 'main' || (github.event_name == 'workflow_dispatch' && inputs.channel == 'main' && 'main') || 'stable' }}
@@ -377,7 +378,7 @@ jobs:
               echo "_Changes up to ${TAG_NAME}_"
             fi
             echo
-            git log "$RANGE_SPEC" --no-merges --pretty='- %s (%h) — %an'
+            git log "$RANGE_SPEC" --no-merges -n 100 --pretty='- %s (%h) — %an'
             echo
           } > GENERATED_CHANGELOG.md
 
