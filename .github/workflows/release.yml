@@ -383,7 +383,7 @@ jobs:
 
           # Summarize commits into prose via GitHub Models (gpt-4o-mini).
           # Falls back to raw changelog if the API is unavailable.
-          raw_commits="$(git log "$RANGE_SPEC" --no-merges --pretty='%s' | head -40)"
+          raw_commits="$(git log "$RANGE_SPEC" --no-merges --pretty='%s' | head -40 || true)"
           if [ -n "$raw_commits" ]; then
             api_body="$(jq -n --arg commits "$raw_commits" '{
               model: "gpt-4o-mini",
