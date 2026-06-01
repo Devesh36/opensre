@@ -1623,10 +1623,9 @@ class TestThemeCommand:
         monkeypatch.setattr(theme_cmd, "repl_tty_interactive", lambda: True)
         monkeypatch.setattr(theme_cmd, "repl_choose_one", lambda **_kwargs: "blue")
         monkeypatch.setattr(theme_cmd, "_refresh_prompt_style", lambda _session: None)
-        monkeypatch.setattr(theme_cmd, "_load_config", lambda: {})
+        monkeypatch.setattr("app.cli.commands.config._load_config", lambda: {})
         monkeypatch.setattr(
-            theme_cmd,
-            "_save_config",
+            "app.cli.commands.config._save_config",
             lambda data: saved_payloads.append(dict(data)),
         )
 
@@ -1670,8 +1669,8 @@ class TestThemeCommand:
 
         monkeypatch.setattr(theme_cmd, "repl_tty_interactive", lambda: True)
         monkeypatch.setattr(theme_cmd, "_refresh_prompt_style", lambda _session: None)
-        monkeypatch.setattr(theme_cmd, "_load_config", lambda: {})
-        monkeypatch.setattr(theme_cmd, "_save_config", lambda _data: None)
+        monkeypatch.setattr("app.cli.commands.config._load_config", lambda: {})
+        monkeypatch.setattr("app.cli.commands.config._save_config", lambda _data: None)
 
         set_active_theme("green")
         session = ReplSession()
@@ -1686,8 +1685,8 @@ class TestThemeCommand:
         monkeypatch.setattr(theme_cmd, "repl_tty_interactive", lambda: True)
         monkeypatch.setattr(theme_cmd, "repl_choose_one", lambda **_kwargs: "blue")
         monkeypatch.setattr(theme_cmd, "_refresh_prompt_style", lambda _session: None)
-        monkeypatch.setattr(theme_cmd, "_load_config", lambda: {})
-        monkeypatch.setattr(theme_cmd, "_save_config", lambda _data: None)
+        monkeypatch.setattr("app.cli.commands.config._load_config", lambda: {})
+        monkeypatch.setattr("app.cli.commands.config._save_config", lambda _data: None)
 
         refreshed: list[dict[str, object | None]] = []
 

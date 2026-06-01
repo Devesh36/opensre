@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 from app.analytics.cli import build_cli_invoked_properties, capture_cli_invoked
 from app.analytics.provider import Properties, capture_first_run_if_needed, shutdown_analytics
 from app.cli.commands import register_commands
+from app.cli.interactive_shell.ui.theme import list_theme_names
 from app.cli.support.exception_reporting import report_exception, should_report_exception
 from app.cli.support.layout import RichGroup, render_landing
 from app.cli.support.prompt_support import (
@@ -141,20 +142,7 @@ def _capture_accepted_cli_invocation(ctx: click.Context) -> None:
 )
 @click.option(
     "--theme",
-    type=click.Choice(
-        [
-            "green",
-            "blue",
-            "amber",
-            "mono",
-            "red",
-            "pink",
-            "purple",
-            "orange",
-            "teal",
-        ],
-        case_sensitive=False,
-    ),
+    type=click.Choice(list(list_theme_names()), case_sensitive=False),
     default=None,
     help="Interactive-shell color palette. Overrides OPENSRE_THEME env var "
     "and ~/.opensre/config.yml interactive.theme.",

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from rich.console import Console
 
 from app.cli.interactive_shell.command_registry.types import ExecutionTier, SlashCommand
@@ -17,24 +15,6 @@ from app.cli.interactive_shell.ui.theme import (
 )
 
 
-def _load_config() -> dict[str, Any]:
-    from app.cli.commands.config import _load_config
-
-    return _load_config()
-
-
-def _save_config(data: dict[str, Any]) -> None:
-    from app.cli.commands.config import _save_config
-
-    _save_config(data)
-
-
-def _set_nested_key(data: dict[str, Any], dotted_key: str, value: Any) -> dict[str, Any]:
-    from app.cli.commands.config import _set_nested_key
-
-    return _set_nested_key(data, dotted_key, value)
-
-
 def _refresh_prompt_style(session: ReplSession) -> None:
     """Schedule a prompt-toolkit style refresh on the main thread."""
     from app.cli.interactive_shell.prompting.prompt_surface import refresh_prompt_theme
@@ -43,28 +23,21 @@ def _refresh_prompt_style(session: ReplSession) -> None:
         session.main_loop.call_soon_threadsafe(refresh_prompt_theme, session)
 
 
-def _current_theme_name(session: ReplSession) -> str:
-    """Return the palette applied in this REPL (session + module globals)."""
-    current = get_active_theme_name()
-    session.active_theme_name = current
-    return current
-
-
 def _persist_and_report_theme(
     session: ReplSession,
     console: Console,
     selected: str,
 ) -> None:
+    from app.cli.commands.config import _load_config, _save_config, _set_nested_key
+    from app.cli.interactive_shell.runtime.loop import drain_stale_cpr_bytes
+    from app.cli.interactive_shell.ui.rendering import refresh_welcome_poster
+
     active = set_active_theme(selected)
     session.active_theme_name = active.name
     _refresh_prompt_style(session)
 
-    config_data = _load_config()
-    updated = _set_nested_key(config_data, "interactive.theme", active.name)
+    updated = _set_nested_key(_load_config(), "interactive.theme", active.name)
     _save_config(updated)
-
-    from app.cli.interactive_shell.runtime.loop import drain_stale_cpr_bytes
-    from app.cli.interactive_shell.ui.rendering import refresh_welcome_poster
 
     drain_stale_cpr_bytes()
     refresh_welcome_poster(console, session=session, theme_notice=active.name)
@@ -85,12 +58,10 @@ def _cmd_theme(session: ReplSession, console: Console, args: list[str]) -> bool:
         console.print(f"[{ui_theme.DIM}]/theme requires an interactive TTY session.[/]")
         return True
 
-    current = _current_theme_name(session)
+    current = get_active_theme_name()
+    session.active_theme_name = current
     choices = [
-        (
-            name,
-            f"{name}{' (current)' if name == current else ''}",
-        )
+        (name, f"{name}{' (current)' if name == current else ''}")
         for name in list_theme_names()
     ]
     picked = repl_choose_one(
