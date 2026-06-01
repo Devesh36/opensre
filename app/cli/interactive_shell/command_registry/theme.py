@@ -61,8 +61,7 @@ def _cmd_theme(session: ReplSession, console: Console, args: list[str]) -> bool:
     current = get_active_theme_name()
     session.active_theme_name = current
     choices = [
-        (name, f"{name}{' (current)' if name == current else ''}")
-        for name in list_theme_names()
+        (name, f"{name}{' (current)' if name == current else ''}") for name in list_theme_names()
     ]
     picked = repl_choose_one(
         title="theme",

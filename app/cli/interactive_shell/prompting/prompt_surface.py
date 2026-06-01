@@ -23,6 +23,7 @@ from app.cli.interactive_shell.history import load_prompt_history
 from app.cli.interactive_shell.routing.resolve_cli_command.catalog import BARE_COMMAND_ALIASES
 from app.cli.interactive_shell.runtime import ReplSession
 from app.cli.interactive_shell.ui import theme as ui_theme
+from app.cli.interactive_shell.ui.choice_menu import repl_tty_interactive
 
 _PROMPT_RULE_CHAR = "─"
 # Keystroke escape (xterm modifyOtherKeys for Shift+Enter), not a colour code.
@@ -319,6 +320,7 @@ def refresh_prompt_theme(session: ReplSession) -> None:
         with suppress(Exception):
             app.renderer.clear()
     app.invalidate()
+
 
 # Commands where bare invocation opens an inline picker in TTY mode.
 _INLINE_PICKER_COMMANDS: frozenset[str] = frozenset(
