@@ -5,7 +5,7 @@ import re
 from rich.console import Console
 from rich.text import Text
 
-from app.cli.interactive_shell.ui.theme import BRAND, DIM, TEXT, WARNING
+from app.cli.interactive_shell.ui.theme import BRAND, DIM, HIGHLIGHT, WARNING
 from app.cli.support.output import get_output_format
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -71,10 +71,11 @@ _BOLD_RE = re.compile(r"\*\*?([^*]+)\*\*?")
 
 
 def _render_rich_section_heading(console: Console, title: str) -> None:
+    from rich.rule import Rule
+
     console.print()
-    t = Text()
-    t.append(f"  {title}", style=f"bold {TEXT}")
-    console.print(t)
+    console.print(Rule(f"[bold {HIGHLIGHT}] {title} [/]", style=DIM, align="left"))
+    console.print()
 
 
 def _render_rich_bullet(console: Console, line: str, *, indent: int = 4) -> None:
@@ -113,7 +114,7 @@ def _render_rich_evidence_item(console: Console, line: str) -> None:
 
 def render_report(slack_message: str, root_cause_category: str | None = None) -> None:
     """Render the final RCA report to terminal."""
-    from app.cli.support.output import stop_display
+    from app.cli.support.output import render_completed_investigation_footer, stop_display
 
     stop_display()
     fmt = get_output_format()
@@ -131,6 +132,10 @@ def render_report(slack_message: str, root_cause_category: str | None = None) ->
         _render_rich_report(slack_message, root_cause_category=root_cause_category)
     else:
         _render_plain_report(slack_message, root_cause_category=root_cause_category)
+
+    # Print the investigation phase footer at the absolute bottom of the
+    # RCA report (without "esc to cancel" — the investigation is complete).
+    render_completed_investigation_footer()
 
 
 def _render_rich_report(slack_message: str, root_cause_category: str | None = None) -> None:

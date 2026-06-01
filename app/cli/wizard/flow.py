@@ -193,6 +193,12 @@ def validate_discord_bot(**kwargs):
     return _validate(**kwargs)
 
 
+def validate_telegram_bot(**kwargs):
+    from app.cli.wizard.integration_health import validate_telegram_bot as _validate
+
+    return _validate(**kwargs)
+
+
 def validate_openclaw_integration(**kwargs):
     from app.cli.wizard.integration_health import validate_openclaw_integration as _validate
 
@@ -292,16 +298,18 @@ def _step_header(n: int, total: int, title: str) -> None:
 
     Rendered output (colour roles):
       ─────────────────────────────────────────  [DIM rule]
-      Step 2/4  —  LLM Provider                  [SECONDARY "Step N/N"] [TEXT title]
+      ●●○○  LLM Provider  2/4                   [BRAND dots] [TEXT title] [SECONDARY counter]
       ─────────────────────────────────────────  [DIM rule]
     """
+    dots = "●" * n + "○" * (total - n)
     _console.print()
     _console.print(Rule(style=DIM))
     header = Text()
     header.append("  ")
-    header.append(f"Step {n}/{total}", style=f"bold {SECONDARY}")
-    header.append("  —  ", style=DIM)
+    header.append(dots, style=f"bold {BRAND}")
+    header.append("  ", style=DIM)
     header.append(title, style=f"bold {TEXT}")
+    header.append(f"  {n}/{total}", style=SECONDARY)
     _console.print(header)
     _console.print(Rule(style=DIM))
 
@@ -1628,6 +1636,51 @@ def _configure_discord() -> tuple[str, str]:
         _console.print(f"[{SECONDARY}]Try again or press Ctrl+C to cancel.[/]")
 
 
+def _configure_telegram() -> tuple[str, str]:
+    _, credentials = _integration_defaults("telegram")
+    _console.print(
+        "\n[bold]Telegram Integration[/bold]\n"
+        f"[{SECONDARY}]Create a bot with @BotFather, add it to your chat, then find "
+        "chat_id via getUpdates. See docs/messaging/telegram for details.[/]\n"
+    )
+    while True:
+        bot_token = _prompt_value(
+            "Telegram bot token",
+            default=_string_value(credentials.get("bot_token")),
+            secret=True,
+        )
+        default_chat_id = _prompt_value(
+            "Default chat ID (recommended for delivery)",
+            default=_string_value(credentials.get("default_chat_id")),
+            allow_empty=True,
+        )
+        with _console.status("Validating Telegram bot token...", spinner="dots"):
+            result = validate_telegram_bot(bot_token=bot_token)
+        _render_integration_result("Telegram", result)
+        if result.ok:
+            upsert_integration(
+                "telegram",
+                {
+                    "credentials": {
+                        "bot_token": bot_token,
+                        "default_chat_id": default_chat_id or None,
+                    }
+                },
+            )
+            sync_env_secret("TELEGRAM_BOT_TOKEN", bot_token)
+            env_values: dict[str, str] = {}
+            if default_chat_id:
+                env_values["TELEGRAM_DEFAULT_CHAT_ID"] = default_chat_id
+            env_path = sync_env_values(env_values)
+            if not default_chat_id:
+                _console.print(
+                    f"[{WARNING}]No default chat ID set — Hermes, watchdog, and scheduled "
+                    "deliveries need TELEGRAM_DEFAULT_CHAT_ID to send messages.[/]"
+                )
+            return "Telegram", str(env_path)
+        _console.print(f"[{SECONDARY}]Try again or press Ctrl+C to cancel.[/]")
+
+
 def _configure_splunk() -> tuple[str, str]:
     _, credentials = _integration_defaults("splunk")
     while True:
@@ -1812,6 +1865,11 @@ def _configure_selected_integrations() -> tuple[list[str], str | None]:
             label="Discord",
             hint="Trigger investigations via slash commands and post findings to threads",
         ),
+        Choice(
+            value="telegram",
+            label="Telegram",
+            hint="Post findings to a Telegram chat",
+        ),
         Choice(value="aws", label="AWS", hint="Inspect CloudWatch, EKS, and account resources"),
         Choice(
             value="github", label="GitHub MCP", hint="Let the agent inspect repos, PRs, and issues"
@@ -1895,6 +1953,7 @@ def _configure_selected_integrations() -> tuple[list[str], str | None]:
         "coralogix": _configure_coralogix,
         "slack": _configure_slack,
         "discord": _configure_discord,
+        "telegram": _configure_telegram,
         "aws": _configure_aws,
         "github": _configure_github_mcp,
         "sentry": _configure_sentry,
@@ -1919,6 +1978,7 @@ def _configure_selected_integrations() -> tuple[list[str], str | None]:
         "coralogix": "coralogix",
         "slack": "slack",
         "discord": "discord",
+        "telegram": "telegram",
         "aws": "aws",
         "github": "github mcp",
         "sentry": "sentry",

@@ -46,15 +46,21 @@ def _call_llm(sanitised_text: str, session: Any) -> str | None:
         )
         return None
 
-    prompt = f"{_system_prompt()}\n\n{_USER_TEMPLATE.format(text=sanitised_text)}"
+    prompt = _system_prompt() + "\n\n" + _USER_TEMPLATE.format(text=sanitised_text)
     try:
         client = get_llm_for_classification().bind_tools(_tool_specs_for_provider(session))
         response = client.invoke(prompt)
         return response.content.strip()
     except Exception as exc:
-        logger.warning(
+        logger.debug(
             "llm_action_planner: LLM call failed (%s): %s",
             type(exc).__name__,
             exc,
         )
-        return None
+        # Raise a typed error so the caller can surface the reason in the
+        # assistant block instead of printing a raw log warning above it.
+        from app.cli.interactive_shell.routing.handle_message_with_agent.errors import (
+            PlannerLLMError,
+        )
+
+        raise PlannerLLMError(str(exc)) from exc
