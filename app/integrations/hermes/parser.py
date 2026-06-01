@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
-from app.hermes.incident import LogLevel, LogRecord
+from app.integrations.hermes.incident import LogLevel, LogRecord
 
 # ``logging``'s default formatter writes ``%Y-%m-%d %H:%M:%S,%f`` truncated to
 # milliseconds. Match it strictly so we don't misclassify a rogue ISO-8601

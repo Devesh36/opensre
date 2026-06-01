@@ -36,9 +36,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Final
 
-from app.hermes.classifier import IncidentClassifier
-from app.hermes.incident import HermesIncident, LogLevel, LogRecord
-from app.hermes.parser import parse_log_line
+from app.integrations.hermes.classifier import IncidentClassifier
+from app.integrations.hermes.incident import HermesIncident, LogLevel, LogRecord
+from app.integrations.hermes.parser import parse_log_line
 
 # Hard upper bound on a single poll's byte read. Hermes errors.log is
 # usually <50 MB even on busy installs; 64 MB is a generous ceiling

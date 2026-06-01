@@ -27,7 +27,7 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Final
 
-from app.hermes.incident import HermesIncident, IncidentSeverity
+from app.integrations.hermes.incident import HermesIncident, IncidentSeverity
 
 DEFAULT_DEDUP_WINDOW_S: Final[float] = 300.0  # 5 minutes
 DEFAULT_ESCALATION_WINDOW_S: Final[float] = 600.0  # 10 minutes

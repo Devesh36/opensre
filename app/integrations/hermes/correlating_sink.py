@@ -29,12 +29,12 @@ import logging
 import threading
 from collections.abc import Callable
 
-from app.hermes.correlator import (
+from app.integrations.hermes.correlator import (
     CorrelatorDecision,
     IncidentCorrelator,
     RouteDestination,
 )
-from app.hermes.incident import HermesIncident
+from app.integrations.hermes.incident import HermesIncident
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +118,7 @@ class CorrelatingSink:
 
         Every downstream sink's ``close()`` is called even if an earlier one
         raises, and ``_correlator.reset()`` always runs in the finally clause
-        so :class:`~app.hermes.sinks.TelegramSink` thread-pool workers are
+        so :class:`~app.integrations.hermes.sinks.TelegramSink` thread-pool workers are
         never leaked by an exception from a sibling sink.
         """
         errors: list[BaseException] = []

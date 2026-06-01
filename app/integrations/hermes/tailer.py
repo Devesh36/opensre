@@ -11,10 +11,10 @@ Behavior intentionally mirrors ``tail -F`` (capital-F) semantics:
   smaller than our last position). On either, reopen from offset 0 so we
   do not miss the first lines written to the rotated-in file.
 * The tailer does not parse content. It yields raw line strings (with
-  trailing newlines stripped). Parsing happens in :mod:`app.hermes.parser`.
+  trailing newlines stripped). Parsing happens in :mod:`app.integrations.hermes.parser`.
 
 The tailer is single-threaded and pull-based (``__iter__`` blocks on
-``poll_interval_s``); :class:`app.hermes.agent.HermesAgent` runs it on its
+``poll_interval_s``); :class:`app.integrations.hermes.agent.HermesAgent` runs it on its
 own daemon thread and dispatches lines through the parser/classifier.
 """
 

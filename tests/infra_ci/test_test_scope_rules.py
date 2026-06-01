@@ -31,7 +31,7 @@ def test_three_areas_escalates() -> None:
     changed = [
         "app/tools/a.py",
         "app/cli/b.py",
-        "app/hermes/c.py",
+        "app/integrations/hermes/c.py",
     ]
     escalate, _, areas = rules.classify(changed)
     assert escalate

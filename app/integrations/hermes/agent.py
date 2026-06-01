@@ -22,10 +22,10 @@ from pathlib import Path
 from types import TracebackType
 from typing import Final
 
-from app.hermes.classifier import IncidentClassifier
-from app.hermes.incident import HermesIncident, LogLevel
-from app.hermes.parser import parse_log_line
-from app.hermes.tailer import DEFAULT_POLL_INTERVAL_S, FileTailer
+from app.integrations.hermes.classifier import IncidentClassifier
+from app.integrations.hermes.incident import HermesIncident, LogLevel
+from app.integrations.hermes.parser import parse_log_line
+from app.integrations.hermes.tailer import DEFAULT_POLL_INTERVAL_S, FileTailer
 
 logger = logging.getLogger(__name__)
 

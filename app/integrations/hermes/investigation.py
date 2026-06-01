@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.hermes.incident import HermesIncident, LogRecord
+from app.integrations.hermes.incident import HermesIncident, LogRecord
 
 # Trim long evidence blobs so the alert annotations stay well under any
 # downstream payload limit (Grafana webhook bodies, LLM prompts, etc.).

@@ -37,7 +37,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Final
 
-from app.hermes.incident import HermesIncident, IncidentSeverity, LogLevel, LogRecord
+from app.integrations.hermes.incident import HermesIncident, IncidentSeverity, LogLevel, LogRecord
 
 
 @dataclass(frozen=True, slots=True)

@@ -33,8 +33,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Final
 
-from app.hermes.incident import HermesIncident, IncidentSeverity, LogLevel, LogRecord
-from app.hermes.rules import PatternRule, RepeatRule, default_pattern_rules
+from app.integrations.hermes.incident import HermesIncident, IncidentSeverity, LogLevel, LogRecord
+from app.integrations.hermes.rules import PatternRule, RepeatRule, default_pattern_rules
 
 DEFAULT_WARNING_BURST_THRESHOLD: Final[int] = 5
 DEFAULT_WARNING_BURST_WINDOW_S: Final[float] = 60.0
