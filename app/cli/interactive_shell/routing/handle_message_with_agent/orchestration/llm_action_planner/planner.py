@@ -30,7 +30,7 @@ class LlmActionPlanResult:
 
 
 _INFORMATIONAL_QUESTION_RE = re.compile(
-    r"^\s*(?:how|what|why|which|when|where|who|can|could|should|do|does|is|are)\b",
+    r"\s*(?:how|what|why|which|when|where|who|can|could|should|do|does|is|are)\b",
     re.IGNORECASE,
 )
 
@@ -38,7 +38,7 @@ _INFORMATIONAL_QUESTION_RE = re.compile(
 def _is_informational_question(message: str) -> bool:
     if "?" in message:
         return True
-    return _INFORMATIONAL_QUESTION_RE.search(message) is not None
+    return _INFORMATIONAL_QUESTION_RE.match(message) is not None
 
 
 def _fallback_handoff(sanitised: str) -> list[PlannedAction]:
@@ -79,8 +79,8 @@ def plan_actions_with_llm_result(
 
         fallback = map_actions_result(sanitised)
         fallback_actions = list(fallback.actions)
-        if _is_informational_question(sanitised) or (
-            not fallback_actions and fallback.has_unhandled_clause
+        if not fallback_actions and (
+            _is_informational_question(sanitised) or fallback.has_unhandled_clause
         ):
             fallback_actions = _fallback_handoff(sanitised)
             fallback_has_unhandled = False

@@ -11,13 +11,14 @@ from app.cli.interactive_shell.runtime import ReplSession
 from app.cli.interactive_shell.ui import ERROR, render_tools_table
 
 
-def _cmd_tools(_session: ReplSession, console: Console, args: list[str]) -> bool:
+def _cmd_tools(session: ReplSession, console: Console, args: list[str]) -> bool:
     sub = (args[0].lower() if args else "list").strip()
     if sub in ("list", "ls", "tool", "tools"):
         render_tools_table(console, build_tool_catalog())
         return True
 
     console.print(f"[{ERROR}]unknown subcommand:[/] {escape(sub)}  (try [bold]/tools list[/bold])")
+    session.mark_latest(ok=False, kind="slash")
     return True
 
 
