@@ -271,6 +271,7 @@ _EFFORT_FIRST_ARGS: tuple[tuple[str, str], ...] = (
     ("max", "alias for xhigh"),
 )
 
+
 def _record_resume_slash(
     session: ReplSession,
     args: list[str],
