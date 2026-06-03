@@ -7,7 +7,11 @@ import re
 from rich.console import Console
 from rich.markup import escape
 
-from app.cli.interactive_shell.command_registry.types import ExecutionTier, SlashCommand
+from app.cli.interactive_shell.command_registry.types import (
+    ExecutionTier,
+    SlashCommand,
+    make_list_root_handler,
+)
 from app.cli.interactive_shell.history import load_command_history_entries
 from app.cli.interactive_shell.runtime import ReplSession, TaskKind, TaskRecord, TaskStatus
 from app.cli.interactive_shell.ui import (
@@ -164,6 +168,14 @@ def _cmd_tasks(session: ReplSession, console: Console, _args: list[str]) -> bool
     return True
 
 
+_cmd_tasks_root = make_list_root_handler("/tasks", _cmd_tasks)
+
+
+_TASKS_FIRST_ARGS: tuple[tuple[str, str], ...] = (
+    ("list", "list recent and in-flight shell tasks"),
+)
+
+
 def _cmd_stop(session: ReplSession, console: Console, args: list[str]) -> bool:  # noqa: ARG001
     console.print(
         f"[{DIM}]in-flight work: press[/] [bold]Ctrl+C[/bold] "
@@ -217,7 +229,13 @@ def _cmd_cancel(session: ReplSession, console: Console, args: list[str]) -> bool
 
 COMMANDS: list[SlashCommand] = [
     SlashCommand("/history", "Show persisted command history.", _cmd_history),
-    SlashCommand("/tasks", "List recent and in-flight shell tasks.", _cmd_tasks),
+    SlashCommand(
+        "/tasks",
+        "List recent and in-flight shell tasks.",
+        _cmd_tasks_root,
+        usage=("/tasks", "/tasks list"),
+        first_arg_completions=_TASKS_FIRST_ARGS,
+    ),
     SlashCommand(
         "/cancel",
         "Cancel a running task by id.",

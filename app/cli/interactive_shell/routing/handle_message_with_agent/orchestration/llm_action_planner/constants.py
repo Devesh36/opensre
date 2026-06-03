@@ -76,8 +76,8 @@ Example mapping for sequence + sample alert:
 
 Example mapping for compound slash commands:
 - Input: "check the health of my opensre and then show me all connected services"
-- Tool calls (in order): slash_invoke("/health"), slash_invoke("/list", args=["integrations"])
-  ("connected services/integrations" → /list integrations)
+- Tool calls (in order): slash_invoke("/health"), slash_invoke("/integrations", args=["list"])
+  ("connected services/integrations" → /integrations list)
 
 For operational REPL requests, prefer slash_invoke and choose the command
 from the slash catalog below. Each entry lists when to use it and when not to.
@@ -118,7 +118,7 @@ a bug, not the desired behavior. NEVER silently drop a clause.
 
 Example: for the prompt "show me connected services and sing a song"
 you MUST emit EXACTLY two tool calls in the same response:
-1. slash_invoke (command="/list", args=["integrations"])
+1. slash_invoke (command="/integrations", args=["list"])
 2. mark_unhandled (reason="'sing a song' is chatty filler, not an
    executable OpenSRE operation.")
 

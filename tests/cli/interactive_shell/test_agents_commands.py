@@ -95,6 +95,11 @@ class TestAgentsRegistration:
         assert "wait" in keywords
         assert "graph" in keywords
 
+    def test_agents_first_arg_completions_include_list(self) -> None:
+        cmd = SLASH_COMMANDS["/agents"]
+        keywords = [pair[0] for pair in cmd.first_arg_completions]
+        assert "list" in keywords
+
     def test_default_window_constant_is_ten_seconds(self) -> None:
         assert DEFAULT_WINDOW_SECONDS == 10.0
 
@@ -162,6 +167,20 @@ class TestAgentsDispatch:
         out = buf.getvalue()
         assert "cursor-claude-code" in out
         assert "80435" in out
+
+    def test_agents_list_alias_renders_registered_agents(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        registry = _isolate_registry(monkeypatch, tmp_path / "agents.jsonl")
+        registry.register(AgentRecord(name="claude-code", pid=8421, command="claude"))
+
+        session = ReplSession()
+        console, buf = _capture()
+        assert dispatch_slash("/agents list", session, console) is True
+
+        out = buf.getvalue()
+        assert "claude-code" in out
+        assert "8421" in out
 
     def test_unknown_subcommand_prints_error(self) -> None:
         session = ReplSession()

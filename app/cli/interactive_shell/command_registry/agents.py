@@ -56,6 +56,7 @@ from app.cli.interactive_shell.ui import (
 )
 
 _AGENTS_FIRST_ARGS: tuple[tuple[str, str], ...] = (
+    ("list", "list registered and discovered local agents"),
     ("budget", "view or edit per-agent hourly budgets"),
     ("bus", "live-tail the cross-agent context bus"),
     ("claim", "claim a branch for an agent"),
@@ -653,6 +654,8 @@ def _cmd_agents(session: ReplSession, console: Console, args: list[str]) -> bool
         return _cmd_agents_list(console)
 
     sub = args[0].lower().strip()
+    if sub in ("list", "ls"):
+        return _cmd_agents_list(console)
 
     if sub == "budget":
         return _cmd_agents_budget(session, console, args[1:])
@@ -698,6 +701,7 @@ COMMANDS: list[SlashCommand] = [
         _cmd_agents,
         usage=(
             "/agents",
+            "/agents list",
             "/agents budget",
             "/agents bus",
             "/agents claim",

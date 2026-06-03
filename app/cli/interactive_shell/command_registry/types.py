@@ -39,4 +39,31 @@ class SlashCommand:
     args_schema: dict[str, Any] | None = None
 
 
-__all__ = ["ExecutionTier", "SlashCommand"]
+def make_list_root_handler(
+    command_name: str,
+    list_handler: Callable[[ReplSession, Console, list[str]], bool],
+) -> Callable[[ReplSession, Console, list[str]], bool]:
+    """Build a root handler that accepts ``list``/``ls`` and delegates to *list_handler*.
+
+    Bare invocation (no args) defaults to ``list``. Unknown subcommands
+    print a hint pointing at ``/<command> list``.
+    """
+
+    def _root(session: ReplSession, console: Console, args: list[str]) -> bool:
+        sub = (args[0].lower() if args else "list").strip()
+        if sub in ("list", "ls"):
+            return list_handler(session, console, args[1:])
+        from rich.markup import escape as _esc
+
+        from app.cli.interactive_shell.ui.theme import ERROR
+
+        console.print(
+            f"[{ERROR}]unknown subcommand:[/] {_esc(sub)}  (try [bold]{command_name} list[/bold])"
+        )
+        session.mark_latest(ok=False, kind="slash")
+        return True
+
+    return _root
+
+
+__all__ = ["ExecutionTier", "SlashCommand", "make_list_root_handler"]

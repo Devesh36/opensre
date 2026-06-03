@@ -10,7 +10,11 @@ from rich.console import Console
 from rich.markup import escape
 
 import app.cli.interactive_shell.command_registry.repl_data as repl_data
-from app.cli.interactive_shell.command_registry.types import ExecutionTier, SlashCommand
+from app.cli.interactive_shell.command_registry.types import (
+    ExecutionTier,
+    SlashCommand,
+    make_list_root_handler,
+)
 from app.cli.interactive_shell.runtime import ReplSession
 from app.cli.interactive_shell.ui import (
     BOLD_BRAND,
@@ -268,6 +272,8 @@ _EFFORT_FIRST_ARGS: tuple[tuple[str, str], ...] = (
     ("max", "alias for xhigh"),
 )
 
+_SESSIONS_FIRST_ARGS: tuple[tuple[str, str], ...] = (("list", "list recent REPL sessions"),)
+
 
 def _record_resume_slash(
     session: ReplSession,
@@ -347,6 +353,9 @@ def _cmd_sessions(session: ReplSession, console: Console, _args: list[str]) -> b
 
     print_repl_table(console, table)
     return True
+
+
+_cmd_sessions_root = make_list_root_handler("/sessions", _cmd_sessions)
 
 
 def _interactive_resume_menu(session: ReplSession, console: Console) -> bool:
@@ -658,7 +667,13 @@ COMMANDS: list[SlashCommand] = [
         first_arg_completions=_VERBOSE_FIRST_ARGS,
     ),
     SlashCommand("/compact", "Trim old session history to free memory.", _cmd_compact),
-    SlashCommand("/sessions", "List recent REPL sessions.", _cmd_sessions),
+    SlashCommand(
+        "/sessions",
+        "List recent REPL sessions.",
+        _cmd_sessions_root,
+        usage=("/sessions", "/sessions list"),
+        first_arg_completions=_SESSIONS_FIRST_ARGS,
+    ),
     SlashCommand(
         "/resume",
         "Resume a previous session by restoring its conversation context.",

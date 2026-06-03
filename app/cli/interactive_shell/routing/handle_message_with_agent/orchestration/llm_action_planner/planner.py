@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
+from app.cli.interactive_shell.routing.handle_message_with_agent.errors import PlannerLLMError
 from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.interaction_models import (
     PlannedAction,
 )
@@ -27,6 +29,29 @@ class LlmActionPlanResult:
     policy_trace: tuple[str, ...]
 
 
+_INFORMATIONAL_QUESTION_RE = re.compile(
+    r"^\s*(?:how|what|why|which|when|where|who|can|could|should|do|does|is|are)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_informational_question(message: str) -> bool:
+    if "?" in message:
+        return True
+    return _INFORMATIONAL_QUESTION_RE.search(message) is not None
+
+
+def _fallback_handoff(sanitised: str) -> list[PlannedAction]:
+    return [
+        PlannedAction(
+            kind="assistant_handoff",
+            content=sanitised,
+            position=0,
+            source="llm",
+        )
+    ]
+
+
 def plan_actions_with_llm_result(
     message: str,
     *,
@@ -43,7 +68,36 @@ def plan_actions_with_llm_result(
             policy_trace=("fail_closed_vague_local_model",),
         )
 
-    raw = _call_llm(sanitised, session)
+    try:
+        raw = _call_llm(sanitised, session)
+    except PlannerLLMError as exc:
+        if "prompt too long" not in str(exc).lower():
+            raise
+        from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.slash_commands.deterministic_action_mapper import (
+            map_actions_result,
+        )
+
+        fallback = map_actions_result(sanitised)
+        fallback_actions = list(fallback.actions)
+        if _is_informational_question(sanitised) or (
+            not fallback_actions and fallback.has_unhandled_clause
+        ):
+            fallback_actions = _fallback_handoff(sanitised)
+            fallback_has_unhandled = False
+        else:
+            fallback_has_unhandled = fallback.has_unhandled_clause
+        finalized = finalize_planner_result_with_trace(
+            sanitised,
+            fallback_actions,
+            fallback_has_unhandled,
+            session=session,
+        )
+        return LlmActionPlanResult(
+            actions=tuple(finalized.actions),
+            has_unhandled_clause=finalized.has_unhandled,
+            policy_trace=("fallback_prompt_too_long",)
+            + tuple(tag.value for tag in finalized.applied_policies),
+        )
     if raw is None:
         return None
 
