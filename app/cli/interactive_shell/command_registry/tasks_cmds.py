@@ -10,7 +10,6 @@ from rich.markup import escape
 from app.cli.interactive_shell.command_registry.types import (
     ExecutionTier,
     SlashCommand,
-    make_list_root_handler,
 )
 from app.cli.interactive_shell.history import load_command_history_entries
 from app.cli.interactive_shell.runtime import ReplSession, TaskKind, TaskRecord, TaskStatus
@@ -168,14 +167,6 @@ def _cmd_tasks(session: ReplSession, console: Console, _args: list[str]) -> bool
     return True
 
 
-_cmd_tasks_root = make_list_root_handler("/tasks", _cmd_tasks)
-
-
-_TASKS_FIRST_ARGS: tuple[tuple[str, str], ...] = (
-    ("list", "list recent and in-flight shell tasks"),
-)
-
-
 def _cmd_stop(session: ReplSession, console: Console, args: list[str]) -> bool:  # noqa: ARG001
     console.print(
         f"[{DIM}]in-flight work: press[/] [bold]Ctrl+C[/bold] "
@@ -232,9 +223,8 @@ COMMANDS: list[SlashCommand] = [
     SlashCommand(
         "/tasks",
         "List recent and in-flight shell tasks.",
-        _cmd_tasks_root,
-        usage=("/tasks", "/tasks list"),
-        first_arg_completions=_TASKS_FIRST_ARGS,
+        _cmd_tasks,
+        usage=("/tasks",),
     ),
     SlashCommand(
         "/cancel",

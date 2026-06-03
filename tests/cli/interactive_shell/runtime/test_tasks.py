@@ -243,25 +243,6 @@ class TestSlashTaskCommands:
         assert "investigation" in out
         assert "completed" in out
 
-    def test_tasks_list_alias_shows_recent_rows(self) -> None:
-        session = ReplSession()
-        t = session.task_registry.create(TaskKind.INVESTIGATION)
-        t.mark_running()
-        t.mark_completed(result="rc")
-        console, buf = _capture()
-        dispatch_slash("/tasks list", session, console)
-        out = buf.getvalue()
-        assert t.task_id in out
-        assert "investigation" in out
-
-    def test_tasks_unknown_subcommand_prints_hint(self) -> None:
-        session = ReplSession()
-        console, buf = _capture()
-        dispatch_slash("/tasks bogus", session, console)
-        out = buf.getvalue().lower()
-        assert "unknown subcommand" in out
-        assert "/tasks list" in out
-
     def test_cancel_usage_without_id(self) -> None:
         session = ReplSession()
         console, buf = _capture()

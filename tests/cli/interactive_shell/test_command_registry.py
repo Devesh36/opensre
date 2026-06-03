@@ -17,13 +17,10 @@ from app.cli.interactive_shell.command_registry.investigation import (
 )
 from app.cli.interactive_shell.command_registry.model import _MODEL_FIRST_ARGS
 from app.cli.interactive_shell.command_registry.session_cmds import (
-    _SESSIONS_FIRST_ARGS,
     _TRUST_FIRST_ARGS,
     _VERBOSE_FIRST_ARGS,
 )
-from app.cli.interactive_shell.command_registry.tasks_cmds import _TASKS_FIRST_ARGS
 from app.cli.interactive_shell.command_registry.tools_cmds import _TOOLS_FIRST_ARGS
-from app.cli.interactive_shell.command_registry.watch_cmds import _WATCHES_FIRST_ARGS
 from app.cli.interactive_shell.commands import SLASH_COMMANDS as COMMANDS_EXPORT
 from app.cli.interactive_shell.runtime.session import ReplSession
 
@@ -74,9 +71,6 @@ def test_registry_first_arg_completion_hints_co_located_with_handlers() -> None:
         "/template": _TEMPLATE_FIRST_ARGS,
         "/trust": _TRUST_FIRST_ARGS,
         "/verbose": _VERBOSE_FIRST_ARGS,
-        "/sessions": _SESSIONS_FIRST_ARGS,
-        "/tasks": _TASKS_FIRST_ARGS,
-        "/watches": _WATCHES_FIRST_ARGS,
     }
     for name, tup in expected.items():
         assert SLASH_COMMANDS[name].first_arg_completions == tup

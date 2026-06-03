@@ -180,23 +180,6 @@ class TestDispatchSlash:
         assert "grounding cli cache" in output
         assert "grounding docs cache" in output
 
-    def test_sessions_list_alias_matches_root(self) -> None:
-        session = ReplSession()
-        console, buf = _capture()
-        assert dispatch_slash("/sessions list", session, console) is True
-        out = buf.getvalue().lower()
-        assert "recent sessions" in out or "no sessions recorded yet" in out
-
-    def test_sessions_unknown_subcommand_prints_hint(self) -> None:
-        session = ReplSession()
-        session.record("slash", "/sessions bogus")
-        console, buf = _capture()
-        assert dispatch_slash("/sessions bogus", session, console) is True
-        out = buf.getvalue().lower()
-        assert "unknown subcommand" in out
-        assert "/sessions list" in out
-        assert session.history[-1]["ok"] is False
-
     def test_unknown_command_does_not_exit(self) -> None:
         session = ReplSession()
         console, buf = _capture()

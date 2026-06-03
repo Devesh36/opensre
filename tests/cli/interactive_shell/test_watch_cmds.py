@@ -143,29 +143,6 @@ def test_unwatch_rejects_non_watchdog_task() -> None:
     assert "not a watchdog" in buf.getvalue()
 
 
-def test_watches_list_alias_matches_root_view() -> None:
-    session = ReplSession()
-    session.trust_mode = True
-    task = session.task_registry.create(TaskKind.WATCHDOG, command="watchdog pid=1234")
-    task.mark_running()
-    task.attach_pid(1234)
-    console, buf = _capture()
-    dispatch_slash("/watches list", session, console, is_tty=True)
-    out = buf.getvalue()
-    assert task.task_id in out
-    assert "1234" in out
-
-
-def test_watches_unknown_subcommand_prints_hint() -> None:
-    session = ReplSession()
-    session.trust_mode = True
-    console, buf = _capture()
-    dispatch_slash("/watches bogus", session, console, is_tty=True)
-    out = buf.getvalue().lower()
-    assert "unknown subcommand" in out
-    assert "/watches list" in out
-
-
 def test_run_watchdog_respects_cancel(monkeypatch: pytest.MonkeyPatch) -> None:
     from datetime import UTC, datetime, timedelta
 

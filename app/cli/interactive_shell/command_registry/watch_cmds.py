@@ -14,7 +14,6 @@ from app.agents.probe import pid_exists
 from app.cli.interactive_shell.command_registry.types import (
     ExecutionTier,
     SlashCommand,
-    make_list_root_handler,
 )
 from app.cli.interactive_shell.runtime import ReplSession, TaskKind, TaskRecord, TaskStatus
 from app.cli.interactive_shell.ui import (
@@ -276,12 +275,6 @@ def _cmd_watches(session: ReplSession, console: Console, _args: list[str]) -> bo
     return True
 
 
-_cmd_watches_root = make_list_root_handler("/watches", _cmd_watches)
-
-
-_WATCHES_FIRST_ARGS: tuple[tuple[str, str], ...] = (("list", "list watchdog background tasks"),)
-
-
 def _validate_unwatch_args(args: list[str]) -> str | None:
     if not args:
         return f"[{ERROR}]usage:[/] /unwatch <task_id>  — use [{HIGHLIGHT}]/watches[/] to list ids"
@@ -348,9 +341,8 @@ COMMANDS: list[SlashCommand] = [
     SlashCommand(
         "/watches",
         "List watchdog background tasks with the latest resource sample.",
-        _cmd_watches_root,
-        usage=("/watches", "/watches list"),
-        first_arg_completions=_WATCHES_FIRST_ARGS,
+        _cmd_watches,
+        usage=("/watches",),
     ),
     SlashCommand(
         "/unwatch",

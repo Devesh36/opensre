@@ -13,7 +13,6 @@ import app.cli.interactive_shell.command_registry.repl_data as repl_data
 from app.cli.interactive_shell.command_registry.types import (
     ExecutionTier,
     SlashCommand,
-    make_list_root_handler,
 )
 from app.cli.interactive_shell.runtime import ReplSession
 from app.cli.interactive_shell.ui import (
@@ -272,9 +271,6 @@ _EFFORT_FIRST_ARGS: tuple[tuple[str, str], ...] = (
     ("max", "alias for xhigh"),
 )
 
-_SESSIONS_FIRST_ARGS: tuple[tuple[str, str], ...] = (("list", "list recent REPL sessions"),)
-
-
 def _record_resume_slash(
     session: ReplSession,
     args: list[str],
@@ -353,9 +349,6 @@ def _cmd_sessions(session: ReplSession, console: Console, _args: list[str]) -> b
 
     print_repl_table(console, table)
     return True
-
-
-_cmd_sessions_root = make_list_root_handler("/sessions", _cmd_sessions)
 
 
 def _interactive_resume_menu(session: ReplSession, console: Console) -> bool:
@@ -670,9 +663,8 @@ COMMANDS: list[SlashCommand] = [
     SlashCommand(
         "/sessions",
         "List recent REPL sessions.",
-        _cmd_sessions_root,
-        usage=("/sessions", "/sessions list"),
-        first_arg_completions=_SESSIONS_FIRST_ARGS,
+        _cmd_sessions,
+        usage=("/sessions",),
     ),
     SlashCommand(
         "/resume",
