@@ -208,10 +208,7 @@ def test_investigate_maps_runtime_failure_to_service_unavailable(
         investigate(InvestigateRequest(raw_alert={"alert_name": "PayloadAlert"}))
 
     assert exc_info.value.status_code == 503
-    assert (
-        exc_info.value.detail
-        == "LLM invocation failed. Suggestion: Shorten prompt and retry."
-    )
+    assert exc_info.value.detail == "LLM invocation failed. Suggestion: Shorten prompt and retry."
     capture_mock.assert_not_called()
 
 

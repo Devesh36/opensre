@@ -56,9 +56,7 @@ def test_gateway_sets_investigations_dir_env(runner: CliRunner) -> None:
     with patch.dict(os.environ, {}, clear=False):
         os.environ.pop("INVESTIGATIONS_DIR", None)
         with patch("uvicorn.run"):
-            result = runner.invoke(
-                cli, ["gateway", "--investigations-dir", "/tmp/reports"]
-            )
+            result = runner.invoke(cli, ["gateway", "--investigations-dir", "/tmp/reports"])
 
         assert result.exit_code == 0
         assert os.environ["INVESTIGATIONS_DIR"] == "/tmp/reports"
