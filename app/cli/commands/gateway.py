@@ -6,7 +6,6 @@ import os
 
 import click
 
-
 _DEFAULT_HOST = "127.0.0.1"
 _DEFAULT_PORT = 2024
 
@@ -36,7 +35,7 @@ _DEFAULT_PORT = 2024
 @click.option(
     "--investigations-dir",
     default=None,
-    type=click.Path(path_type=str),
+    type=click.Path(path_type=str, file_okay=False, dir_okay=True),
     envvar="INVESTIGATIONS_DIR",
     help="Output directory for investigation markdown files.",
 )

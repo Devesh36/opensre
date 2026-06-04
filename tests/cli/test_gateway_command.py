@@ -64,6 +64,20 @@ def test_gateway_sets_investigations_dir_env(runner: CliRunner) -> None:
         assert os.environ["INVESTIGATIONS_DIR"] == "/tmp/reports"
 
 
+def test_gateway_rejects_file_path_for_investigations_dir(runner: CliRunner) -> None:
+    with runner.isolated_filesystem():
+        with open("not-a-directory.txt", "w", encoding="utf-8") as handle:
+            handle.write("placeholder")
+
+        result = runner.invoke(
+            cli,
+            ["gateway", "--investigations-dir", "not-a-directory.txt"],
+        )
+
+    assert result.exit_code != 0
+    assert "Directory" in result.output
+
+
 def test_gateway_reload_flag(runner: CliRunner) -> None:
     with patch("uvicorn.run") as mock_run:
         result = runner.invoke(cli, ["gateway", "--reload"])
