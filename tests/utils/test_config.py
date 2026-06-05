@@ -126,3 +126,21 @@ def test_load_env_uses_opensre_project_env_path_when_unqualified(
     load_env(override=False)
 
     assert os.environ["LLM_PROVIDER"] == "openai"
+
+
+def test_env_file_paths_deduplicates_symlinked_cwd_env(monkeypatch, tmp_path: Path) -> None:
+    from app.utils.config import _env_file_paths
+
+    package_env = tmp_path / "project" / ".env"
+    package_env.parent.mkdir(parents=True)
+    package_env.write_text("LLM_PROVIDER=openai\n", encoding="utf-8")
+
+    link_dir = tmp_path / "link"
+    link_dir.symlink_to(package_env.parent)
+    monkeypatch.chdir(link_dir)
+    monkeypatch.setattr(
+        "app.utils.config._DEFAULT_PROJECT_ENV_PATH",
+        package_env.resolve(),
+    )
+
+    assert _env_file_paths(None) == (package_env.resolve(),)
