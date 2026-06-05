@@ -11,6 +11,8 @@ DEFAULT_INSTANCE_URL = "https://tracerbio.grafana.net"
 DEFAULT_LOKI_UID = "grafanacloud-logs"
 DEFAULT_TEMPO_UID = "grafanacloud-traces"
 DEFAULT_MIMIR_UID = "grafanacloud-prom"
+# Default project .env path — matches ``app.cli.wizard.config.PROJECT_ENV_PATH``.
+_DEFAULT_PROJECT_ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 
 
 def _get_env(key: str, default: str = "") -> str:
@@ -22,25 +24,50 @@ def get_env(key: str, default: str = "") -> str:
     return _get_env(key, default)
 
 
+def _env_file_paths(env_path: Path | str | None) -> tuple[Path, ...]:
+    """Return ordered, deduplicated .env paths (explicit > package default > cwd)."""
+    if env_path is not None:
+        return (Path(env_path),)
+    explicit = os.getenv("OPENSRE_PROJECT_ENV_PATH", "").strip()
+    if explicit:
+        # When the project env path is explicit, do not merge in the package or cwd
+        # .env files — onboard and CLI subprocess tests rely on that file alone.
+        return (Path(explicit),)
+    paths: list[Path] = [_DEFAULT_PROJECT_ENV_PATH]
+    cwd_env = Path.cwd() / ".env"
+    if cwd_env not in paths:
+        paths.append(cwd_env)
+    return tuple(paths)
+
+
+def _should_apply_env_file_value(key: str, *, override: bool) -> bool:
+    """True when a .env assignment should be applied to ``os.environ``."""
+    if override:
+        return True
+    current = os.environ.get(key)
+    if current is None:
+        return True
+    # Blank shell values (common on Windows) must not block onboarded .env settings.
+    return not current.strip()
+
+
 def load_env(env_path: Path | str | None = None, *, override: bool = False) -> None:
     if os.getenv("GRAFANA_CONFIG_SKIP_ENV_FILE") == "1":
         return
-    if env_path is None:
-        env_path = Path.cwd() / ".env"
-    path = Path(env_path)
-    if not path.exists():
-        return
-    for line in path.read_text().splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#") or stripped.startswith(";"):
+    for path in _env_file_paths(env_path):
+        if not path.exists():
             continue
-        if "=" not in stripped:
-            continue
-        key, value = stripped.split("=", 1)
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        if key and (override or key not in os.environ):
-            os.environ[key] = value
+        for line in path.read_text().splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or stripped.startswith(";"):
+                continue
+            if "=" not in stripped:
+                continue
+            key, value = stripped.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key and _should_apply_env_file_value(key, override=override):
+                os.environ[key] = value
 
 
 def get_account_read_token(account_id: str) -> str:

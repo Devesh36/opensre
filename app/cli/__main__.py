@@ -15,7 +15,6 @@ import sys
 from contextlib import suppress
 
 import click
-from dotenv import load_dotenv
 
 from app.analytics.cli import build_cli_invoked_properties, capture_cli_invoked
 from app.analytics.provider import Properties, capture_first_run_if_needed, shutdown_analytics
@@ -27,6 +26,7 @@ from app.cli.support.prompt_support import (
     install_questionary_ctrl_c_double_exit,
     install_questionary_escape_cancel,
 )
+from app.utils.config import load_env
 from app.utils.sentry_sdk import capture_exception, init_sentry
 from app.version import get_version
 
@@ -215,7 +215,7 @@ def _should_capture_cli_exception(exc: click.ClickException) -> bool:
 def main(argv: list[str] | None = None) -> int:
     """Entry point for the ``opensre`` console script."""
     _ensure_utf8_stdio()
-    load_dotenv(override=False)
+    load_env(override=False)
     cli_argv = list(sys.argv[1:] if argv is None else argv)
     try:
         init_sentry(entrypoint=_sentry_entrypoint_for_invocation(cli_argv))

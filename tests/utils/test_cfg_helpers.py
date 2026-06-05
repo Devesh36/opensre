@@ -111,6 +111,14 @@ def test_resolve_llm_provider_defaults_to_anthropic(monkeypatch) -> None:
         None.
     """
     monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("GRAFANA_CONFIG_SKIP_ENV_FILE", "1")
+
+    assert CfgHelpers.resolve_llm_provider() == "anthropic"
+
+
+def test_resolve_llm_provider_defaults_to_anthropic_when_blank(monkeypatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "")
+    monkeypatch.setenv("GRAFANA_CONFIG_SKIP_ENV_FILE", "1")
 
     assert CfgHelpers.resolve_llm_provider() == "anthropic"
 

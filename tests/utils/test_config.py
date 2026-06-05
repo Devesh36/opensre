@@ -1,11 +1,13 @@
 import os
 from contextlib import contextmanager
+from pathlib import Path
 
 import pytest
 
 from app.utils.config import (
     apply_otel_env_defaults,
     configure_grafana_cloud,
+    load_env,
     validate_grafana_cloud_config,
 )
 
@@ -91,3 +93,36 @@ def test_validate_grafana_cloud_config_passes_when_present():
         }
     ):
         assert validate_grafana_cloud_config() is True
+
+
+def test_load_env_overrides_blank_shell_value_from_file(monkeypatch, tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("LLM_PROVIDER=openai\n", encoding="utf-8")
+    monkeypatch.setenv("LLM_PROVIDER", "")
+
+    load_env(env_file, override=False)
+
+    assert os.environ["LLM_PROVIDER"] == "openai"
+
+
+def test_load_env_does_not_override_non_blank_shell_value(monkeypatch, tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("LLM_PROVIDER=openai\n", encoding="utf-8")
+    monkeypatch.setenv("LLM_PROVIDER", "anthropic")
+
+    load_env(env_file, override=False)
+
+    assert os.environ["LLM_PROVIDER"] == "anthropic"
+
+
+def test_load_env_uses_opensre_project_env_path_when_unqualified(
+    monkeypatch, tmp_path: Path
+) -> None:
+    project_env = tmp_path / "project.env"
+    project_env.write_text("LLM_PROVIDER=openai\n", encoding="utf-8")
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("OPENSRE_PROJECT_ENV_PATH", str(project_env))
+
+    load_env(override=False)
+
+    assert os.environ["LLM_PROVIDER"] == "openai"

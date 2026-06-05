@@ -200,7 +200,8 @@ DEFAULT_LLM_RESOLUTION_FALLBACK_PROVIDERS: tuple[str, ...] = ("openai", "anthrop
 def get_configured_llm_provider() -> str:
     """Return the active LLM provider from env/project .env."""
     load_env(override=False)
-    return os.getenv("LLM_PROVIDER", "anthropic").strip().lower() or "anthropic"
+    provider = (os.getenv("LLM_PROVIDER") or "").strip().lower()
+    return provider or "anthropic"
 
 
 def get_llm_provider_api_key_env(provider: str | None = None) -> str | None:

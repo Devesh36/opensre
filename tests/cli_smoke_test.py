@@ -51,6 +51,7 @@ _CLEARED_ENV_KEYS = (
     "NVIDIA_API_KEY",
     "OPENAI_API_KEY",
     "OPENROUTER_API_KEY",
+    "LLM_PROVIDER",
     "OPENCLAW_MCP_ARGS",
     "OPENCLAW_MCP_AUTH_TOKEN",
     "OPENCLAW_MCP_COMMAND",
@@ -206,10 +207,11 @@ def _is_python_script(path: Path) -> bool:
 
 def _cli_env(home: Path, project_env_path: Path) -> dict[str, str]:
     env = os.environ.copy()
-    # Blank values block ``load_dotenv(override=False)`` from re-importing the repo
-    # ``.env`` when subprocesses run with ``cwd=REPO_ROOT``.
+    # Drop host env keys so subprocesses don't inherit developer credentials or
+    # stale provider settings. Unset keys (not empty strings) allow onboarded
+    # project.env values to apply via load_env().
     for key in _CLEARED_ENV_KEYS:
-        env[key] = ""
+        env.pop(key, None)
 
     existing_pythonpath = env.get("PYTHONPATH", "")
     pythonpath_parts = [str(REPO_ROOT)]

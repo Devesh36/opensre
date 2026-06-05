@@ -3,7 +3,23 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.config import LLMSettings, has_credentials_for_active_llm_provider, resolve_llm_settings
+from app.config import (
+    LLMSettings,
+    get_configured_llm_provider,
+    has_credentials_for_active_llm_provider,
+    resolve_llm_settings,
+)
+
+
+def test_get_configured_llm_provider_reads_openai_when_shell_llm_provider_blank(
+    monkeypatch, tmp_path
+) -> None:
+    env_file = tmp_path / "project.env"
+    env_file.write_text("LLM_PROVIDER=openai\n", encoding="utf-8")
+    monkeypatch.setenv("LLM_PROVIDER", "")
+    monkeypatch.setenv("OPENSRE_PROJECT_ENV_PATH", str(env_file))
+
+    assert get_configured_llm_provider() == "openai"
 
 
 def test_llm_settings_reject_provider_typos_with_suggestion() -> None:
@@ -196,6 +212,7 @@ def test_resolve_llm_settings_falls_back_to_openai_when_default_anthropic_key_mi
 ) -> None:
     monkeypatch.delenv("LLM_PROVIDER", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("GRAFANA_CONFIG_SKIP_ENV_FILE", "1")
     monkeypatch.setattr(
         "app.config.resolve_llm_api_key",
         lambda env_var: "sk-openai" if env_var == "OPENAI_API_KEY" else "",

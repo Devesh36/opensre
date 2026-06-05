@@ -29,7 +29,10 @@ class CfgHelpers:
         Returns:
             str: The provider string.
         """
-        return (os.getenv("LLM_PROVIDER") or "anthropic").strip().lower()
+        from app.utils.config import load_env
+
+        load_env(override=False)
+        return CfgHelpers.get_clean_env_value("LLM_PROVIDER").lower() or "anthropic"
 
     @staticmethod
     def get_clean_env_value(env_key: str) -> str:
