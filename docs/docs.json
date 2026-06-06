@@ -44,6 +44,12 @@
             ]
           },
           {
+            "group": "Community",
+            "pages": [
+              "bi-weekly-giveaway"
+            ]
+          },
+          {
             "group": "Configuration",
             "pages": [
               "configuration/environment-variables"
@@ -124,6 +130,7 @@
               "aws",
               "bitbucket",
               "github",
+              "integrations/github-actions",
               "gitlab",
               "google-docs",
               "helm",

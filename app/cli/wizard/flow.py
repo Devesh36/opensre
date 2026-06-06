@@ -356,14 +356,15 @@ def _choose_model(provider: ProviderOption, *, default: str | None) -> str:
     "Enter custom model ID" escape hatch is always available.
     """
     resolved_default = (default or "").strip()
-    if not provider.models:
+    models = provider.models
+    if not models:
         return resolved_default or provider.default_model
 
     _step("Model")
 
-    curated_values = {option.value for option in provider.models}
+    curated_values = {option.value for option in models}
     curated_choices: list[Choice] = [
-        Choice(value=option.value, label=option.label) for option in provider.models
+        Choice(value=option.value, label=option.label) for option in models
     ]
 
     extra_choices: list[Choice] = []
