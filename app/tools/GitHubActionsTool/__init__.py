@@ -6,14 +6,14 @@ import json
 from typing import Any, cast
 
 from app.integrations.github_mcp import call_github_mcp_tool
-from app.tools.GitHubSearchCodeTool import (
-    _gh_available,
-    _gh_creds,
-    _normalize_tool_result,
-    _resolve_config,
-)
 from app.tools.tool_decorator import tool
 from app.tools.utils.code_host_unavailable import code_host_unavailable_payload
+from app.tools.utils.github_helpers import (
+    github_creds,
+    github_source_available,
+    normalize_github_tool_result,
+    resolve_github_mcp_config,
+)
 
 
 def _extract_json_text(result: dict[str, Any]) -> dict[str, Any] | str | None:
@@ -203,7 +203,8 @@ def extract_step_log(
                 selected_idx = i
                 break
 
-    if selected is None and step_number is not None and 1 <= step_number <= len(sections):
+    group_count = sum(1 for s in sections if s.get("name") != UNGROUPED_SECTION_NAME)
+    if selected is None and step_number is not None and 1 <= step_number <= group_count:
         group_counter = 0
         for i, section in enumerate(sections):
             if section.get("name") != UNGROUPED_SECTION_NAME:
@@ -235,13 +236,17 @@ def extract_step_log(
 def _github_actions_is_available(sources: dict[str, dict]) -> bool:
     """Check if GitHub Actions tool should be available."""
     github = sources.get("github", {})
-    return bool(_gh_available(sources) and github.get("owner") and github.get("repo"))
+    return bool(github_source_available(sources) and github.get("owner") and github.get("repo"))
 
 
 def _github_actions_repo_params(sources: dict[str, dict]) -> dict[str, Any]:
     """Extract repo parameters for GitHub Actions tools."""
     github = sources["github"]
-    params: dict[str, Any] = {"owner": github["owner"], "repo": github["repo"], **_gh_creds(github)}
+    params: dict[str, Any] = {
+        "owner": github["owner"],
+        "repo": github["repo"],
+        **github_creds(github),
+    }
     return params
 
 
@@ -300,7 +305,9 @@ def list_github_actions_workflow_runs(
     **_kwargs: Any,
 ) -> dict[str, Any]:
     """List recent GitHub Actions workflow runs for a repository."""
-    config = _resolve_config(github_url, github_mode, github_token, github_command, github_args)
+    config = resolve_github_mcp_config(
+        github_url, github_mode, github_token, github_command, github_args
+    )
     if config is None:
         return code_host_unavailable_payload(
             source="github",
@@ -327,7 +334,7 @@ def list_github_actions_workflow_runs(
         arguments["workflow_runs_filter"] = workflow_runs_filter
 
     result = call_github_mcp_tool(config, "actions_list", arguments)
-    payload = _normalize_tool_result(result)
+    payload = normalize_github_tool_result(result)
     if not isinstance(payload, dict):
         return {"error": "Unexpected payload format returned from GitHub MCP tool"}
 
@@ -384,7 +391,9 @@ def list_github_actions_active_runs(
     **_kwargs: Any,
 ) -> dict[str, Any]:
     """List GitHub Actions workflow runs that are currently queued or in progress."""
-    config = _resolve_config(github_url, github_mode, github_token, github_command, github_args)
+    config = resolve_github_mcp_config(
+        github_url, github_mode, github_token, github_command, github_args
+    )
     if config is None:
         return code_host_unavailable_payload(
             source="github",
@@ -494,7 +503,9 @@ def list_github_actions_run_jobs(
     **_kwargs: Any,
 ) -> dict[str, Any]:
     """List jobs and step outcomes for a GitHub Actions workflow run."""
-    config = _resolve_config(github_url, github_mode, github_token, github_command, github_args)
+    config = resolve_github_mcp_config(
+        github_url, github_mode, github_token, github_command, github_args
+    )
     if config is None:
         return code_host_unavailable_payload(
             source="github",
@@ -513,7 +524,7 @@ def list_github_actions_run_jobs(
             "resource_id": str(run_id),
         },
     )
-    payload = _normalize_tool_result(result)
+    payload = normalize_github_tool_result(result)
     if not isinstance(payload, dict):
         return {"error": "Unexpected payload format returned from GitHub MCP tool"}
 
@@ -574,7 +585,9 @@ def get_github_actions_step_log(
     **_kwargs: Any,
 ) -> dict[str, Any]:
     """Fetch the log output for a failed GitHub Actions job step."""
-    config = _resolve_config(github_url, github_mode, github_token, github_command, github_args)
+    config = resolve_github_mcp_config(
+        github_url, github_mode, github_token, github_command, github_args
+    )
     if config is None:
         return code_host_unavailable_payload(
             source="github",

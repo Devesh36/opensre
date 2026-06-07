@@ -219,7 +219,7 @@ def test_extract_params_maps_github_repository_fields() -> None:
 def test_list_workflow_runs_happy_path() -> None:
     workflow_tool = cast(Any, list_github_actions_workflow_runs)
     with (
-        patch("app.tools.GitHubActionsTool._resolve_config", return_value=object()),
+        patch("app.tools.GitHubActionsTool.resolve_github_mcp_config", return_value=object()),
         patch("app.tools.GitHubActionsTool.call_github_mcp_tool", side_effect=_mcp_response),
     ):
         result = workflow_tool(owner="org", repo="repo", github_token="tok")
@@ -230,7 +230,7 @@ def test_list_workflow_runs_happy_path() -> None:
 def test_list_active_runs_happy_path() -> None:
     active_tool = cast(Any, list_github_actions_active_runs)
     with (
-        patch("app.tools.GitHubActionsTool._resolve_config", return_value=object()),
+        patch("app.tools.GitHubActionsTool.resolve_github_mcp_config", return_value=object()),
         patch("app.tools.GitHubActionsTool.call_github_mcp_tool", side_effect=_mcp_response),
     ):
         result = active_tool(owner="org", repo="repo", github_token="tok")
@@ -241,7 +241,7 @@ def test_list_active_runs_happy_path() -> None:
 def test_list_run_jobs_happy_path() -> None:
     jobs_tool = cast(Any, list_github_actions_run_jobs)
     with (
-        patch("app.tools.GitHubActionsTool._resolve_config", return_value=object()),
+        patch("app.tools.GitHubActionsTool.resolve_github_mcp_config", return_value=object()),
         patch("app.tools.GitHubActionsTool.call_github_mcp_tool", side_effect=_mcp_response),
     ):
         result = jobs_tool(owner="org", repo="repo", run_id=101, github_token="tok")
@@ -252,7 +252,7 @@ def test_list_run_jobs_happy_path() -> None:
 def test_get_step_log_happy_path() -> None:
     log_tool = cast(Any, get_github_actions_step_log)
     with (
-        patch("app.tools.GitHubActionsTool._resolve_config", return_value=object()),
+        patch("app.tools.GitHubActionsTool.resolve_github_mcp_config", return_value=object()),
         patch("app.tools.GitHubActionsTool.call_github_mcp_tool", side_effect=_mcp_response),
     ):
         result = log_tool(
@@ -325,3 +325,47 @@ final runner summary
     assert "runner setup before groups" not in result["log_text"]
     assert "line 2" not in result["log_text"]
     assert "final runner summary" not in result["log_text"]
+
+
+def test_extract_step_log_prefers_step_number() -> None:
+    result = extract_step_log(
+        """runner setup before groups
+##[group]Checkout
+line 1
+##[endgroup]
+annotation between groups
+##[group]Deploy
+line 2
+##[endgroup]
+final runner summary
+""",
+        step_number=1,
+    )
+    assert result["step_name"] == "Checkout"
+    assert result["match_strategy"] == "step_number"
+    assert "line 1" in result["log_text"]
+    assert "annotation between groups" in result["log_text"]
+    assert "runner setup before groups" not in result["log_text"]
+
+
+def test_extract_step_log_invalid_step_number() -> None:
+    result = extract_step_log(
+        """runner setup before groups
+##[group]Checkout
+line 1
+##[endgroup]
+annotation between groups
+##[group]Deploy
+line 2
+##[endgroup]
+final runner summary
+""",
+        step_number=3,
+    )
+    assert result["step_name"] == "full-log"
+    assert result["match_strategy"] == "full-log"
+    assert "runner setup before groups" in result["log_text"]
+    assert "line 1" in result["log_text"]
+    assert "annotation between groups" in result["log_text"]
+    assert "line 2" in result["log_text"]
+    assert "final runner summary" in result["log_text"]
