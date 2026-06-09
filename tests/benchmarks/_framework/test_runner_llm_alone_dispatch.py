@@ -162,7 +162,7 @@ def test_run_inner_refuses_llm_alone_when_adapter_has_no_baseline(tmp_path: Path
     assert "no-baseline" in str(exc_info.value)
 
 
-def test_run_inner_accepts_llm_alone_when_adapter_provides_baseline(tmp_path: Path,) -> None:
+def test_run_inner_accepts_llm_alone_when_adapter_provides_baseline(tmp_path: Path) -> None:
     """The flip side: same config but an adapter that DOES return a
     baseline_agent_class must proceed past the pre-flight gate. We patch
     run_investigation so the test doesn't depend on the production
