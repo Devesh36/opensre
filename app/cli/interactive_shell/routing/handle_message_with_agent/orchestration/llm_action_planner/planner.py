@@ -29,22 +29,12 @@ class LlmActionPlanResult:
     policy_trace: tuple[str, ...]
 
 
-_INFORMATIONAL_QUESTION_RE = re.compile(
-    r"\s*(?:how|what|why|which|when|where|who|can|could|should|do|does|is|are)\b",
-    re.IGNORECASE,
-)
 _PROMPT_TOO_LONG_RE = re.compile(
     r"context.?length|context.?window|max.?token|token.?limit|"
     r"too.?long|input.*exceed|prompt.*too.?large|reduce.*context|"
     r"string too long",
     re.IGNORECASE,
 )
-
-
-def _is_informational_question(message: str) -> bool:
-    if "?" in message:
-        return True
-    return _INFORMATIONAL_QUESTION_RE.match(message) is not None
 
 
 def _is_prompt_too_long_error(exc: PlannerLLMError) -> bool:
@@ -89,9 +79,7 @@ def plan_actions_with_llm_result(
 
         fallback = map_actions_result(sanitised)
         fallback_actions = list(fallback.actions)
-        if not fallback_actions and (
-            _is_informational_question(sanitised) or fallback.has_unhandled_clause
-        ):
+        if not fallback_actions:
             fallback_actions = _fallback_handoff(sanitised)
             fallback_has_unhandled = False
         else:

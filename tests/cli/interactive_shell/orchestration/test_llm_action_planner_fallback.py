@@ -11,6 +11,9 @@ from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.l
     _is_prompt_too_long_error,
     plan_actions_with_llm_result,
 )
+from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.slash_commands.deterministic_action_mapper import (
+    DeterministicMappingResult,
+)
 
 
 @pytest.mark.parametrize(
@@ -90,6 +93,39 @@ def test_plan_actions_with_llm_result_keeps_mapped_slash_for_informational_quest
     assert [(action.kind, action.content) for action in result.actions] == [
         ("slash", "/integrations list")
     ]
+
+
+def test_plan_actions_with_llm_result_handoffs_when_mapper_returns_empty() -> None:
+    message = "summarize recent deploy impact on checkout latency"
+    empty_result = DeterministicMappingResult(
+        actions=(),
+        has_unhandled_clause=False,
+        applied_policies=(),
+    )
+
+    def _raise_overflow(*_args: object, **_kwargs: object) -> str:
+        raise PlannerLLMError("prompt is too long: 200001 tokens > 200000 maximum")
+
+    with (
+        patch(
+            "app.cli.interactive_shell.routing.handle_message_with_agent.orchestration."
+            "llm_action_planner.planner._call_llm",
+            side_effect=_raise_overflow,
+        ),
+        patch(
+            "app.cli.interactive_shell.routing.handle_message_with_agent.orchestration."
+            "slash_commands.deterministic_action_mapper.map_actions_result",
+            return_value=empty_result,
+        ),
+    ):
+        result = plan_actions_with_llm_result(message)
+
+    assert result is not None
+    assert result.policy_trace[0] == "fallback_prompt_too_long"
+    assert [(action.kind, action.content) for action in result.actions] == [
+        ("assistant_handoff", message)
+    ]
+    assert result.has_unhandled_clause is False
 
 
 def test_plan_actions_with_llm_result_re_raises_non_overflow_planner_errors() -> None:
