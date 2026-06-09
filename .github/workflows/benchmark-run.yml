@@ -26,7 +26,7 @@ on:
       config:
         description: 'Path to YAML config inside the container'
         required: true
-        default: 'tests/benchmarks/configs/cloudopsbench_smoke.yml'
+        default: 'tests/benchmarks/cloudopsbench/configs/cloudopsbench_smoke.yml'
       dev_mode:
         description: 'Dev mode (skip integrity gates, no pre-reg needed)'
         type: boolean
@@ -64,7 +64,7 @@ jobs:
         # Fail loudly BEFORE the AWS auth step if any required repo variable
         # is missing. Without this, an unset var would surface downstream as
         # an opaque error like "Task Definition can not be blank" from
-        # describe-task-definition. See AWS_BENCH_SETUP.md step 4 for how
+        # describe-task-definition. See tests/benchmarks/cloudopsbench/AWS_BENCH_SETUP.md step 4 for how
         # to set these.
         env:
           AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
@@ -83,7 +83,7 @@ jobs:
           if [ "${#missing[@]}" -gt 0 ]; then
             echo "::error::Missing repo variable(s): ${missing[*]}"
             echo "::error::Set them under Settings → Secrets and variables → Actions → Variables."
-            echo "::error::Values come from \`cd infra/bench && terraform output\` — see tests/benchmarks/AWS_BENCH_SETUP.md step 4."
+            echo "::error::Values come from \`cd infra/bench && terraform output\` — see tests/benchmarks/cloudopsbench/AWS_BENCH_SETUP.md step 4."
             exit 1
           fi
           echo "All 5 required repo variables are set."

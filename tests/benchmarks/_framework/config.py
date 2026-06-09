@@ -2,7 +2,7 @@
 
 The benchmark framework is YAML-driven (Yauhen's stated requirement: easy
 to configure, parallel by default). Configs live under
-``tests/benchmarks/configs/*.yml``. Loading a config goes through these
+``tests/benchmarks/cloudopsbench/configs/*.yml``. Loading a config goes through these
 validation layers:
 
   1. Pydantic — types and field constraints (always-on, fast).
@@ -104,6 +104,17 @@ class BenchmarkConfig(BaseModel):
     report_formats: list[Literal["json", "markdown", "html"]] = Field(
         default_factory=_default_report_formats, min_length=1
     )
+
+    # Adapter-specific termination floor (currently honored only by the
+    # CloudOpsBench adapter's ``BenchInvestigationAgent``). When set, the
+    # CLI overrides ``BenchInvestigationAgent.MIN_TOOL_CALLS`` to this
+    # value before the run starts — keeping the floor as part of the
+    # experiment definition rather than a launch-time env var. Leave
+    # ``None`` to inherit the agent's default (which itself can be
+    # overridden by the ``BENCH_MIN_TOOL_CALLS`` env var at import time).
+    # Required for floor-ablation experiments so the floor is reproducible
+    # from the config file alone — see ``cloudopsbench_floor_ablation_v2_openai.yml``.
+    min_tool_calls: int | None = Field(ge=0, default=None)
 
     # ----------------------------------------------------------------------- #
     # Pydantic-level validation                                               #

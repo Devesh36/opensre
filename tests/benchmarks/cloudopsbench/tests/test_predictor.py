@@ -183,6 +183,216 @@ def test_emit_paper_predictions_llm_alone_path_passes_alert_only() -> None:
     assert "No prior investigation evidence" in user_content
 
 
+def _run_with_diagnosis(diagnosis: dict[str, Any]) -> Any:
+    from tests.benchmarks._framework.adapters import RunResult
+
+    return RunResult(
+        case_id="c1",
+        mode="opensre+llm",
+        llm="gpt-4o",
+        model_version="(test)",
+        opensre_sha="(test)",
+        started_at="2026-01-01T00:00:00+00:00",
+        ended_at="2026-01-01T00:00:01+00:00",
+        ok=True,
+        error=None,
+        final_diagnosis=diagnosis,
+        evidence_entries=[],
+        tokens_in=0,
+        tokens_out=0,
+        cost_usd=0.0,
+        latency_ms=1000,
+    )
+
+
+def test_summarize_investigation_leads_with_conclusion_then_report() -> None:
+    """Fix A: opensre's conclusion must come BEFORE the hedge-heavy report body
+    so the predictor anchors on it. Component (when populated) leads, then the
+    free-text root cause, then the supporting report."""
+    from tests.benchmarks.cloudopsbench.adapter import _summarize_investigation
+
+    run = _run_with_diagnosis(
+        {
+            "component": "app/redis-cart",
+            "root_cause": "missing service account redis-service in boutique",
+            "report": "## Findings\n• non-validated claims ...",
+        }
+    )
+    summary = _summarize_investigation(run)
+    assert "app/redis-cart" in summary
+    assert "missing service account" in summary
+    # Conclusion ordering: identified component / conclusion precede the report.
+    assert summary.index("redis-cart") < summary.index("Findings")
+    assert "Investigation conclusion" in summary
+
+
+def test_summarize_investigation_handles_empty_component() -> None:
+    """Component is empty in the current opensre output schema — the summary
+    must still surface the free-text conclusion without crashing."""
+    from tests.benchmarks.cloudopsbench.adapter import _summarize_investigation
+
+    run = _run_with_diagnosis(
+        {"component": "", "root_cause": "oom on cartservice", "report": "details"}
+    )
+    summary = _summarize_investigation(run)
+    assert "oom on cartservice" in summary
+    assert "Identified component" not in summary
+
+
+def test_system_prompt_marks_investigation_summary_authoritative() -> None:
+    """Fix A (2026-06-07): the 2026-06-06 run showed the predictor dropped the
+    component opensre's report named from its top-3 on 15% of failures (3x the
+    no-investigation arm). Root cause was the prompt telling the model rank-1 is
+    'your strongest hypothesis given the evidence' — inviting it to re-diagnose
+    and discard opensre's conclusion. The prompt must now mark a provided
+    investigation summary as AUTHORITATIVE for rank-1."""
+    from tests.benchmarks.cloudopsbench.predictor import _build_system_prompt
+
+    prompt = _build_system_prompt()
+    assert "AUTHORITATIVE" in prompt
+    assert "re-diagnose" in prompt.lower() or "re-diagnose from the alert" in prompt
+    # The alert-alone fallback (llm_alone control) must still be described so
+    # that path is unchanged.
+    assert "NO investigation summary" in prompt or "no investigation summary" in prompt
+
+
+def test_user_prompt_with_summary_anchors_rank1_on_investigation() -> None:
+    """The investigation-path user prompt must instruct the model to set rank-1
+    to the investigation's identified component/root_cause, not re-derive it."""
+    from tests.benchmarks.cloudopsbench.predictor import _build_user_prompt
+
+    body = _build_user_prompt(
+        "alert_name: trainticket/runtime/56",
+        "ts-voucher-service Access denied for user 'ts'",
+    )
+    assert "INVESTIGATION SUMMARY" in body
+    assert "rank 1" in body.lower()
+    # Inputs are still carried through verbatim.
+    assert "trainticket/runtime/56" in body
+    assert "Access denied" in body
+
+
+def test_user_prompt_includes_performance_localization_hint() -> None:
+    from tests.benchmarks.cloudopsbench.predictor import _build_user_prompt
+
+    body = _build_user_prompt(
+        "alert_name: trainticket/performance/44",
+        "cluster-wide CPU saturation under load",
+        metric_alerts="Metric anomalies:\n  - ts-station-service: [LATENCY] +35691%",
+        performance_localization_hint={
+            "fault_object": "app/ts-station-service",
+            "root_cause": "pod_network_delay",
+            "rationale": "largest latency spike",
+        },
+    )
+    assert "ALERT-DERIVED PERFORMANCE LOCALIZATION" in body
+    assert "app/ts-station-service" in body
+    assert "pod_network_delay" in body
+    assert "35691" in body
+
+
+def test_bridge_does_not_fire_on_realistic_investigation_text() -> None:
+    """Pins the bridge's STRICT contract on text matching the kind of phrasing
+    real investigations actually produce: pod-status terms ("ImagePullBackOff")
+    + a known service name + a tag mention. The existing rule for
+    ``incorrect_image_reference`` requires all of (``imagepullbackoff``,
+    ``image pull``, ``incorrect image``) verbatim — the literal phrase
+    ``incorrect image`` rarely appears in real LLM-generated investigation
+    output, so the bridge stays silent on this realistic case and the
+    predictor LLM still runs (no regression vs pre-bridge behavior).
+
+    This documents WHY the bridge-before-predictor wiring evaluated on
+    2026-06-07 was not shipped: offline replay against the 240 Fargate
+    Fix-A cells showed the bridge fires on 3/120 cells per arm with zero
+    net Δa1. See ``bench-results-openai/fix-a-loss-patterns.md``.
+    """
+    from tests.benchmarks.cloudopsbench.scoring import (
+        infer_final_answer_from_opensre_text,
+    )
+
+    case_data = {
+        "root_cause": "frontend deployment failing with ImagePullBackOff",
+        "report": "image pull failed for frontend; tag v0.10.999 not found in registry",
+        "final_state": {
+            "root_cause": "frontend deployment failing with ImagePullBackOff",
+            "report": "image pull failed for frontend; tag v0.10.999 not found in registry",
+        },
+    }
+    # No "incorrect image" → strict AND-of-3-tokens rule misses → bridge silent.
+    assert infer_final_answer_from_opensre_text(case_data) is None
+
+
+def test_bridge_fires_when_all_required_tokens_present() -> None:
+    """Pins the bridge's POSITIVE contract: when text DOES contain every token
+    the rule requires (here ``imagepullbackoff`` + ``image pull`` + ``incorrect
+    image``) AND a known service name, the bridge fires and emits the right
+    rank-1 triple. Contrived input — the prior test documents that real LLM
+    output rarely produces this exact phrase combination."""
+    from tests.benchmarks.cloudopsbench.scoring import (
+        infer_final_answer_from_opensre_text,
+    )
+
+    case_data = {
+        "root_cause": "frontend ImagePullBackOff — incorrect image reference",
+        "report": "image pull failed for frontend; incorrect image tag v0.10.999",
+        "final_state": {
+            "root_cause": "frontend ImagePullBackOff — incorrect image reference",
+            "report": "image pull failed for frontend; incorrect image tag v0.10.999",
+        },
+    }
+    payload = infer_final_answer_from_opensre_text(case_data)
+    assert payload is not None
+    rank1 = payload["top_3_predictions"][0]
+    assert rank1["root_cause"] == "incorrect_image_reference"
+    assert rank1["fault_object"] == "app/frontend"
+    assert rank1["fault_taxonomy"] == "Startup_Fault"
+
+
+def test_bridge_override_does_not_fire_without_known_service_name() -> None:
+    """Confidence gate: the bridge requires BOTH a recognized root_cause keyword
+    AND a known service/node/namespace name. Investigation text that only
+    mentions a generic concept (no entity to localize) must return None so the
+    predictor LLM still runs as fallback."""
+    from tests.benchmarks.cloudopsbench.scoring import (
+        infer_final_answer_from_opensre_text,
+    )
+
+    case_data = {
+        "root_cause": "ImagePullBackOff observed in the cluster",
+        "report": "Pods can't pull images",
+        "final_state": {
+            "root_cause": "ImagePullBackOff observed in the cluster",
+            "report": "Pods can't pull images",
+        },
+    }
+    payload = infer_final_answer_from_opensre_text(case_data)
+    assert payload is None
+
+
+def test_bridge_override_does_not_fire_on_empty_investigation() -> None:
+    """The llm_alone control arm passes an empty investigation summary; the
+    bridge must return None on empty input so llm_alone falls through to the
+    predictor LLM as today — preserves the matched contrast."""
+    from tests.benchmarks.cloudopsbench.scoring import (
+        infer_final_answer_from_opensre_text,
+    )
+
+    payload = infer_final_answer_from_opensre_text(
+        {"root_cause": "", "report": "", "final_state": {"root_cause": "", "report": ""}}
+    )
+    assert payload is None
+
+
+def test_user_prompt_without_summary_is_alert_only_and_unchanged() -> None:
+    """The llm_alone control path (empty summary) must NOT get the authoritative
+    framing — it has no investigation to anchor on. Keeps the controls valid."""
+    from tests.benchmarks.cloudopsbench.predictor import _build_user_prompt
+
+    body = _build_user_prompt("alert_name: boutique/startup/9", "")
+    assert "No prior investigation evidence" in body
+    assert "AUTHORITATIVE" not in body
+
+
 def test_emit_paper_predictions_returns_none_when_llm_raises() -> None:
     """Predictor is best-effort: LLM failure must NOT break scoring."""
     llm = _FakeLLM("", raise_on_invoke=True)
