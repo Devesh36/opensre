@@ -79,8 +79,8 @@ Example mapping for compound slash commands:
 - Tool calls (in order): slash_invoke("/health"), slash_invoke("/integrations", args=["list"])
   ("connected services/integrations" → /integrations list)
 
-For operational REPL requests, prefer slash_invoke and choose the command
-from the slash catalog below. Each entry lists when to use it and when not to.
+For operational REPL requests, prefer slash_invoke and choose the best-matching
+command from the slash_invoke tool description (available command names are listed there).
 Other tools:
 - llm_set_provider — switch provider when target is an exact provider name
 - alert_sample — run a sample alert (template="generic")

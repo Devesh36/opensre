@@ -410,7 +410,7 @@ def slash_invoke_input_schema(
     command_names = tuple(spec.name for spec in entries)
     args_description = (
         "Positional arguments after the command name. Valid values depend on the "
-        "chosen command — see the tool description catalog. Examples: "
+        "chosen command — see the slash_invoke tool description. Examples: "
         '["list"] for /tools, ["verify", "datadog"] for /integrations.'
     )
     return object_schema(

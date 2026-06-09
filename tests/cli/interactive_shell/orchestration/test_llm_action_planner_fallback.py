@@ -7,13 +7,26 @@ from unittest.mock import patch
 import pytest
 
 from app.cli.interactive_shell.routing.handle_message_with_agent.errors import PlannerLLMError
+from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.llm_action_planner.constants import (
+    _SYSTEM_PROMPT_BASE,
+)
 from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.llm_action_planner.planner import (
     _is_prompt_too_long_error,
     plan_actions_with_llm_result,
 )
+from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.llm_action_planner.prompting import (
+    _system_prompt,
+)
 from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.slash_commands.deterministic_action_mapper import (
     DeterministicMappingResult,
 )
+
+
+def test_system_prompt_does_not_reference_removed_slash_catalog() -> None:
+    prompt = _system_prompt()
+    assert prompt == _SYSTEM_PROMPT_BASE
+    assert "slash catalog below" not in prompt.lower()
+    assert "slash_invoke tool description" in prompt
 
 
 @pytest.mark.parametrize(
