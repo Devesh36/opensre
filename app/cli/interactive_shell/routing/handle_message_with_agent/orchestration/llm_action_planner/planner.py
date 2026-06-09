@@ -33,12 +33,22 @@ _INFORMATIONAL_QUESTION_RE = re.compile(
     r"\s*(?:how|what|why|which|when|where|who|can|could|should|do|does|is|are)\b",
     re.IGNORECASE,
 )
+_PROMPT_TOO_LONG_RE = re.compile(
+    r"context.?length|context.?window|max.?token|token.?limit|"
+    r"too.?long|input.*exceed|prompt.*too.?large|reduce.*context|"
+    r"string too long",
+    re.IGNORECASE,
+)
 
 
 def _is_informational_question(message: str) -> bool:
     if "?" in message:
         return True
     return _INFORMATIONAL_QUESTION_RE.match(message) is not None
+
+
+def _is_prompt_too_long_error(exc: PlannerLLMError) -> bool:
+    return _PROMPT_TOO_LONG_RE.search(str(exc)) is not None
 
 
 def _fallback_handoff(sanitised: str) -> list[PlannedAction]:
@@ -71,7 +81,7 @@ def plan_actions_with_llm_result(
     try:
         raw = _call_llm(sanitised, session)
     except PlannerLLMError as exc:
-        if "prompt too long" not in str(exc).lower():
+        if not _is_prompt_too_long_error(exc):
             raise
         from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.slash_commands.deterministic_action_mapper import (
             map_actions_result,

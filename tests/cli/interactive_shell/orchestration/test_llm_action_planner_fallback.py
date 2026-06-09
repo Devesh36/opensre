@@ -1,0 +1,104 @@
+"""Unit tests for LLM action planner prompt-overflow fallback."""
+
+from __future__ import annotations
+
+from unittest.mock import patch
+
+import pytest
+
+from app.cli.interactive_shell.routing.handle_message_with_agent.errors import PlannerLLMError
+from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.llm_action_planner.planner import (
+    _is_prompt_too_long_error,
+    plan_actions_with_llm_result,
+)
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("prompt is too long: 200001 tokens > 200000 maximum", True),
+        (
+            "Error code: 400 - This model's maximum context length is 128000 tokens",
+            True,
+        ),
+        ("prompt too long — shorten the input or reduce accumulated context", True),
+        ("codex: quota or rate limit exceeded (exit 1)", False),
+        ("authentication failed — verify your API key", False),
+    ],
+)
+def test_is_prompt_too_long_error_matches_provider_messages(message: str, expected: bool) -> None:
+    assert _is_prompt_too_long_error(PlannerLLMError(message)) is expected
+
+
+def test_plan_actions_with_llm_result_falls_back_on_anthropic_prompt_overflow() -> None:
+    message = "show connected integrations"
+
+    def _raise_overflow(*_args: object, **_kwargs: object) -> str:
+        raise PlannerLLMError("prompt is too long: 200001 tokens > 200000 maximum")
+
+    with patch(
+        "app.cli.interactive_shell.routing.handle_message_with_agent.orchestration."
+        "llm_action_planner.planner._call_llm",
+        side_effect=_raise_overflow,
+    ):
+        result = plan_actions_with_llm_result(message)
+
+    assert result is not None
+    assert result.policy_trace[0] == "fallback_prompt_too_long"
+    assert [(action.kind, action.content) for action in result.actions] == [
+        ("slash", "/integrations list")
+    ]
+
+
+def test_plan_actions_with_llm_result_falls_back_on_openai_context_overflow() -> None:
+    message = "show connected integrations"
+
+    def _raise_overflow(*_args: object, **_kwargs: object) -> str:
+        raise PlannerLLMError(
+            "Error code: 400 - This model's maximum context length is 128000 tokens"
+        )
+
+    with patch(
+        "app.cli.interactive_shell.routing.handle_message_with_agent.orchestration."
+        "llm_action_planner.planner._call_llm",
+        side_effect=_raise_overflow,
+    ):
+        result = plan_actions_with_llm_result(message)
+
+    assert result is not None
+    assert result.policy_trace[0] == "fallback_prompt_too_long"
+    assert [(action.kind, action.content) for action in result.actions] == [
+        ("slash", "/integrations list")
+    ]
+
+
+def test_plan_actions_with_llm_result_keeps_mapped_slash_for_informational_question() -> None:
+    message = "Which integrations are connected?"
+
+    def _raise_overflow(*_args: object, **_kwargs: object) -> str:
+        raise PlannerLLMError("prompt is too long: 200001 tokens > 200000 maximum")
+
+    with patch(
+        "app.cli.interactive_shell.routing.handle_message_with_agent.orchestration."
+        "llm_action_planner.planner._call_llm",
+        side_effect=_raise_overflow,
+    ):
+        result = plan_actions_with_llm_result(message)
+
+    assert result is not None
+    assert result.policy_trace[0] == "fallback_prompt_too_long"
+    assert [(action.kind, action.content) for action in result.actions] == [
+        ("slash", "/integrations list")
+    ]
+
+
+def test_plan_actions_with_llm_result_re_raises_non_overflow_planner_errors() -> None:
+    with (
+        patch(
+            "app.cli.interactive_shell.routing.handle_message_with_agent.orchestration."
+            "llm_action_planner.planner._call_llm",
+            side_effect=PlannerLLMError("codex: quota or rate limit exceeded (exit 1)"),
+        ),
+        pytest.raises(PlannerLLMError, match="quota"),
+    ):
+        plan_actions_with_llm_result("check cpu usage")

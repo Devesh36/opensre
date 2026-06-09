@@ -42,16 +42,19 @@ class SlashCommand:
 def make_list_root_handler(
     command_name: str,
     list_handler: Callable[[ReplSession, Console, list[str]], bool],
+    *,
+    list_aliases: tuple[str, ...] = ("list", "ls"),
 ) -> Callable[[ReplSession, Console, list[str]], bool]:
-    """Build a root handler that accepts ``list``/``ls`` and delegates to *list_handler*.
+    """Build a root handler that accepts list aliases and delegates to *list_handler*.
 
     Bare invocation (no args) defaults to ``list``. Unknown subcommands
     print a hint pointing at ``/<command> list``.
     """
+    aliases = frozenset(list_aliases)
 
     def _root(session: ReplSession, console: Console, args: list[str]) -> bool:
         sub = (args[0].lower() if args else "list").strip()
-        if sub in ("list", "ls"):
+        if sub in aliases:
             return list_handler(session, console, args[1:])
         from rich.markup import escape as _esc
 
