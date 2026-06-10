@@ -43,6 +43,7 @@ def run_cli_command(
     *,
     subprocess_timeout: float | None = None,
     capture_output: bool = False,
+    session: ReplSession | None = None,
 ) -> bool:
     """Helper to delegate complex or interactive Click commands to a child process.
 
@@ -59,6 +60,14 @@ def run_cli_command(
     must leave this ``False`` so the child's prompts stay attached to the real
     TTY. Capture is also enabled automatically whenever a timeout is set.
 
+    Returns ``True`` when the child exits zero. On failure (non-zero exit,
+    timeout, spawn error, or Ctrl+C), returns ``False`` and, when ``session`` is
+    provided, marks the latest slash turn as failed via
+    :meth:`~ReplSession.mark_latest`.
+
+    Slash handlers must still return ``True`` to keep the REPL running; only
+    ``/exit`` and ``/quit`` return ``False``.
+
     Ctrl+C sends :exc:`KeyboardInterrupt`, which subclasses :exc:`BaseException`
     rather than :exc:`Exception`; it is handled here so the REPL survives and the
     child process exits on SIGINT alongside the interrupted ``run`` call.
@@ -66,6 +75,7 @@ def run_cli_command(
     console.print()
     cmd = [sys.executable, "-m", "app.cli", *args]
     should_capture = capture_output or subprocess_timeout is not None
+    ok = True
     try:
         if should_capture:
             captured_result = subprocess.run(
@@ -83,35 +93,44 @@ def run_cli_command(
                 console.print(
                     f"[{ERROR}]CLI command exited with non-zero code {captured_result.returncode}[/]"
                 )
+                ok = False
         else:
             interactive_result = subprocess.run(cmd, check=False)
             if interactive_result.returncode != 0:
                 console.print(
                     f"[{ERROR}]CLI command exited with non-zero code {interactive_result.returncode}[/]"
                 )
+                ok = False
     except subprocess.TimeoutExpired as exc:
         print_command_output(console, _decode_subprocess_stream(exc.stdout))
         print_command_output(console, _decode_subprocess_stream(exc.stderr), style=ERROR)
         console.print(f"[{ERROR}]error:[/] CLI command timed out")
+        ok = False
     except KeyboardInterrupt:
         console.print(f"[{DIM}]CLI command cancelled (Ctrl+C).[/]")
+        ok = False
     except Exception as exc:
         console.print(f"[{ERROR}]error running CLI command:[/] {exc}")
+        ok = False
     console.print()
-    return True
+    if session is not None and not ok:
+        session.mark_latest(ok=False, kind="slash")
+    return ok
 
 
-def _cmd_onboard(session: ReplSession, console: Console, args: list[str]) -> bool:  # noqa: ARG001
+def _cmd_onboard(session: ReplSession, console: Console, args: list[str]) -> bool:
     # The REPL loop adds ``/onboard`` to ``_WAIT_FOR_COMPLETION_COMMANDS``
     # (dispatch.py) so the prompt_toolkit Application is torn down before
     # this handler runs — the wizard subprocess therefore gets exclusive
     # stdin and can drive its own interactive prompts without conflicting
     # with the shell's UI.
-    return run_cli_command(console, ["onboard", *args])
+    run_cli_command(console, ["onboard", *args], session=session)
+    return True
 
 
-def _cmd_remote(session: ReplSession, console: Console, args: list[str]) -> bool:  # noqa: ARG001
-    return run_cli_command(console, ["remote", *args])
+def _cmd_remote(session: ReplSession, console: Console, args: list[str]) -> bool:
+    run_cli_command(console, ["remote", *args], session=session)
+    return True
 
 
 def _catalog_task_kind(command: list[str]) -> TaskKind:
@@ -165,6 +184,7 @@ def _run_test_picker_for_background(session: ReplSession, console: Console) -> b
         if result.returncode != 0:
             console.print(f"[{ERROR}]CLI command exited with non-zero code {result.returncode}[/]")
             console.print()
+            session.mark_latest(ok=False, kind="slash")
             return True
         if not selection_path.stat().st_size:
             console.print()
@@ -210,7 +230,8 @@ def _cmd_tests(session: ReplSession, console: Console, args: list[str]) -> bool:
         return True
 
     if subcommand.startswith("-"):
-        return run_cli_command(console, ["tests", *args], capture_output=True)
+        run_cli_command(console, ["tests", *args], capture_output=True, session=session)
+        return True
 
     if subcommand not in _TEST_SUBCOMMANDS:
         suggestion = closest_choice(subcommand, _TEST_SUBCOMMANDS)
@@ -228,53 +249,64 @@ def _cmd_tests(session: ReplSession, console: Console, args: list[str]) -> bool:
         session.mark_latest(ok=False, kind="slash")
         return True
 
-    return run_cli_command(console, ["tests", *args], capture_output=True)
+    run_cli_command(console, ["tests", *args], capture_output=True, session=session)
+    return True
 
 
-def _cmd_guardrails(session: ReplSession, console: Console, args: list[str]) -> bool:  # noqa: ARG001
+def _cmd_guardrails(session: ReplSession, console: Console, args: list[str]) -> bool:
     # ``opensre guardrails`` and its subcommands are all non-interactive printers
     # (init/test/audit/rules just ``click.echo``). Capture so the output — and
     # Click's usage block when no subcommand is given — reaches the REPL buffer
     # instead of bypassing ``console.print`` via the child's inherited stdout FD.
-    return run_cli_command(console, ["guardrails", *args], capture_output=True)
+    run_cli_command(console, ["guardrails", *args], capture_output=True, session=session)
+    return True
 
 
-def _cmd_update(session: ReplSession, console: Console, args: list[str]) -> bool:  # noqa: ARG001
-    return run_cli_command(
+def _cmd_update(session: ReplSession, console: Console, args: list[str]) -> bool:
+    run_cli_command(
         console,
         ["update", *args],
         subprocess_timeout=_UPDATE_SUBPROCESS_TIMEOUT_SECONDS,
+        session=session,
     )
+    return True
 
 
-def _cmd_uninstall(session: ReplSession, console: Console, args: list[str]) -> bool:  # noqa: ARG001
-    return run_cli_command(console, ["uninstall", *args])
+def _cmd_uninstall(session: ReplSession, console: Console, args: list[str]) -> bool:
+    run_cli_command(console, ["uninstall", *args], session=session)
+    return True
 
 
-def _cmd_config(session: ReplSession, console: Console, args: list[str]) -> bool:  # noqa: ARG001
+def _cmd_config(session: ReplSession, console: Console, args: list[str]) -> bool:
     # Non-interactive click.echo only; capture so output reaches the REPL buffer
     # instead of the child's inherited stdout while prompt_toolkit redraws.
-    return run_cli_command(console, ["config", *args], capture_output=True)
+    run_cli_command(console, ["config", *args], capture_output=True, session=session)
+    return True
 
 
-def _cmd_messaging(session: ReplSession, console: Console, args: list[str]) -> bool:  # noqa: ARG001
-    return run_cli_command(console, ["messaging", *args])
+def _cmd_messaging(session: ReplSession, console: Console, args: list[str]) -> bool:
+    run_cli_command(console, ["messaging", *args], session=session)
+    return True
 
 
-def _cmd_hermes(session: ReplSession, console: Console, args: list[str]) -> bool:  # noqa: ARG001
-    return run_cli_command(console, ["hermes", *args])
+def _cmd_hermes(session: ReplSession, console: Console, args: list[str]) -> bool:
+    run_cli_command(console, ["hermes", *args], session=session)
+    return True
 
 
-def _cmd_cron(session: ReplSession, console: Console, args: list[str]) -> bool:  # noqa: ARG001
-    return run_cli_command(console, ["cron", *args])
+def _cmd_cron(session: ReplSession, console: Console, args: list[str]) -> bool:
+    run_cli_command(console, ["cron", *args], session=session)
+    return True
 
 
-def _cmd_watchdog(session: ReplSession, console: Console, args: list[str]) -> bool:  # noqa: ARG001
-    return run_cli_command(console, ["watchdog", *args])
+def _cmd_watchdog(session: ReplSession, console: Console, args: list[str]) -> bool:
+    run_cli_command(console, ["watchdog", *args], session=session)
+    return True
 
 
-def _cmd_debug(session: ReplSession, console: Console, args: list[str]) -> bool:  # noqa: ARG001
-    return run_cli_command(console, ["debug", *args])
+def _cmd_debug(session: ReplSession, console: Console, args: list[str]) -> bool:
+    run_cli_command(console, ["debug", *args], session=session)
+    return True
 
 
 COMMANDS: list[SlashCommand] = [

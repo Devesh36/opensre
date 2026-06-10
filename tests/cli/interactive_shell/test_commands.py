@@ -1969,9 +1969,61 @@ class TestRunCliCommand:
         monkeypatch.setattr(m.subprocess, "run", _fake_run)
 
         console, buf = _capture()
-        assert m.run_cli_command(console, ["update"], subprocess_timeout=30.0) is True
+        assert m.run_cli_command(console, ["update"], subprocess_timeout=30.0) is False
         assert replayed == [("partial stdout\n", None), ("partial stderr\n", m.ERROR)]
         assert "timed out" in buf.getvalue()
+
+    def test_non_zero_exit_returns_false_and_marks_slash_turn(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from app.cli.interactive_shell.command_registry import cli_parity as m
+
+        def _fake_run(
+            cmd: list[str],
+            *,
+            check: bool,
+            timeout: float | None,
+            capture_output: bool,
+            text: bool,
+            encoding: str,
+            errors: str,
+        ) -> subprocess.CompletedProcess[str]:
+            del check, timeout, text, encoding, errors
+            assert capture_output is True
+            return subprocess.CompletedProcess(cmd, 2, stdout="", stderr="boom\n")
+
+        monkeypatch.setattr(m.subprocess, "run", _fake_run)
+        session = ReplSession()
+        session.record("slash", "/remote health", ok=True)
+        console, buf = _capture()
+
+        assert (
+            m.run_cli_command(console, ["remote", "health"], capture_output=True, session=session)
+            is False
+        )
+        assert "non-zero code 2" in buf.getvalue()
+        assert session.history[-1]["ok"] is False
+
+    def test_delegated_slash_handler_keeps_repl_running_on_failure(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from app.cli.interactive_shell.command_registry import cli_parity as m
+
+        def _fake_run_cli_command(_console: Console, _args: list[str], **kwargs: object) -> bool:
+            session = kwargs.get("session")
+            if isinstance(session, ReplSession):
+                session.mark_latest(ok=False, kind="slash")
+            return False
+
+        monkeypatch.setattr(m, "run_cli_command", _fake_run_cli_command)
+        session = ReplSession()
+        session.record("slash", "/remote health", ok=True)
+        console, _buf = _capture()
+
+        assert m._cmd_remote(session, console, ["health"]) is True
+        assert session.history[-1]["ok"] is False
 
 
 class TestCliDelegatedCommands:
