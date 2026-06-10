@@ -87,11 +87,13 @@ export ANTHROPIC_API_KEY=...
 
 Ensure the Railway project has Postgres and Redis and that the OpenSRE service has **`DATABASE_URI`** and **`REDIS_URI`** wired to them before deploying.
 
-```bash
-opensre deploy railway --project <project> --service <service> --yes
-```
+Deploy the service using your Railway project workflow (see [deployment.mdx](deployment.mdx)).
 
-If the service never becomes healthy, confirm both URIs are set on the service.
+If the service never becomes healthy, confirm both URIs are set on the service, then register it:
+
+```bash
+opensre remote --url https://<your-service>.up.railway.app health
+```
 
 ### Remote hosted ops (Railway)
 
