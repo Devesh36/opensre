@@ -39,6 +39,8 @@ def is_context_length_overflow(message: str) -> bool:
     are not misclassified as context overflow.
     """
     return _CONTEXT_OVERFLOW_RE.search(message) is not None
+
+
 _NETWORK_RE = re.compile(
     r"network.*error|connection.*refused|dns.*fail|unreachable|"
     r"no route to host|connection reset|ssl.*error|certificate.*error|"

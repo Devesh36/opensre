@@ -13,13 +13,13 @@ from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.l
 from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.llm_action_planner.planner import (
     plan_actions_with_llm_result,
 )
-from app.integrations.llm_cli.failure_explain import is_context_length_overflow
 from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.llm_action_planner.prompting import (
     _system_prompt,
 )
 from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.slash_commands.deterministic_action_mapper import (
     DeterministicMappingResult,
 )
+from app.integrations.llm_cli.failure_explain import is_context_length_overflow
 
 
 def test_system_prompt_does_not_reference_removed_slash_catalog() -> None:
