@@ -535,7 +535,7 @@ class TestIntegrationsCommand:
         monkeypatch.setattr(
             m,
             "run_cli_command",
-            lambda _, args, **kwargs: (captured.append(args), True)[1],
+            lambda _, args, **_kwargs: (captured.append(args), True)[1],
         )
         dispatch_slash("/integrations setup", ReplSession(), Console())
         assert captured == [["integrations", "setup"]]
@@ -547,7 +547,7 @@ class TestIntegrationsCommand:
         monkeypatch.setattr(
             m,
             "run_cli_command",
-            lambda _, args, **kwargs: (captured.append(args), True)[1],
+            lambda _, args, **_kwargs: (captured.append(args), True)[1],
         )
         dispatch_slash("/integrations remove slack", ReplSession(), Console())
         assert captured == [["integrations", "remove", "slack"]]
@@ -585,7 +585,7 @@ class TestMcpCommand:
         monkeypatch.setattr(
             m,
             "run_cli_command",
-            lambda _, args, **kwargs: (captured.append(args), True)[1],
+            lambda _, args, **_kwargs: (captured.append(args), True)[1],
         )
         dispatch_slash("/mcp connect", ReplSession(), Console())
         assert captured == [["integrations", "setup"]]
@@ -597,7 +597,7 @@ class TestMcpCommand:
         monkeypatch.setattr(
             m,
             "run_cli_command",
-            lambda _, args, **kwargs: (captured.append(args), True)[1],
+            lambda _, args, **_kwargs: (captured.append(args), True)[1],
         )
         dispatch_slash("/mcp disconnect github", ReplSession(), Console())
         assert captured == [["integrations", "remove", "github"]]
@@ -2264,6 +2264,46 @@ class TestCliDelegatedCommands:
 
         assert started == ["opensre tests synthetic"]
         assert not selection_path.exists()
+
+    def test_tests_picker_invalid_payload_marks_slash_turn_failed(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        from app.cli.interactive_shell.command_registry import cli_parity as m
+
+        selection_path = tmp_path / "selection.json"
+
+        class _SelectionFile:
+            name = str(selection_path)
+            closed = False
+
+            def __init__(self) -> None:
+                selection_path.touch()
+
+            def close(self) -> None:
+                self.closed = True
+
+        handle = _SelectionFile()
+
+        def _fake_run(_command: list[str], **kwargs: object) -> object:
+            del kwargs
+            selection_path.write_text('{"not": "a list"}', encoding="utf-8")
+
+            class _Result:
+                returncode = 0
+
+            return _Result()
+
+        monkeypatch.setattr(m.tempfile, "NamedTemporaryFile", lambda **_kwargs: handle)
+        monkeypatch.setattr(m.subprocess, "run", _fake_run)
+
+        session = ReplSession()
+        console, buf = _capture()
+        dispatch_slash("/tests", session, console)
+
+        assert "invalid selection" in buf.getvalue()
+        assert session.history[-1]["ok"] is False
 
     def test_tests_flag_first_invocation_delegates_to_cli(self, monkeypatch: object) -> None:
         from app.cli.interactive_shell.command_registry import cli_parity as m

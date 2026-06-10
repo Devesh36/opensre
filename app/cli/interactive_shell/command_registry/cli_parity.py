@@ -197,6 +197,7 @@ def _run_test_picker_for_background(session: ReplSession, console: Console) -> b
     if not isinstance(payload, list):
         console.print(f"[{ERROR}]test picker returned an invalid selection[/]")
         console.print()
+        session.mark_latest(ok=False, kind="slash")
         return True
 
     for item in payload:
