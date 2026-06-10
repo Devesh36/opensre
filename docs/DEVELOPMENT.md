@@ -89,11 +89,13 @@ Ensure the Railway project has Postgres and Redis and that the OpenSRE service h
 
 Deploy the service using your Railway project workflow (see [deployment.mdx](deployment.mdx)).
 
-If the service never becomes healthy, confirm both URIs are set on the service, then register it:
+After deploy, register the remote agent:
 
 ```bash
 opensre remote --url https://<your-service>.up.railway.app health
 ```
+
+If the service never becomes healthy, confirm both `DATABASE_URI` and `REDIS_URI` are set on the service.
 
 ### Remote hosted ops (Railway)
 
