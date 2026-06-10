@@ -205,7 +205,8 @@ class TestDispatchSlash:
 
         calls: list[list[str]] = []
 
-        def _fake_run_cli_command(_console: Console, args: list[str]) -> bool:
+        def _fake_run_cli_command(_console: Console, args: list[str], **kwargs: object) -> bool:
+            del kwargs
             calls.append(args)
             return True
 
@@ -520,15 +521,22 @@ class TestIntegrationsCommand:
 
     def test_unknown_subcommand_prints_hint(self, monkeypatch: object) -> None:
         self._patch(monkeypatch)
+        session = ReplSession()
+        session.record("slash", "/integrations bogus", ok=True)
         console, buf = _capture()
-        dispatch_slash("/integrations bogus", ReplSession(), console)
+        dispatch_slash("/integrations bogus", session, console)
         assert "unknown subcommand" in buf.getvalue()
+        assert session.history[-1]["ok"] is False
 
     def test_setup_delegates_to_cli(self, monkeypatch: object) -> None:
         from app.cli.interactive_shell.command_registry import integrations as m
 
         captured = []
-        monkeypatch.setattr(m, "run_cli_command", lambda _, args: (captured.append(args), True)[1])
+        monkeypatch.setattr(
+            m,
+            "run_cli_command",
+            lambda _, args, **kwargs: (captured.append(args), True)[1],
+        )
         dispatch_slash("/integrations setup", ReplSession(), Console())
         assert captured == [["integrations", "setup"]]
 
@@ -536,7 +544,11 @@ class TestIntegrationsCommand:
         from app.cli.interactive_shell.command_registry import integrations as m
 
         captured = []
-        monkeypatch.setattr(m, "run_cli_command", lambda _, args: (captured.append(args), True)[1])
+        monkeypatch.setattr(
+            m,
+            "run_cli_command",
+            lambda _, args, **kwargs: (captured.append(args), True)[1],
+        )
         dispatch_slash("/integrations remove slack", ReplSession(), Console())
         assert captured == [["integrations", "remove", "slack"]]
 
@@ -570,7 +582,11 @@ class TestMcpCommand:
         from app.cli.interactive_shell.command_registry import integrations as m
 
         captured = []
-        monkeypatch.setattr(m, "run_cli_command", lambda _, args: (captured.append(args), True)[1])
+        monkeypatch.setattr(
+            m,
+            "run_cli_command",
+            lambda _, args, **kwargs: (captured.append(args), True)[1],
+        )
         dispatch_slash("/mcp connect", ReplSession(), Console())
         assert captured == [["integrations", "setup"]]
 
@@ -578,15 +594,22 @@ class TestMcpCommand:
         from app.cli.interactive_shell.command_registry import integrations as m
 
         captured = []
-        monkeypatch.setattr(m, "run_cli_command", lambda _, args: (captured.append(args), True)[1])
+        monkeypatch.setattr(
+            m,
+            "run_cli_command",
+            lambda _, args, **kwargs: (captured.append(args), True)[1],
+        )
         dispatch_slash("/mcp disconnect github", ReplSession(), Console())
         assert captured == [["integrations", "remove", "github"]]
 
     def test_unknown_subcommand(self, monkeypatch: object) -> None:
         self._patch(monkeypatch)
+        session = ReplSession()
+        session.record("slash", "/mcp bogus", ok=True)
         console, buf = _capture()
-        dispatch_slash("/mcp bogus", ReplSession(), console)
+        dispatch_slash("/mcp bogus", session, console)
         assert "unknown subcommand" in buf.getvalue()
+        assert session.history[-1]["ok"] is False
 
 
 class TestModelCommand:
@@ -2098,9 +2121,12 @@ class TestCliDelegatedCommands:
             return True
 
         monkeypatch.setattr(m, "run_cli_command", _fake_run_cli_command)
-        dispatch_slash(slash_input, ReplSession(), Console())
+        session = ReplSession()
+        dispatch_slash(slash_input, session, Console())
 
-        assert captured_kwargs == [{"capture_output": True}]
+        assert len(captured_kwargs) == 1
+        assert captured_kwargs[0]["capture_output"] is True
+        assert captured_kwargs[0]["session"] is session
 
     @pytest.mark.parametrize(
         "slash_input",
@@ -2124,9 +2150,12 @@ class TestCliDelegatedCommands:
             return True
 
         monkeypatch.setattr(m, "run_cli_command", _fake_run_cli_command)
-        dispatch_slash(slash_input, ReplSession(), Console())
+        session = ReplSession()
+        dispatch_slash(slash_input, session, Console())
 
-        assert captured_kwargs == [{"capture_output": True}]
+        assert len(captured_kwargs) == 1
+        assert captured_kwargs[0]["capture_output"] is True
+        assert captured_kwargs[0]["session"] is session
 
     def test_slash_onboard_with_args_forwards_them_to_subprocess(self, monkeypatch: object) -> None:
         """Args passed to ``/onboard`` must be forwarded to the subprocess."""

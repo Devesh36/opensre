@@ -255,6 +255,7 @@ def _cmd_mcp(session: ReplSession, console: Console, args: list[str]) -> bool:
         f"[{ERROR}]unknown subcommand:[/] {escape(sub)}  "
         "(try [bold]/mcp list[/bold], [bold]/mcp connect[/bold], or [bold]/mcp disconnect[/bold])"
     )
+    session.mark_latest(ok=False, kind="slash")
     return True
 
 
