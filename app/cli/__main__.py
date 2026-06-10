@@ -215,6 +215,9 @@ def _should_capture_cli_exception(exc: click.ClickException) -> bool:
 def main(argv: list[str] | None = None) -> int:
     """Entry point for the ``opensre`` console script."""
     _ensure_utf8_stdio()
+    from app.constants.home_migration import migrate_opensre_home_from_config
+
+    migrate_opensre_home_from_config()
     load_dotenv(override=False)
     cli_argv = list(sys.argv[1:] if argv is None else argv)
     try:
