@@ -7,11 +7,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from rich.console import Console
+from rich.markup import escape as _rich_escape
 
 from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.execution_tier import (
     ExecutionTier,
 )
 from app.cli.interactive_shell.runtime import ReplSession
+from app.cli.interactive_shell.ui.theme import ERROR
 
 
 @dataclass(frozen=True)
@@ -56,12 +58,10 @@ def make_list_root_handler(
         sub = (args[0].lower() if args else "list").strip()
         if sub in aliases:
             return list_handler(session, console, args[1:])
-        from rich.markup import escape as _esc
-
-        from app.cli.interactive_shell.ui.theme import ERROR
 
         console.print(
-            f"[{ERROR}]unknown subcommand:[/] {_esc(sub)}  (try [bold]{command_name} list[/bold])"
+            f"[{ERROR}]unknown subcommand:[/] {_rich_escape(sub)}  "
+            f"(try [bold]{command_name} list[/bold])"
         )
         session.mark_latest(ok=False, kind="slash")
         return True

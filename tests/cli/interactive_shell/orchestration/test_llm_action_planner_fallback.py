@@ -11,9 +11,9 @@ from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.l
     _SYSTEM_PROMPT_BASE,
 )
 from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.llm_action_planner.planner import (
-    _is_prompt_too_long_error,
     plan_actions_with_llm_result,
 )
+from app.integrations.llm_cli.failure_explain import is_context_length_overflow
 from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.llm_action_planner.prompting import (
     _system_prompt,
 )
@@ -38,12 +38,14 @@ def test_system_prompt_does_not_reference_removed_slash_catalog() -> None:
             True,
         ),
         ("prompt too long — shorten the input or reduce accumulated context", True),
+        ("Prompt too long: 65798 tokens exceeds max context window of 65536 tokens", True),
+        ("The request took too long to complete", False),
         ("codex: quota or rate limit exceeded (exit 1)", False),
         ("authentication failed — verify your API key", False),
     ],
 )
-def test_is_prompt_too_long_error_matches_provider_messages(message: str, expected: bool) -> None:
-    assert _is_prompt_too_long_error(PlannerLLMError(message)) is expected
+def test_is_context_length_overflow_matches_provider_messages(message: str, expected: bool) -> None:
+    assert is_context_length_overflow(message) is expected
 
 
 def test_plan_actions_with_llm_result_falls_back_on_anthropic_prompt_overflow() -> None:
@@ -149,5 +151,17 @@ def test_plan_actions_with_llm_result_re_raises_non_overflow_planner_errors() ->
             side_effect=PlannerLLMError("codex: quota or rate limit exceeded (exit 1)"),
         ),
         pytest.raises(PlannerLLMError, match="quota"),
+    ):
+        plan_actions_with_llm_result("check cpu usage")
+
+
+def test_plan_actions_with_llm_result_re_raises_timeout_too_long_errors() -> None:
+    with (
+        patch(
+            "app.cli.interactive_shell.routing.handle_message_with_agent.orchestration."
+            "llm_action_planner.planner._call_llm",
+            side_effect=PlannerLLMError("The request took too long to complete"),
+        ),
+        pytest.raises(PlannerLLMError, match="too long"),
     ):
         plan_actions_with_llm_result("check cpu usage")

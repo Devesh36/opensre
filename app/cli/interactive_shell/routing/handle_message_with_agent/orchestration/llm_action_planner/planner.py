@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -10,6 +9,7 @@ from app.cli.interactive_shell.routing.handle_message_with_agent.errors import P
 from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.interaction_models import (
     PlannedAction,
 )
+from app.integrations.llm_cli.failure_explain import is_context_length_overflow
 
 from .llm_client import _call_llm
 from .parsing import _parse_tool_plan
@@ -29,18 +29,6 @@ class LlmActionPlanResult:
     policy_trace: tuple[str, ...]
 
 
-_PROMPT_TOO_LONG_RE = re.compile(
-    r"context.?length|context.?window|max.?token|token.?limit|"
-    r"too.?long|input.*exceed|prompt.*too.?large|reduce.*context|"
-    r"string too long",
-    re.IGNORECASE,
-)
-
-
-def _is_prompt_too_long_error(exc: PlannerLLMError) -> bool:
-    return _PROMPT_TOO_LONG_RE.search(str(exc)) is not None
-
-
 def _fallback_handoff(sanitised: str) -> list[PlannedAction]:
     return [
         PlannedAction(
@@ -50,6 +38,36 @@ def _fallback_handoff(sanitised: str) -> list[PlannedAction]:
             source="llm",
         )
     ]
+
+
+def _plan_prompt_overflow_fallback(
+    sanitised: str,
+    *,
+    session: Any | None,
+) -> LlmActionPlanResult:
+    from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.slash_commands.deterministic_action_mapper import (
+        map_actions_result,
+    )
+
+    fallback = map_actions_result(sanitised)
+    if fallback.actions:
+        fallback_actions = list(fallback.actions)
+        fallback_has_unhandled = fallback.has_unhandled_clause
+    else:
+        fallback_actions = _fallback_handoff(sanitised)
+        fallback_has_unhandled = False
+    finalized = finalize_planner_result_with_trace(
+        sanitised,
+        fallback_actions,
+        fallback_has_unhandled,
+        session=session,
+    )
+    return LlmActionPlanResult(
+        actions=tuple(finalized.actions),
+        has_unhandled_clause=finalized.has_unhandled,
+        policy_trace=("fallback_prompt_too_long",)
+        + tuple(tag.value for tag in finalized.applied_policies),
+    )
 
 
 def plan_actions_with_llm_result(
@@ -71,31 +89,9 @@ def plan_actions_with_llm_result(
     try:
         raw = _call_llm(sanitised, session)
     except PlannerLLMError as exc:
-        if not _is_prompt_too_long_error(exc):
+        if not is_context_length_overflow(str(exc)):
             raise
-        from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.slash_commands.deterministic_action_mapper import (
-            map_actions_result,
-        )
-
-        fallback = map_actions_result(sanitised)
-        fallback_actions = list(fallback.actions)
-        if not fallback_actions:
-            fallback_actions = _fallback_handoff(sanitised)
-            fallback_has_unhandled = False
-        else:
-            fallback_has_unhandled = fallback.has_unhandled_clause
-        finalized = finalize_planner_result_with_trace(
-            sanitised,
-            fallback_actions,
-            fallback_has_unhandled,
-            session=session,
-        )
-        return LlmActionPlanResult(
-            actions=tuple(finalized.actions),
-            has_unhandled_clause=finalized.has_unhandled,
-            policy_trace=("fallback_prompt_too_long",)
-            + tuple(tag.value for tag in finalized.applied_policies),
-        )
+        return _plan_prompt_overflow_fallback(sanitised, session=session)
     if raw is None:
         return None
 
