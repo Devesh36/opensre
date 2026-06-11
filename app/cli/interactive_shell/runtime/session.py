@@ -24,15 +24,18 @@ InterventionKind = Literal["ctrl_c", "correction"]
 SUGGESTED_PROMPT_AFTER_FAILED_SYNTHETIC_TEST = "why did it fail?"
 
 _SCENARIO_FLAG_RE = re.compile(r"--scenario\s+(\S+)")
+_SYNTHETIC_SCENARIO_ID_RE = re.compile(r"^\d{3}-[a-z0-9][a-z0-9-]*$")
 
 
 def _scenario_id_from_synthetic_label(label: str) -> str:
     """Extract a scenario id from a synthetic command or ``suite:scenario`` label."""
     match = _SCENARIO_FLAG_RE.search(label)
     if match is not None:
-        return match.group(1).strip()
+        candidate = match.group(1).strip()
+        return candidate if _SYNTHETIC_SCENARIO_ID_RE.fullmatch(candidate) else ""
     if ":" in label:
-        return label.rsplit(":", 1)[-1].strip()
+        candidate = label.rsplit(":", 1)[-1].strip()
+        return candidate if _SYNTHETIC_SCENARIO_ID_RE.fullmatch(candidate) else ""
     return ""
 
 
@@ -172,9 +175,11 @@ class ReplSession:
             self.prompt_refresh_fn()
 
     def suggest_synthetic_failure_follow_up(self, *, label: str = "") -> None:
-        """Queue RCA prefill after a failed synthetic run; call ``notify_prompt_changed()`` after."""
+        """Queue RCA prefill after a failed synthetic run and refresh the active prompt."""
         self.pending_prompt_default = SUGGESTED_PROMPT_AFTER_FAILED_SYNTHETIC_TEST
+        self.notify_prompt_changed()
         self._bind_last_synthetic_observation(_scenario_id_from_synthetic_label(label))
+        self.notify_prompt_changed()
 
     def _bind_last_synthetic_observation(self, scenario_id: str) -> None:
         if not scenario_id:

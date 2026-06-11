@@ -53,6 +53,8 @@ class TestReplSession:
         assert _scenario_id_from_synthetic_label("rds_postgres:001-replication-lag") == (
             "001-replication-lag"
         )
+        assert _scenario_id_from_synthetic_label("opensre tests synthetic --scenario ./evil") == ""
+        assert _scenario_id_from_synthetic_label("rds_postgres:not-a-scenario") == ""
 
     def test_suggest_synthetic_failure_follow_up_sets_pending(self) -> None:
         session = ReplSession()

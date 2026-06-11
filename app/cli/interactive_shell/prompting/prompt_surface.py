@@ -372,6 +372,7 @@ def wire_prompt_refresh(
     session.prompt_refresh_fn = refresh_active_prompt
     return invalidate_prompt
 
+
 # Commands where bare invocation opens an inline picker in TTY mode.
 _INLINE_PICKER_COMMANDS: frozenset[str] = frozenset(
     {
@@ -394,7 +395,12 @@ def _suppress_empty_arg_completions_for_inline_picker(cmd_name: str, raw_arg: st
     return repl_tty_interactive() and not raw_arg and cmd_name in _INLINE_PICKER_COMMANDS
 
 
-def _build_prompt_session(_session: ReplSession | None = None) -> PromptSession[str]:
+def _build_prompt_session(session: ReplSession | None = None) -> PromptSession[str]:
+    placeholder = (
+        (lambda: resolve_prompt_placeholder(session))
+        if session is not None
+        else _DEFAULT_PLACEHOLDER_ANSI
+    )
     return _install_prompt_frame(
         PromptSession(
             completer=ShellCompleter(),
@@ -406,7 +412,7 @@ def _build_prompt_session(_session: ReplSession | None = None) -> PromptSession[
             key_bindings=_build_prompt_key_bindings(),
             style=_build_prompt_style(),
             erase_when_done=True,
-            placeholder=_DEFAULT_PLACEHOLDER_ANSI,
+            placeholder=placeholder,
         )
     )
 

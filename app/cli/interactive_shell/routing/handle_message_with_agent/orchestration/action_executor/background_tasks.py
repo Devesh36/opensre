@@ -122,6 +122,8 @@ def start_background_cli_task(
         output_thread.start()
         output_threads = [output_thread]
 
+    history_gen_when_watch_started = session.history_generation
+
     def _watch() -> None:
         terminated_by_watcher = False
         timed_out = False
@@ -148,7 +150,6 @@ def start_background_cli_task(
                 task.mark_cancelled()
                 return
 
-            _join_task_output_streams(output_threads)
             code = proc.returncode
             if code == 0:
                 task.mark_completed()
@@ -168,9 +169,10 @@ def start_background_cli_task(
             if stdout_buf is not None:
                 stdout_buf.close()
             stderr_buf.close()
-            if suggest_follow_up:
+            if suggest_follow_up and session.history_generation == history_gen_when_watch_started:
                 session.suggest_synthetic_failure_follow_up(label=display_command)
-            session.notify_prompt_changed()
+            else:
+                session.notify_prompt_changed()
 
     thread = threading.Thread(target=_watch, daemon=True)
     thread.start()

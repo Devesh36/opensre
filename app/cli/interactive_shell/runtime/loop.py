@@ -161,7 +161,7 @@ async def run_interactive(
     inbox: _alert_inbox.AlertInbox | None = None,
 ) -> None:
     if pt_session is None:
-        pt_session = _prompt_surface._build_prompt_session()
+        pt_session = _prompt_surface._build_prompt_session(session)
         session.prompt_history_backend = pt_session.history
     spinner = SpinnerState()
     state = ReplState()
