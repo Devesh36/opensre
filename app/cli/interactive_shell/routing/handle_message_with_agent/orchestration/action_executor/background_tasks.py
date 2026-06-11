@@ -125,6 +125,7 @@ def start_background_cli_task(
     def _watch() -> None:
         terminated_by_watcher = False
         timed_out = False
+        suggest_follow_up = False
         while proc.poll() is None:
             if time.monotonic() - started_at > timeout_seconds:
                 timed_out = True
@@ -141,6 +142,7 @@ def start_background_cli_task(
         try:
             if timed_out:
                 task.mark_failed(f"timed out after {timeout_seconds}s")
+                suggest_follow_up = kind is TaskKind.SYNTHETIC_TEST
                 return
             if terminated_by_watcher and task.cancel_requested.is_set():
                 task.mark_cancelled()
@@ -155,15 +157,20 @@ def start_background_cli_task(
                 error_msg = f"exit code {code}" + (f": {diag}" if diag else "")
                 task.mark_failed(error_msg)
                 console.print(f"[{ERROR}]command failed (exit {code}):[/]")
+                suggest_follow_up = kind is TaskKind.SYNTHETIC_TEST
         except Exception as exc:  # noqa: BLE001
             task.mark_failed(str(exc))
             report_exception(exc, context="interactive_shell.background_cli_task.watch")
             console.print(f"[{ERROR}]error:[/] {escape(str(exc))}")
+            suggest_follow_up = kind is TaskKind.SYNTHETIC_TEST
         finally:
             _join_task_output_streams(output_threads)
             if stdout_buf is not None:
                 stdout_buf.close()
             stderr_buf.close()
+            if suggest_follow_up:
+                session.suggest_synthetic_failure_follow_up(label=display_command)
+            session.notify_prompt_changed()
 
     thread = threading.Thread(target=_watch, daemon=True)
     thread.start()

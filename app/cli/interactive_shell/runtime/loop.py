@@ -174,8 +174,7 @@ async def run_interactive(
     main_loop = asyncio.get_running_loop()
     state.bind_loop(main_loop)
 
-    def _invalidate_prompt() -> None:
-        main_loop.call_soon_threadsafe(pt_app.invalidate)
+    _invalidate_prompt = _prompt_surface.wire_prompt_refresh(session, pt_app, main_loop)
 
     def _request_exit() -> None:
         state.request_exit()
@@ -338,10 +337,13 @@ async def run_interactive(
                 await asyncio.sleep(0.05)
                 _drain_stale_cpr_bytes()
                 try:
+                    prefilled = session.take_pending_prompt_default()
                     text = await pt_session.prompt_async(
                         message=_message_with_spinner,
                         bottom_toolbar=spinner.toolbar_ansi,
                         refresh_interval=PROMPT_REFRESH_INTERVAL_S,
+                        placeholder=lambda: _prompt_surface.resolve_prompt_placeholder(session),
+                        default=prefilled,
                     )
                 except EOFError:
                     if state.is_dispatch_running():
