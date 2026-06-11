@@ -150,6 +150,7 @@ def start_background_cli_task(
                 task.mark_cancelled()
                 return
 
+            _join_task_output_streams(output_threads)
             code = proc.returncode
             if code == 0:
                 task.mark_completed()
