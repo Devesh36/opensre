@@ -105,7 +105,14 @@ class ReplSession:
     """Session-scoped reasoning effort preference for REPL-driven LLM calls."""
 
     token_usage: dict[str, int] = field(default_factory=dict)
-    """Accumulated token counts: {"input": N, "output": N}. Populated when available."""
+    """Accumulated token counts.
+
+    Totals: ``input``, ``output``. Breakdown: ``input_measured``,
+    ``output_measured``, ``input_estimated``, ``output_estimated``.
+    """
+
+    llm_call_count: int = 0
+    """Number of LLM calls accumulated into ``token_usage`` (for ``/cost``)."""
 
     cli_agent_messages: list[tuple[str, str]] = field(default_factory=list)
     """Assistant conversation history: alternating (\"user\"|\"assistant\", text)."""
@@ -198,6 +205,30 @@ class ReplSession:
             time.sleep(0.06)
         self.last_synthetic_observation_path = None
 
+    @property
+    def token_usage_has_estimates(self) -> bool:
+        usage = self.token_usage
+        return bool(usage.get("input_estimated") or usage.get("output_estimated"))
+
+    def record_token_usage(
+        self,
+        *,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        estimated: bool = False,
+    ) -> None:
+        """Accumulate token counts for ``/cost`` (input/output keys)."""
+        if not input_tokens and not output_tokens:
+            return
+        suffix = "estimated" if estimated else "measured"
+        for direction, count in (("input", input_tokens), ("output", output_tokens)):
+            if not count:
+                continue
+            self.token_usage[direction] = self.token_usage.get(direction, 0) + count
+            bucket = f"{direction}_{suffix}"
+            self.token_usage[bucket] = self.token_usage.get(bucket, 0) + count
+        self.llm_call_count += 1
+
     def record(self, kind: str, text: str, *, ok: bool = True) -> None:
         """Append an entry to the session history.
 
@@ -265,6 +296,7 @@ class ReplSession:
         self.available_capabilities.clear()
         self.accumulated_context.clear()
         self.token_usage.clear()
+        self.llm_call_count = 0
         self.cli_agent_messages.clear()
         self.incoming_alerts.clear()
         # Keep persisted cross-session task history on disk intact.

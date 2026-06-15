@@ -11,6 +11,7 @@ from rich.console import Console
 from rich.markup import escape
 
 from app.cli.interactive_shell.prompt_logging import LlmRunInfo
+from app.cli.interactive_shell.token_accounting import build_llm_run_info
 from app.cli.interactive_shell.ui import DIM, ERROR, STREAM_LABEL_ANSWER, WARNING, stream_to_console
 from app.cli.support.exception_reporting import report_exception
 
@@ -121,33 +122,13 @@ def answer_follow_up(
         report_exception(exc, context="interactive_shell.follow_up.stream")
         console.print(f"[{ERROR}]follow-up failed:[/] {escape(str(exc))}")
         return None
-    return LlmRunInfo(
-        model=_resolve_model_name(client),
-        provider=_resolve_provider_name(client),
-        latency_ms=int((time.monotonic() - started) * 1000),
+    return build_llm_run_info(
+        session=session,
+        prompt=prompt,
         response_text=response_text,
+        started=started,
+        client=client,
     )
-
-
-def _resolve_model_name(client: object) -> str | None:
-    value = getattr(client, "_model", None)
-    return value if isinstance(value, str) and value else None
-
-
-def _resolve_provider_name(client: object) -> str | None:
-    provider_label = getattr(client, "_provider_label", None)
-    if isinstance(provider_label, str) and provider_label:
-        return provider_label.strip().lower().replace(" ", "_")
-    name = type(client).__name__.lower()
-    if "openai" in name:
-        return "openai"
-    if "bedrock" in name:
-        return "bedrock"
-    if "cli" in name:
-        return "cli"
-    if "anthropic" in name or "llmclient" in name:
-        return "anthropic"
-    return None
 
 
 __all__ = ["answer_follow_up"]

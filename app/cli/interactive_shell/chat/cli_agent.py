@@ -32,6 +32,7 @@ from app.cli.interactive_shell.runtime import ReplSession
 from app.cli.interactive_shell.runtime.session import (
     SUGGESTED_PROMPT_AFTER_FAILED_SYNTHETIC_TEST,
 )
+from app.cli.interactive_shell.token_accounting import build_llm_run_info
 from app.cli.interactive_shell.ui import (
     BOLD_BRAND,
     DIM,
@@ -484,11 +485,12 @@ def answer_cli_agent(
             chunks=iter((deterministic_response,)),
         )
         _record_cli_agent_turn(session, message, deterministic_response)
-        return LlmRunInfo(
+        return build_llm_run_info(
+            session=session,
+            prompt=message,
+            response_text=deterministic_response,
             model="deterministic_command_selection",
             provider="local",
-            latency_ms=0,
-            response_text=deterministic_response,
         )
 
     try:
@@ -560,11 +562,12 @@ def answer_cli_agent(
         console.print(f"[{ERROR}]assistant failed:[/] {escape(str(exc))}")
         return None
 
-    run_info = LlmRunInfo(
-        model=_resolve_model_name(client),
-        provider=_resolve_provider_name(client),
-        latency_ms=int((time.monotonic() - started) * 1000),
+    run_info = build_llm_run_info(
+        session=session,
+        prompt=prompt,
         response_text=text_str,
+        started=started,
+        client=client,
     )
 
     actions = _parse_action_plan(text_str)
@@ -590,27 +593,6 @@ def answer_cli_agent(
             console.print(Markdown(text_str, code_theme="ansi_dark"))
         console.print()
     return run_info
-
-
-def _resolve_model_name(client: object) -> str | None:
-    value = getattr(client, "_model", None)
-    return value if isinstance(value, str) and value else None
-
-
-def _resolve_provider_name(client: object) -> str | None:
-    provider_label = getattr(client, "_provider_label", None)
-    if isinstance(provider_label, str) and provider_label:
-        return provider_label.strip().lower().replace(" ", "_")
-    name = type(client).__name__.lower()
-    if "openai" in name:
-        return "openai"
-    if "bedrock" in name:
-        return "bedrock"
-    if "cli" in name:
-        return "cli"
-    if "anthropic" in name or "llmclient" in name:
-        return "anthropic"
-    return None
 
 
 __all__ = ["answer_cli_agent"]

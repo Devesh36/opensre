@@ -15,6 +15,7 @@ from app.cli.interactive_shell.command_registry.types import (
     SlashCommand,
 )
 from app.cli.interactive_shell.runtime import ReplSession
+from app.cli.interactive_shell.token_accounting import format_token_total
 from app.cli.interactive_shell.ui import (
     BOLD_BRAND,
     DIM,
@@ -138,18 +139,22 @@ def _cmd_status(session: ReplSession, console: Console, _args: list[str]) -> boo
 
 
 def _cmd_cost(session: ReplSession, console: Console, _args: list[str]) -> bool:
-    table = repl_table(title="Session cost\n", title_style=BOLD_BRAND, show_header=False)
+    title = "Session cost"
+    if session.token_usage_has_estimates:
+        title = "Session cost (includes estimates)"
+    table = repl_table(title=f"{title}\n", title_style=BOLD_BRAND, show_header=False)
     table.add_column("key", style="bold")
     table.add_column("value")
-    table.add_row("interactions", str(len(session.history)))
+    table.add_row("history entries", str(len(session.history)))
+    if session.llm_call_count:
+        table.add_row("llm calls", str(session.llm_call_count))
 
     if session.token_usage:
-        inp = session.token_usage.get("input", 0)
-        out = session.token_usage.get("output", 0)
-        table.add_row("input tokens", f"{inp:,}")
-        table.add_row("output tokens", f"{out:,}")
+        for direction in ("input", "output"):
+            label, value = format_token_total(session, direction=direction)
+            table.add_row(label, value)
     else:
-        table.add_row("token usage", f"[{DIM}]not available (not wired yet)[/]")
+        table.add_row("token usage", f"[{DIM}]no LLM usage recorded yet[/]")
 
     print_repl_table(console, table)
     return True

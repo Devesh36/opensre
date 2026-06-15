@@ -238,6 +238,7 @@ class TestAssistantOutputRendering:
         assert "**world**" not in output
         assert "world" in output
         assert "Hello" in output
+        assert session.token_usage.get("output", 0) > 0
 
     def test_table_markdown_is_rendered_as_table(self, monkeypatch: Any) -> None:
         markdown = (

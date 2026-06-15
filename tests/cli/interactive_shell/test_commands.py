@@ -1668,16 +1668,37 @@ class TestCostCommand:
     def test_no_token_data_shows_placeholder(self) -> None:
         console, buf = _capture()
         dispatch_slash("/cost", ReplSession(), console)
-        assert "not available" in buf.getvalue()
+        assert "no LLM usage recorded yet" in buf.getvalue()
 
     def test_shows_token_counts_when_available(self) -> None:
         session = ReplSession()
         session.token_usage = {"input": 1000, "output": 500}
+        session.llm_call_count = 2
         console, buf = _capture()
         dispatch_slash("/cost", session, console)
         output = buf.getvalue()
         assert "1,000" in output
         assert "500" in output
+        assert "llm calls" in output
+        assert "2" in output
+
+    def test_shows_estimate_labels_when_mixed(self) -> None:
+        session = ReplSession()
+        session.token_usage = {
+            "input": 400,
+            "output": 60,
+            "input_measured": 300,
+            "output_measured": 40,
+            "input_estimated": 100,
+            "output_estimated": 20,
+        }
+        session.llm_call_count = 2
+        console, buf = _capture()
+        dispatch_slash("/cost", session, console)
+        output = buf.getvalue()
+        assert "provider + 100 est." in output
+        assert "provider + 20 est." in output
+        assert "includes estimates" in output
 
 
 class TestVerboseCommand:
