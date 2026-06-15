@@ -109,6 +109,16 @@ def test_build_llm_run_info_records_tokens_and_metadata() -> None:
     assert run.latency_ms is not None and run.latency_ms >= 0
 
 
+def test_coerce_usage_tokens_accepts_float_counts() -> None:
+    from app.services.llm_client import _coerce_usage_tokens
+
+    assert _coerce_usage_tokens(
+        {"input_tokens": 512.0, "output_tokens": 64.0},
+        input_key="input_tokens",
+        output_key="output_tokens",
+    ) == (512, 64)
+
+
 def test_record_token_usage_skips_zero_counts() -> None:
     session = ReplSession()
     session.record_token_usage()
@@ -126,11 +136,15 @@ class _FakeLLMClient:
         yield self._content
 
 
+_PLANNER_LLM_CLIENT = (
+    "app.cli.interactive_shell.routing.handle_message_with_agent"
+    ".orchestration.llm_action_planner.llm_client"
+)
+
+
 def test_answer_cli_agent_records_session_token_usage(monkeypatch: Any) -> None:
     client = _FakeLLMClient("assistant reply")
-    import app.services.llm_client as llm_module
-
-    monkeypatch.setattr(llm_module, "get_llm_for_reasoning", lambda: client)
+    monkeypatch.setattr("app.services.llm_client.get_llm_for_reasoning", lambda: client)
     session = ReplSession()
     console = Console(file=io.StringIO(), force_terminal=False)
     answer_cli_agent("hello", session, console)
@@ -157,9 +171,9 @@ def test_planner_call_llm_records_provider_token_usage() -> None:
                 output_tokens=42,
             )
 
-    with patch(
-        "app.services.llm_client.get_llm_for_classification",
-        return_value=_FakeClient(),
+    with (
+        patch("app.services.llm_client.get_llm_for_classification", return_value=_FakeClient()),
+        patch(f"{_PLANNER_LLM_CLIENT}._tool_specs_for_provider", return_value=[]),
     ):
         result = _call_llm("check cpu", session)
 
@@ -185,12 +199,12 @@ def test_planner_call_llm_falls_back_to_estimates_without_provider_usage() -> No
         def bind_tools(self, _tools: object) -> _FakeClient:
             return self
 
-        def invoke(self, prompt: str) -> LLMResponse:
+        def invoke(self, _prompt: str) -> LLMResponse:
             return LLMResponse(content='{"tool_calls": []}')
 
-    with patch(
-        "app.services.llm_client.get_llm_for_classification",
-        return_value=_FakeClient(),
+    with (
+        patch("app.services.llm_client.get_llm_for_classification", return_value=_FakeClient()),
+        patch(f"{_PLANNER_LLM_CLIENT}._tool_specs_for_provider", return_value=[]),
     ):
         _call_llm("check cpu", session)
 

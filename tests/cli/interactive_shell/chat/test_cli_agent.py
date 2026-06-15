@@ -285,6 +285,8 @@ class TestAssistantOutputRendering:
                 "If you want a full command list, run `opensre --help`.",
             ),
         ]
+        assert session.token_usage == {}
+        assert session.llm_call_count == 0
 
     def test_structured_content_blocks_are_rendered(self, monkeypatch: Any) -> None:
         class _Block:

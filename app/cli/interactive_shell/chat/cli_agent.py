@@ -485,12 +485,11 @@ def answer_cli_agent(
             chunks=iter((deterministic_response,)),
         )
         _record_cli_agent_turn(session, message, deterministic_response)
-        return build_llm_run_info(
-            session=session,
-            prompt=message,
-            response_text=deterministic_response,
+        return LlmRunInfo(
             model="deterministic_command_selection",
             provider="local",
+            latency_ms=0,
+            response_text=deterministic_response,
         )
 
     try:

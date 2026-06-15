@@ -155,8 +155,8 @@ def _coerce_usage_tokens(
     else:
         raw_in = getattr(usage, input_key, None)
         raw_out = getattr(usage, output_key, None)
-    inp = int(raw_in) if isinstance(raw_in, int) else None
-    out = int(raw_out) if isinstance(raw_out, int) else None
+    inp = int(raw_in) if isinstance(raw_in, (int, float)) else None
+    out = int(raw_out) if isinstance(raw_out, (int, float)) else None
     return inp, out
 
 
