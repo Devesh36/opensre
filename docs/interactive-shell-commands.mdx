@@ -1,0 +1,85 @@
+---
+title: 'Interactive Shell Commands'
+description: 'Quick reference for common slash commands in the opensre REPL — session cost, status, help, and more'
+---
+
+Start the interactive shell with `opensre` (TTY required). Type a slash command at the prompt, or describe what you want in plain language and the planner can map intent to the right command.
+
+Run `/help` anytime for the full, up-to-date command list grouped by category.
+
+## Quick reference
+
+| Command | What it does |
+| --- | --- |
+| `/help` | List commands or show help for one command (`/help /model`, `/help tasks`) |
+| `/status` | Session summary — interactions, alerts, provider, reasoning effort, trust mode |
+| `/cost` | Token usage and LLM call count for the current session |
+| `/effort` | Set or show reasoning effort (`low`, `medium`, `high`, `xhigh`, `max`) |
+| `/clear` | Clear the screen and re-render the banner |
+| `/exit` | Leave the interactive shell (`/quit` is an alias) |
+| `/health` | Integration and agent health |
+| `/investigate` | Run an investigation from the REPL |
+| `/integrations` | List, verify, or manage integrations |
+| `/model` | Show or switch LLM provider and models |
+| `/sessions` | List recent REPL sessions |
+| `/resume <id>` | Restore a past session's conversation context |
+
+For session persistence in depth, see [Session History](/sessions). For `/history` and `/privacy`, see [Interactive Shell Privacy](/interactive-shell-privacy).
+
+---
+
+## Session cost — `/cost`
+
+Show how much LLM usage the **current REPL session** has accumulated:
+
+```
+/cost
+```
+
+Typical output includes:
+
+| Field | Meaning |
+| --- | --- |
+| `history entries` | Lines recorded in this session's history |
+| `llm calls` | Number of LLM turns counted this session |
+| `input tokens` / `output tokens` | Totals for prompt and completion usage |
+
+When the provider returns usage metadata (for example on planner `invoke` calls), those counts are **measured**. Streaming chat and help paths **estimate** tokens from text length (roughly four characters per token). If any estimates are included, the table title notes `(includes estimates)` and measured vs estimated splits appear on the token rows.
+
+Token totals reset when you start a new session (`/new`) or clear session state; `/cost` does not show billing from your cloud provider — only what OpenSRE tracked locally for this shell session.
+
+---
+
+## Session status — `/status`
+
+```
+/status
+```
+
+Shows interaction count, incoming alerts, last investigation, trust mode, reasoning effort, active provider, and any accumulated infra context keys.
+
+---
+
+## Reasoning effort — `/effort`
+
+For OpenAI and Codex providers, set how much reasoning the model applies in this REPL session:
+
+```
+/effort high
+/effort
+```
+
+Bare `/effort` prints the current level and usage. `/status` includes the same field. Other providers ignore this setting. You can also set `OPENSRE_REASONING_EFFORT` in the environment for non-interactive defaults. See [LLM providers](/llm-providers).
+
+---
+
+## Help — `/help`
+
+```
+/help
+/help /model
+/help investigation
+/help all
+```
+
+In a TTY, bare `/help` opens an interactive picker. Use `/help <command>` or `/help <category>` for details on one topic.
