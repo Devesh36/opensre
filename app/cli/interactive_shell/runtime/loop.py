@@ -114,6 +114,9 @@ class StreamingConsole(Console):
     def update_streaming_progress(self, bytes_received: int) -> None:
         self._spinner.bytes_in = bytes_received
 
+    def set_spinner_phase(self, phase: str) -> None:
+        self._spinner.set_phase(phase)
+
     @property
     def cancel_requested(self) -> bool:
         return self._cancel_event.is_set()

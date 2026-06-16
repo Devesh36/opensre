@@ -821,9 +821,7 @@ class TestSpinnerState:
         spinner.start()
         spinner.bytes_in = 1234 * _CHARS_PER_TOKEN  # = 1234 tokens
         rendered = _strip_ansi(spinner.inline_spinner_ansi())
-        # The verb is randomly picked from ``_THINKING_VERBS`` per turn —
-        # any of them followed by ``…`` is acceptable.
-        assert any(f"{verb}…" in rendered for verb in spinner._THINKING_VERBS)
+        assert "planning…" in rendered
         # 1234 tokens → "1.2k" via format_token_count_short.
         assert "1.2k tokens" in rendered
         # Spinner glyph from the brail palette.
@@ -853,19 +851,24 @@ class TestSpinnerState:
         rendered = _strip_ansi(spinner.inline_spinner_ansi())
         assert "tokens" in rendered
 
-    def test_streaming_inline_spinner_verb_stays_constant_across_calls(self) -> None:
-        """A turn's verb is fixed at ``start()`` so the indicator
-        doesn't flicker between words mid-stream."""
+    def test_streaming_inline_spinner_phase_stays_constant_across_calls(self) -> None:
+        """A turn's phase is fixed until ``set_phase`` so the indicator
+        doesn't flicker between labels mid-stream."""
         spinner = loop_state.SpinnerState()
         spinner.start()
-        verbs_seen: set[str] = set()
+        phases_seen: set[str] = set()
         for _ in range(20):
             rendered = _strip_ansi(spinner.inline_spinner_ansi())
-            for verb in spinner._THINKING_VERBS:
-                if f"{verb}…" in rendered:
-                    verbs_seen.add(verb)
-                    break
-        assert len(verbs_seen) == 1, f"verb changed mid-turn — saw {verbs_seen}"
+            if "planning…" in rendered:
+                phases_seen.add("planning")
+        assert phases_seen == {"planning"}, f"phase changed mid-turn — saw {phases_seen}"
+
+    def test_set_phase_updates_inline_spinner_label(self) -> None:
+        spinner = loop_state.SpinnerState()
+        spinner.start()
+        spinner.set_phase("running /health")
+        rendered = _strip_ansi(spinner.inline_spinner_ansi())
+        assert "running /health…" in rendered
 
     def test_inline_spinner_glyph_animates_across_calls(self) -> None:
         """Each render advances the frame index — animation in place."""
@@ -1005,6 +1008,22 @@ class TestStreamingConsole:
         )
         console.update_streaming_progress(4096)
         assert spinner.bytes_in == 4096
+
+    def test_set_spinner_phase_writes_to_spinner_state(self) -> None:
+        import threading as _threading
+
+        spinner = loop_state.SpinnerState()
+        spinner.start()
+        console = loop_module.StreamingConsole(
+            spinner,
+            _threading.Event(),
+            highlight=False,
+            force_terminal=True,
+            color_system=None,
+        )
+        console.set_spinner_phase("streaming answer")
+        rendered = _strip_ansi(spinner.inline_spinner_ansi())
+        assert "streaming answer…" in rendered
 
     def test_cancel_requested_reflects_event_state(self) -> None:
         import threading as _threading

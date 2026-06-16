@@ -19,6 +19,10 @@ from app.cli.interactive_shell.prompt_logging import PromptRecorder
 from app.cli.interactive_shell.prompting import follow_up as _follow_up
 from app.cli.interactive_shell.routing.types import RouteDecision
 from app.cli.interactive_shell.runtime.session import ReplSession
+from app.cli.interactive_shell.runtime.spinner_phases import (
+    SPINNER_PHASE_RUNNING_INVESTIGATION,
+    set_spinner_phase,
+)
 from app.cli.interactive_shell.ui import DIM, ERROR, WARNING
 from app.cli.support.errors import OpenSREError
 from app.cli.support.exception_reporting import report_exception
@@ -88,6 +92,7 @@ def run_new_alert(
 
     task = session.task_registry.create(TaskKind.INVESTIGATION, command="free-text investigation")
     task.mark_running()
+    set_spinner_phase(console, SPINNER_PHASE_RUNNING_INVESTIGATION)
     try:
         with (
             track_investigation(

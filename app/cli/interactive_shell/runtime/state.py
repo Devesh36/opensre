@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import random
 import threading
 import time
 from dataclasses import dataclass, field
 
 from prompt_toolkit.application.current import get_app_or_none
 
+from app.cli.interactive_shell.runtime.spinner_phases import SPINNER_PHASE_PLANNING
 from app.cli.interactive_shell.ui import ANSI_DIM, ANSI_RESET, PROMPT_ACCENT_ANSI
 from app.cli.interactive_shell.ui.streaming import _CHARS_PER_TOKEN, format_token_count_short
 
@@ -87,33 +87,24 @@ class SpinnerState:
     """Mutable state read by prompt callbacks for toolbar + inline spinner."""
 
     _SPINNER_FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
-    _THINKING_VERBS = (
-        "thinking",
-        "pondering",
-        "exploring",
-        "reasoning",
-        "considering",
-        "analysing",
-        "investigating",
-        "deliberating",
-        "ruminating",
-        "deducing",
-        "noodling",
-    )
 
     def __init__(self) -> None:
         self.streaming: bool = False
         self.started_at: float = 0.0
         self.bytes_in: int = 0
         self._frame_idx: int = 0
-        self._verb: str = self._THINKING_VERBS[0]
+        self._phase: str = SPINNER_PHASE_PLANNING
 
     def start(self) -> None:
         self.streaming = True
         self.started_at = time.monotonic()
         self.bytes_in = 0
         self._frame_idx = 0
-        self._verb = random.choice(self._THINKING_VERBS)
+        self._phase = SPINNER_PHASE_PLANNING
+
+    def set_phase(self, phase: str) -> None:
+        if phase.strip():
+            self._phase = phase.strip()
 
     def stop(self) -> None:
         self.streaming = False
@@ -152,7 +143,7 @@ class SpinnerState:
         else:
             suffix = f" ({elapsed:.0f}s)"
         return (
-            f"{PROMPT_ACCENT_ANSI}{glyph} {self._verb}…{ANSI_RESET}"
+            f"{PROMPT_ACCENT_ANSI}{glyph} {self._phase}…{ANSI_RESET}"
             f"{ANSI_DIM}{suffix}  esc to cancel{ANSI_RESET}"
         )
 

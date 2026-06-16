@@ -27,6 +27,10 @@ from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.t
     ToolContext,
 )
 from app.cli.interactive_shell.runtime import ReplSession
+from app.cli.interactive_shell.runtime.spinner_phases import (
+    set_spinner_phase,
+    spinner_phase_for_action,
+)
 from app.cli.interactive_shell.ui import DIM, print_planned_actions
 from app.cli.interactive_shell.ui.streaming import render_response_header
 
@@ -239,6 +243,10 @@ def _execute_planned_actions(
         if getattr(console, "cancel_requested", False):
             console.print(f"[{DIM}](remaining actions cancelled)[/]")
             break
+        set_spinner_phase(
+            console,
+            spinner_phase_for_action(kind=action.kind, content=action.content),
+        )
         console.print()
         tool_name = ACTION_KIND_TO_TOOL.get(action.kind)
         if tool_name is None:

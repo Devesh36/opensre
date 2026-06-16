@@ -32,6 +32,10 @@ from collections.abc import Iterator
 from rich.console import Console
 from rich.markdown import Markdown
 
+from app.cli.interactive_shell.runtime.spinner_phases import (
+    SPINNER_PHASE_STREAMING_ANSWER,
+    set_spinner_phase,
+)
 from app.cli.interactive_shell.ui.theme import BOLD_BRAND, DIM, MARKDOWN_THEME
 
 # Approximate characters per token. Single source of truth for the
@@ -76,7 +80,7 @@ def format_token_count_short(token_count: int) -> str:
 
     Shared with :class:`app.cli.interactive_shell.runtime.state.SpinnerState` so
     the streaming footer (``· 9.5s · ↓ 1.2k tokens``) and the live
-    spinner (``⠋ thinking… (5s · ↓ 1.2k tokens)``) format identically.
+    spinner (``⠋ streaming answer… (5s · ↓ 1.2k tokens)``) format identically.
     """
     if token_count >= 1000:
         return f"{token_count / 1000:.1f}k"
@@ -152,9 +156,10 @@ def stream_to_console(
     # Markdown via ``console.print(Markdown(...))``. Visible "streaming"
     # is per-paragraph rather than per-chunk — a true live re-render
     # would need cursor manipulation that fights ``patch_stdout``. The
-    # spinner (``⠋ thinking… (Ns · ↓ X tokens)``) ticks during long
+    # spinner (``⠋ streaming answer… (Ns · ↓ X tokens)``) ticks during long
     # paragraphs to confirm chunks are still arriving, and code blocks
     # are kept whole (we never split on ``\n\n`` while a fence is open).
+    set_spinner_phase(console, SPINNER_PHASE_STREAMING_ANSWER)
     buffer: list[str] = list(peeked)
     para_buffer: list[str] = list(peeked)
     started = time.monotonic()
