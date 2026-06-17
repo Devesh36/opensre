@@ -157,7 +157,7 @@ Bare invocation opens a picker or submenu:
 
 ## Using `/help`
 
-```
+```text
 /help
 /help /model
 /help investigation
@@ -184,7 +184,7 @@ Help categories mirror the REPL grouping: Quick Access, Session, Integrations/Mo
 
 Shows a snapshot of the **current** REPL session:
 
-```
+```text
 /status
 ```
 
@@ -207,13 +207,13 @@ Use `/status` for **session** state. Use `/health` for **integration connectivit
 
 Shows LLM usage tracked **locally** for the current REPL session. This is not cloud-provider billing and does not read your vendor invoice.
 
-```
+```text
 /cost
 ```
 
 Example output (measured + estimated mix):
 
-```
+```text
   Session cost (includes estimates)
 
   history entries     12
@@ -245,7 +245,7 @@ Token totals reset on `/new` or when session identity is rotated. They do **not*
 
 Displays key/value infra metadata collected during investigations and chat — typically `service`, `cluster`, `region`, or similar fields extracted from alert text and investigation state.
 
-```
+```text
 /context
 ```
 
@@ -255,7 +255,7 @@ Context is **inherited** across investigations in the same session (and restored
 
 Set reasoning depth for **OpenAI and Codex** providers in this REPL session only.
 
-```
+```text
 /effort high
 /effort
 ```
@@ -275,7 +275,7 @@ Other providers (Anthropic, Ollama, etc.) ignore `/effort`; the shell prints a h
 
 Trust mode skips execution confirmation prompts for **elevated** commands (`/save`, `/watch`, `/cancel`, `/uninstall`, integration remove, etc.).
 
-```
+```text
 /trust on
 /trust off
 /trust
@@ -291,7 +291,7 @@ In a TTY, bare `/trust` opens an interactive on/off menu. Trust mode is a **sess
 
 Toggle `TRACER_VERBOSE` logging for the REPL process (deeper internal logs to stderr).
 
-```
+```text
 /verbose on
 /verbose off
 /verbose
@@ -301,7 +301,7 @@ Toggle `TRACER_VERBOSE` logging for the REPL process (deeper internal logs to st
 
 Clears the terminal and re-renders the OpenSRE banner. Does **not** reset session state, token usage, LLM conversation context, or accumulated infra context.
 
-```
+```text
 /clear
 ```
 
@@ -309,7 +309,7 @@ Clears the terminal and re-renders the OpenSRE banner. Does **not** reset sessio
 
 Trims **in-memory** session history to the last 20 entries. Does not affect persisted session files under `~/.opensre/sessions/`, up-arrow recall file, or `cli_agent_messages`.
 
-```
+```text
 /compact
 ```
 
@@ -319,11 +319,11 @@ If you already have ≤20 entries, the command reports nothing to compact.
 
 List up to **20** recent sessions stored on disk, newest first:
 
-```
+```text
 /sessions
 ```
 
-```
+```text
   Recent sessions
 
    #  Session ID  Name                           Started            Duration  Turns  Investigations
@@ -345,7 +345,7 @@ The current row updates **duration** live. Sessions with no name show `(current)
 
 Restore LLM conversation context and accumulated infra context from a previous session.
 
-```
+```text
 /resume 9b2e4f7a
 /resume redis
 /resume
@@ -382,11 +382,11 @@ If turn-detail records were never written (prompt logging disabled), history rep
 
 Rotate to a **new session file** while keeping the current LLM conversation thread and accumulated context.
 
-```
+```text
 /new
 ```
 
-```
+```text
 new session started — conversation context carried forward.
   14 messages in context · type to continue
 ```
@@ -403,7 +403,7 @@ Use `/new` after a long `/resume` so `/sessions` stays tidy without losing your 
 
 `/exit`, `/quit`, double **Ctrl+C**, or **Ctrl+D** (empty prompt) all print:
 
-```
+```text
 Resume this session with:
 /resume 3f8a1c2d
 goodbye.
@@ -425,7 +425,7 @@ Investigations inherit [accumulated context](#context) from earlier runs in the 
 
 ### `/investigate`
 
-```
+```text
 /investigate alert.json
 /investigate generic
 /investigate sample:datadog
@@ -459,7 +459,7 @@ Investigations inherit [accumulated context](#context) from earlier runs in the 
 
 Print starter alert JSON to stdout — copy, edit, save, then `/investigate your-file.json`.
 
-```
+```text
 /template generic
 /template datadog
 /template
@@ -478,7 +478,7 @@ Print starter alert JSON to stdout — copy, edit, save, then `/investigate your
 
 Reprint the root cause and report sections from the most recent successful investigation in **this session**.
 
-```
+```text
 /last
 ```
 
@@ -488,7 +488,7 @@ Sections rendered when present: **Root Cause**, **Report** (from `problem_md` or
 
 Write the last investigation to disk. Requires confirmation unless trust mode is on.
 
-```
+```text
 /save report.md
 /save out.json
 /save ./rca/checkout-502.json
@@ -518,7 +518,7 @@ Parent directories must exist or be creatable; write failures print the underlyi
 
 Read-only pass/fail report for the local OpenSRE agent, LLM connectivity, and each configured integration.
 
-```
+```text
 /health
 ```
 
@@ -526,7 +526,7 @@ Runs live verification against the integration store. Use before incidents to co
 
 ### `/integrations`
 
-```
+```text
 /integrations
 /integrations list
 /integrations verify
@@ -549,7 +549,7 @@ Bare `/integrations` opens an interactive menu in a TTY with service pickers for
 
 MCP-capable integrations only (subset of the full integration catalog).
 
-```
+```text
 /mcp list
 /mcp connect github
 /mcp disconnect github
@@ -565,7 +565,7 @@ MCP-capable integrations only (subset of the full integration catalog).
 
 Show or change LLM provider and models. Updates `~/.opensre/.env` (or your configured env path) and resets in-process LLM caches.
 
-```
+```text
 /model show
 /model set openai gpt-4.1
 /model set anthropic claude-sonnet-4-20250514 --toolcall-model claude-sonnet-4-20250514
@@ -596,7 +596,7 @@ See [LLM providers](/llm-providers).
 
 List tools available to investigation and chat surfaces in this build (name, source, surfaces).
 
-```
+```text
 /tools
 /tools list
 ```
@@ -611,7 +611,7 @@ Command **history** (up-arrow recall) is separate from **session** history (`/se
 
 ### `/history`
 
-```
+```text
 /history
 /history clear
 /history off
@@ -635,7 +635,7 @@ Bare `/history` opens an interactive menu in a TTY (presets: 100, 500, 1000, 500
 
 ### `/privacy`
 
-```
+```text
 /privacy
 ```
 
@@ -669,13 +669,13 @@ Long-running work is tracked in a per-session task registry surfaced by `/tasks`
 
 ### `/tasks`
 
-```
+```text
 /tasks
 ```
 
 Example:
 
-```
+```text
   Tasks
 
   id      kind           status     started (UTC)     duration  detail
@@ -687,7 +687,7 @@ Shows up to **50** recent tasks, newest first. Use the **id** column (short pref
 
 ### `/cancel`
 
-```
+```text
 /cancel abc12
 ```
 
@@ -700,7 +700,7 @@ Shows up to **50** recent tasks, newest first. Use the **id** column (short pref
 
 Prints guidance only — does not kill processes:
 
-```
+```text
 /stop
 ```
 
@@ -718,7 +718,7 @@ Monitor a local process and send **Telegram** alarms when CPU, memory, or runtim
 
 ### `/watch`
 
-```
+```text
 /watch 12345 --max-cpu 80 --max-rss 512M --max-runtime 30m --cooldown 5m --interval 2s --once
 ```
 
@@ -734,13 +734,13 @@ Monitor a local process and send **Telegram** alarms when CPU, memory, or runtim
 
 On start:
 
-```
+```text
 task abc12 started.
 ```
 
 When a threshold fires (Telegram configured):
 
-```
+```text
 [task abc12] alarm fired: max_cpu … (telegram delivered)
 ```
 
@@ -755,7 +755,7 @@ Quoted values are supported: `/watch 12345 --max-cpu "80"`.
 
 ### `/watches`
 
-```
+```text
 /watches
 ```
 
@@ -763,7 +763,7 @@ Watchdog-only view with columns: id, pid, status, started, thresholds (from comm
 
 ### `/unwatch`
 
-```
+```text
 /unwatch abc12
 ```
 
@@ -773,7 +773,7 @@ Cancels a **watchdog** task by task id. Using `/cancel` also works; `/unwatch` v
 
 CLI-parity syntax (subprocess to `opensre watchdog`):
 
-```
+```text
 /watchdog --pid 12345 --max-rss 1G --max-cpu 80
 ```
 
@@ -787,7 +787,7 @@ Fleet coordination is documented further on [Agents](/agents). Register discover
 
 ### `/agents`
 
-```
+```text
 /agents
 /agents budget
 /agents budget cursor-agent 5.00
@@ -820,7 +820,7 @@ Fleet coordination is documented further on [Agents](/agents). Register discover
 
 ### `/alerts`
 
-```
+```text
 /alerts
 ```
 
@@ -843,7 +843,7 @@ These spawn `opensre …` subprocesses. Output is captured into the REPL buffer 
 
 ### `/onboard`
 
-```
+```text
 /onboard
 /onboard local_llm
 ```
@@ -852,7 +852,7 @@ First-run setup: LLM keys, integrations, Telegram, alert listener. Requires excl
 
 ### `/remote`
 
-```
+```text
 /remote health
 /remote investigate
 /remote ops
@@ -864,7 +864,7 @@ Operate remote deployed OpenSRE agents (EC2, Nitro, hosted runtime). See [Remote
 
 ### `/config`
 
-```
+```text
 /config show
 /config set interactive.history.max_entries 1000
 ```
@@ -873,7 +873,7 @@ Read/write `~/.opensre/config.yml`. Prefer env vars for secrets; use config for 
 
 ### `/cron`
 
-```
+```text
 /cron list
 /cron add
 /cron remove <id>
@@ -885,7 +885,7 @@ Scheduled investigation or report delivery. See [Cron](/cron).
 
 ### `/messaging`
 
-```
+```text
 /messaging pair
 /messaging allow
 /messaging revoke
@@ -896,7 +896,7 @@ Telegram bot pairing and sender allowlist — required for `/watch` alarms and s
 
 ### `/hermes`
 
-```
+```text
 /hermes watch
 ```
 
@@ -904,7 +904,7 @@ Tail Hermes logs and route classified incidents. See [Hermes](/hermes) and [Herm
 
 ### `/guardrails`
 
-```
+```text
 /guardrails audit
 /guardrails init
 /guardrails rules
@@ -922,7 +922,7 @@ Related: [Masking](/masking).
 
 ### `/tests`
 
-```
+```text
 /tests
 /tests list
 /tests run <test_id>
@@ -942,7 +942,7 @@ Synthetic tests can run for a long time; default timeout is generous — use `/c
 
 ### `/update`
 
-```
+```text
 /update
 ```
 
@@ -950,7 +950,7 @@ Checks PyPI and upgrades OpenSRE in-place (5-minute network timeout). Non-zero e
 
 ### `/debug`
 
-```
+```text
 /debug sentry
 ```
 
@@ -958,7 +958,7 @@ Targeted smoke tests (Sentry, etc.) — subcommands match `opensre debug --help`
 
 ### `/uninstall`
 
-```
+```text
 /uninstall
 ```
 
@@ -972,7 +972,7 @@ Removes OpenSRE and local data. **Destructive** — confirmation required unless
 
 Environment diagnostic distinct from `/health`:
 
-```
+```text
 /doctor
 ```
 
@@ -982,7 +982,7 @@ Use **`/doctor`** before first install debugging; use **`/health`** before an in
 
 ### `/version`
 
-```
+```text
 /version
 ```
 
@@ -994,7 +994,7 @@ Use **`/doctor`** before first install debugging; use **`/health`** before an in
 
 ### `/exit` and `/quit`
 
-```
+```text
 /exit
 /quit
 ```
@@ -1013,7 +1013,7 @@ Clean shutdown with `/resume` hint. Prefer over killing the terminal so session 
 
 Non-TTY: elevated commands **fail closed** (error message, no side effect).
 
-```
+```text
 /trust on   # skip prompts for this session
 /trust off  # restore prompts
 ```
@@ -1057,7 +1057,7 @@ Compound requests ("health then integrations") execute as an ordered sequence of
 
 ### First-time setup
 
-```
+```text
 /onboard
 /health
 /integrations verify
@@ -1066,7 +1066,7 @@ Compound requests ("health then integrations") execute as an ordered sequence of
 
 ### Incident triage (local)
 
-```
+```text
 /status
 /alerts
 /health
@@ -1074,7 +1074,7 @@ Compound requests ("health then integrations") execute as an ordered sequence of
 
 Paste alert text or:
 
-```
+```text
 /investigate ./alerts/prod-502.json
 /last
 /save ./rca/prod-502.md
@@ -1082,20 +1082,20 @@ Paste alert text or:
 
 ### Pick up yesterday's thread
 
-```
+```text
 /sessions
 /resume 9b2e4f7a
 ```
 
 Continue chatting, then optionally:
 
-```
+```text
 /new
 ```
 
 ### Switch model mid-session
 
-```
+```text
 /model set anthropic claude-sonnet-4-20250514
 /effort high
 /cost
@@ -1103,7 +1103,7 @@ Continue chatting, then optionally:
 
 ### Monitor a runaway process
 
-```
+```text
 /watch <pid> --max-cpu 90 --max-rss 2G --cooldown 10m
 /watches
 /unwatch <task_id>
@@ -1111,7 +1111,7 @@ Continue chatting, then optionally:
 
 ### Debug integration failures
 
-```
+```text
 /integrations show datadog
 /doctor
 /verbose on
