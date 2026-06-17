@@ -176,10 +176,10 @@ class TestCompletionPreviewHint:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         first = Completion(
-            "/help",
+            "/plugin-cmd",
             start_position=-1,
-            display="/help",
-            display_meta="Show available commands.",
+            display="/plugin-cmd",
+            display_meta="Plugin-provided slash command.",
         )
         app = _FakeApp(
             current_buffer=_FakeBuffer(
@@ -194,7 +194,7 @@ class TestCompletionPreviewHint:
         monkeypatch.setattr(prompt_surface, "get_app_or_none", lambda: app)
 
         rendered = _strip_ansi(completion_preview_hint_ansi())
-        assert rendered == "/help — Show available commands."
+        assert rendered == "/plugin-cmd — Plugin-provided slash command."
 
     def test_clips_preview_to_terminal_width(self, monkeypatch: pytest.MonkeyPatch) -> None:
         completion = Completion(

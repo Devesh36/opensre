@@ -210,7 +210,7 @@ def _resolve_completion_preview(
         return None
 
     display = completion.display_text or completion.text
-    if _slash_command_name(completion) is not None:
+    if cmd_name is not None:
         label = display
     else:
         parts = buffer_text.split()
