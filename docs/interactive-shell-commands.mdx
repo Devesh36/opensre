@@ -357,9 +357,11 @@ Restore LLM conversation context and accumulated infra context from a previous s
 | Name substring | Match when ≥3 characters and exactly one session matches (e.g. `/resume redis`) |
 | Bare `/resume` | Interactive numbered picker of recent sessions (TTY) |
 
-On success, OpenSRE:
+**Current session:** If the ID prefix matches the session you are already in, `/resume` is a no-op — OpenSRE prints a hint to pick a previous session from `/sessions`.
 
-1. Switches the active session file to the target session (or reopens it if resuming into the same ID)
+When you resume a **different** session, OpenSRE:
+
+1. Switches the active session file to the target session
 2. Restores `cli_agent_messages` so the assistant remembers prior turns
 3. Restores `accumulated_context` keys
 4. Reprints conversation history (user prompts, assistant replies, slash commands)
@@ -374,7 +376,7 @@ On success, OpenSRE:
 | Token usage / `/cost` counters | No — fresh counters for the resumed session identity |
 | In-memory history count | Yes — turn stubs from the saved session |
 
-**Warnings:** Resuming replaces the current session's LLM context if messages already exist. Resuming the **active** session ID is a no-op with a hint to pick another from `/sessions`.
+**Warning:** Resuming a different session replaces the current session's LLM context if messages already exist.
 
 If turn-detail records were never written (prompt logging disabled), history replay may show prompts without assistant responses — enable prompt logging for richer resume display. See [Session History](/sessions).
 
