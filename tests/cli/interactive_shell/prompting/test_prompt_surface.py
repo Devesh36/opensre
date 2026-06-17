@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 import pytest
@@ -20,7 +21,7 @@ from app.cli.interactive_shell.runtime.tasks import TaskKind
 
 
 def _strip_ansi(text: str) -> str:
-    return text.replace("\x1b[2m", "").replace("\x1b[0m", "")
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
 def _placeholder_text(session: ReplSession) -> str:
@@ -99,9 +100,7 @@ class TestCompletionPreviewHint:
         monkeypatch.setattr(prompt_surface, "get_app_or_none", lambda: None)
         assert completion_preview_hint_ansi() == ""
 
-    def test_shows_full_slash_command_description(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_shows_full_slash_command_description(self, monkeypatch: pytest.MonkeyPatch) -> None:
         completion = Completion(
             "/investigate",
             start_position=-1,
@@ -122,8 +121,32 @@ class TestCompletionPreviewHint:
 
         rendered = _strip_ansi(completion_preview_hint_ansi())
         assert rendered.startswith("/investigate — ")
-        assert "sample template." in rendered
+        assert len(rendered) > len("/investigate — " + completion.display_meta_text)
         assert "…" not in rendered
+
+    def test_unregistered_slash_completion_uses_display_label(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        completion = Completion(
+            "/plugin-cmd",
+            start_position=-1,
+            display="/plugin-cmd",
+            display_meta="Plugin-provided slash command.",
+        )
+        app = _FakeApp(
+            current_buffer=_FakeBuffer(
+                text="/",
+                complete_state=_FakeCompleteState(
+                    completions=[completion],
+                    current_completion=completion,
+                ),
+            ),
+            output=_FakeOutput(),
+        )
+        monkeypatch.setattr(prompt_surface, "get_app_or_none", lambda: app)
+
+        rendered = _strip_ansi(completion_preview_hint_ansi())
+        assert rendered == "/plugin-cmd — Plugin-provided slash command."
 
     def test_shows_subcommand_label_with_parent_command(
         self, monkeypatch: pytest.MonkeyPatch

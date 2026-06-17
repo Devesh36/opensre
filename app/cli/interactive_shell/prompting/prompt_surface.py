@@ -210,8 +210,11 @@ def _resolve_completion_preview(
         return None
 
     display = completion.display_text or completion.text
-    parts = buffer_text.split()
-    label = f"{parts[0]} {display}" if parts and parts[0].startswith("/") else display
+    if _slash_command_name(completion) is not None:
+        label = display
+    else:
+        parts = buffer_text.split()
+        label = f"{parts[0]} {display}" if parts and parts[0].startswith("/") else display
     return label, meta
 
 
