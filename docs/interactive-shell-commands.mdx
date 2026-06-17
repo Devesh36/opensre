@@ -1,85 +1,745 @@
 ---
 title: 'Interactive Shell Commands'
-description: 'Quick reference for common slash commands in the opensre REPL — session cost, status, help, and more'
+description: 'Complete reference for every slash command in the OpenSRE REPL — session control, investigations, integrations, tasks, watchdogs, and more'
 ---
 
-Start the interactive shell with `opensre` (TTY required). Type a slash command at the prompt, or describe what you want in plain language and the planner can map intent to the right command.
+Start the interactive shell with `opensre` (TTY required). Type a slash command at the prompt, or describe what you want in plain language — the action planner can route intent to the right command.
 
-Run `/help` anytime for the full, up-to-date command list grouped by category.
+Run `/help` anytime for the live command list grouped by category. In a TTY, bare `/help` opens an interactive picker; selecting a command runs it directly.
+
+<Info>
+  Commands marked **elevated** may prompt for confirmation unless [trust mode](#trust-mode) is on. Non-TTY sessions fail closed on elevated actions.
+</Info>
 
 ## Quick reference
 
+### Help and exit
+
 | Command | What it does |
 | --- | --- |
-| `/help` | List commands or show help for one command (`/help /model`, `/help tasks`) |
-| `/status` | Session summary — interactions, alerts, provider, reasoning effort, trust mode |
-| `/cost` | Token usage and LLM call count for the current session |
-| `/effort` | Set or show reasoning effort (`low`, `medium`, `high`, `xhigh`, `max`) |
-| `/clear` | Clear the screen and re-render the banner |
-| `/exit` | Leave the interactive shell (`/quit` is an alias) |
-| `/health` | Integration and agent health |
-| `/investigate` | Run an investigation from the REPL |
-| `/integrations` | List, verify, or manage integrations |
-| `/model` | Show or switch LLM provider and models |
-| `/sessions` | List recent REPL sessions |
-| `/resume <id>` | Restore a past session's conversation context |
+| `/help` | List commands or show help for one command or category |
+| `/?` | Shortcut for `/help` |
+| `/exit` | Leave the interactive shell |
+| `/quit` | Alias for `/exit` |
 
-For session persistence in depth, see [Session History](/sessions). For `/history` and `/privacy`, see [Interactive Shell Privacy](/interactive-shell-privacy).
+### Session
 
----
-
-## Session cost — `/cost`
-
-Show how much LLM usage the **current REPL session** has accumulated:
-
-```
-/cost
-```
-
-Typical output includes:
-
-| Field | Meaning |
+| Command | What it does |
 | --- | --- |
-| `history entries` | Lines recorded in this session's history |
-| `llm calls` | Number of LLM turns counted this session |
-| `input tokens` / `output tokens` | Totals for prompt and completion usage |
+| `/status` | Session summary — interactions, alerts, provider, effort, trust mode |
+| `/cost` | Token usage and LLM call count for the current session |
+| `/context` | Infra metadata accumulated during the session |
+| `/effort` | Set or show reasoning effort (`low` … `max`) |
+| `/trust` | Enable or disable trust mode (skip confirmation prompts) |
+| `/verbose` | Toggle verbose logging |
+| `/clear` | Clear the screen and re-render the banner |
+| `/compact` | Trim in-memory session history to the last 20 entries |
+| `/sessions` | List recent REPL sessions on disk |
+| `/resume <id>` | Restore a past session's conversation context |
+| `/new` | Start a new session file while keeping LLM context |
 
-When the provider returns usage metadata (for example on planner `invoke` calls), those counts are **measured**. Streaming chat and help paths **estimate** tokens from text length (roughly four characters per token). If any estimates are included, the table title notes `(includes estimates)` and measured vs estimated splits appear on the token rows.
+### Investigation
 
-Token totals reset when you start a new session (`/new`) or clear session state; `/cost` does not show billing from your cloud provider — only what OpenSRE tracked locally for this shell session.
+| Command | What it does |
+| --- | --- |
+| `/investigate` | Run an RCA from a file path or sample template |
+| `/template` | Print a starter alert JSON template |
+| `/last` | Reprint the most recent investigation report |
+| `/save <path>` | Export the last investigation to a file **elevated** |
+
+### Integrations, models, and tools
+
+| Command | What it does |
+| --- | --- |
+| `/health` | Integration and agent health check |
+| `/integrations` | List, verify, show, setup, or remove integrations |
+| `/mcp` | List, connect, or disconnect MCP servers |
+| `/model` | Show or switch LLM provider and models |
+| `/tools` | List registered investigation and chat tools |
+
+### Privacy and history
+
+| Command | What it does |
+| --- | --- |
+| `/history` | Show or manage persisted command history |
+| `/privacy` | History persistence, redaction status, and threat model |
+
+### Tasks and background work
+
+| Command | What it does |
+| --- | --- |
+| `/tasks` | List recent and in-flight background tasks |
+| `/cancel <id>` | Cancel a running task by id **elevated** |
+| `/stop` | Guidance for stopping investigations and background work |
+
+### Watchdog
+
+| Command | What it does |
+| --- | --- |
+| `/watch` | Watch a process and send Telegram threshold alarms **elevated** |
+| `/watches` | List active watchdog tasks with latest samples |
+| `/unwatch <id>` | Stop a watchdog task by id **elevated** |
+| `/watchdog` | CLI-parity wrapper for the watchdog monitor |
+
+### Agents and alerts
+
+| Command | What it does |
+| --- | --- |
+| `/agents` | View and manage the local AI agent fleet |
+| `/alerts` | Alert listener inbox status |
+
+### CLI parity
+
+These commands delegate to the same Click CLI you would run outside the REPL.
+
+| Command | What it does |
+| --- | --- |
+| `/onboard` | Interactive onboarding wizard |
+| `/remote` | Connect to and operate remote deployed agents |
+| `/config` | Show or edit `~/.opensre/config.yml` |
+| `/cron` | Manage scheduled delivery jobs |
+| `/messaging` | Telegram pairing and allowlist |
+| `/hermes` | Hermes log tailing and incident routing |
+| `/guardrails` | Sensitive-information guardrail rules |
+| `/tests` | Browse and run inventoried tests |
+| `/update` | Check for updates and upgrade OpenSRE |
+| `/debug` | Targeted runtime diagnostics |
+| `/uninstall` | Remove OpenSRE and local data **elevated** |
+
+### System
+
+| Command | What it does |
+| --- | --- |
+| `/doctor` | Full local environment diagnostic |
+| `/version` | OpenSRE, Python, and OS versions |
 
 ---
 
-## Session status — `/status`
+## Using `/help`
+
+```
+/help
+/help /model
+/help investigation
+/help tasks
+/help all
+```
+
+| Form | Result |
+| --- | --- |
+| `/help` | Interactive picker in a TTY; category index otherwise |
+| `/help <command>` | Detailed usage for one command (e.g. `/help /watch`) |
+| `/help <category>` | All commands in a section (`investigation`, `session`, `tasks`, …) |
+| `/help all` | Full command index |
+
+Help categories mirror the REPL grouping: Quick Access, Session, Integrations/Models/Tools, Investigation, Privacy, Tasks, Agents, Alerts, CLI parity, and System.
+
+---
+
+## Session commands
+
+### `/status`
+
+Shows interaction count, incoming alerts (with age of the most recent), whether an investigation ran this session, trust mode, reasoning effort, active LLM provider, grounding cache stats, and any accumulated infra context keys.
 
 ```
 /status
 ```
 
-Shows interaction count, incoming alerts, last investigation, trust mode, reasoning effort, active provider, and any accumulated infra context keys.
+### `/cost`
 
----
+Shows LLM usage tracked **locally** for the current REPL session. This is not cloud-provider billing.
 
-## Reasoning effort — `/effort`
+```
+/cost
+```
 
-For OpenAI and Codex providers, set how much reasoning the model applies in this REPL session:
+| Field | Meaning |
+| --- | --- |
+| `history entries` | Lines recorded in this session's history |
+| `llm calls` | Number of LLM turns counted this session |
+| `input tokens` / `output tokens` | Prompt and completion totals |
+
+When the provider returns usage metadata (planner `invoke` calls), counts are **measured**. Streaming chat paths **estimate** tokens from text length (~four characters per token). If estimates are included, the title notes `(includes estimates)` and rows show measured vs estimated splits.
+
+Token totals reset on `/new` or when session state is cleared. See [Session History](/sessions) for persistence across sessions.
+
+### `/context`
+
+Displays key/value infra metadata collected during investigations and chat (service name, cluster, region, and similar fields).
+
+```
+/context
+```
+
+### `/effort`
+
+Set reasoning depth for OpenAI and Codex providers in this REPL session.
 
 ```
 /effort high
 /effort
 ```
 
-Bare `/effort` prints the current level and usage. `/status` includes the same field. Other providers ignore this setting. You can also set `OPENSRE_REASONING_EFFORT` in the environment for non-interactive defaults. See [LLM providers](/llm-providers).
+| Level | Notes |
+| --- | --- |
+| `low` | Favor speed and lower cost |
+| `medium` | Balanced (default for many setups) |
+| `high` | More thorough reasoning |
+| `xhigh`, `max` | Deepest supported reasoning; best with newer GPT-5 or Codex models |
+
+Bare `/effort` prints the current level and provider default. Other providers ignore this setting. You can also set `OPENSRE_REASONING_EFFORT` in the environment. See [LLM providers](/llm-providers).
+
+### `/trust`
+
+Trust mode skips execution confirmation prompts for elevated commands.
+
+```
+/trust on
+/trust off
+/trust
+```
+
+In a TTY, bare `/trust` opens an interactive on/off menu. Use with care during incidents — confirmations exist for destructive or networked actions.
+
+### `/verbose`
+
+Toggle `TRACER_VERBOSE` logging for the REPL process.
+
+```
+/verbose on
+/verbose off
+/verbose
+```
+
+### `/clear`
+
+Clears the terminal and re-renders the OpenSRE banner. Does **not** reset session state, token usage, or conversation context.
+
+```
+/clear
+```
+
+### `/compact`
+
+Trims in-memory session history to the last 20 entries to reduce memory use. Does not affect persisted session files or LLM conversation context.
+
+```
+/compact
+```
+
+### `/sessions`, `/resume`, `/new`
+
+Session persistence is documented in depth on [Session History](/sessions). Summary:
+
+```
+/sessions
+/resume 9b2e4f7a
+/resume redis
+/resume
+/new
+```
+
+| Command | Behavior |
+| --- | --- |
+| `/sessions` | Up to 20 recent sessions with ID, name, duration, turns, investigation count |
+| `/resume <prefix>` | Restore LLM messages and infra context; bare `/resume` opens a picker in a TTY |
+| `/new` | Rotate session ID and reset counters while **keeping** conversation context — use after `/resume` to continue in a fresh session file |
+
+On exit, OpenSRE prints a `/resume <id>` hint so you can pick up later.
 
 ---
 
-## Help — `/help`
+## Investigation commands
+
+You can also paste alert text or describe an incident in plain language — the planner routes that to an investigation without a slash command. Use slash commands when you want explicit control.
+
+### `/investigate`
+
+Run root-cause analysis from a local alert file or a built-in sample template.
 
 ```
-/help
-/help /model
-/help investigation
-/help all
+/investigate alert.json
+/investigate generic
+/investigate ./alerts/checkout-502.json
+/investigate
 ```
 
-In a TTY, bare `/help` opens an interactive picker. Use `/help <command>` or `/help <category>` for details on one topic.
+| Target | Behavior |
+| --- | --- |
+| `alert.json` | Bundled demo alert file |
+| `generic`, `datadog`, `grafana`, `honeycomb`, `coralogix`, `splunk` | Built-in sample templates |
+| File path | Read alert text from disk (`.json`, `.md`, `.txt`) |
+| Bare `/investigate` | Interactive picker in a TTY |
+
+Template names take precedence over same-named files in the working directory. Force file mode with an explicit path (e.g. `/investigate ./generic`).
+
+Press **Ctrl+C** during a streaming investigation to cancel. Use `/tasks` and `/cancel` for background task control.
+
+### `/template`
+
+Print starter alert JSON you can edit and feed back into `/investigate`.
+
+```
+/template generic
+/template datadog
+/template
+```
+
+Choices: `generic`, `datadog`, `grafana`, `honeycomb`, `coralogix`, `splunk`.
+
+### `/last`
+
+Reprint the root cause and report from the most recent investigation in this session.
+
+```
+/last
+```
+
+### `/save`
+
+Write the last investigation to disk. Requires confirmation unless trust mode is on.
+
+```
+/save report.md
+/save out.json
+```
+
+| Extension | Output |
+| --- | --- |
+| `.json` | Full investigation state as JSON |
+| Other | Markdown with Root Cause and Report sections |
+
+---
+
+## Integrations, models, and tools
+
+### `/health`
+
+Read-only health check: local OpenSRE agent, LLM connectivity, and each configured integration with pass/fail per component.
+
+```
+/health
+```
+
+For environment-wide checks (Python, credentials, paths), use `/doctor` instead.
+
+### `/integrations`
+
+Manage integrations stored in your local integration store.
+
+```
+/integrations
+/integrations list
+/integrations verify
+/integrations show datadog
+/integrations setup datadog
+/integrations remove datadog
+```
+
+| Subcommand | Behavior |
+| --- | --- |
+| `list` (default) | Verify and list all configured integrations |
+| `verify` | Same as list; prints a summary if any integration failed |
+| `show <service>` | Verify and print details for one integration |
+| `setup <service>` | Run the integration setup wizard (CLI parity) |
+| `remove <service>` | Remove an integration **elevated** |
+
+Bare `/integrations` opens an interactive menu in a TTY.
+
+### `/mcp`
+
+Manage MCP server connections (subset of integrations that expose MCP).
+
+```
+/mcp list
+/mcp connect <server>
+/mcp disconnect <server>
+```
+
+`connect` and `disconnect` map to `opensre integrations setup` and `remove` for MCP-capable services.
+
+### `/model`
+
+Show or change the active LLM provider and models. Changes are written to your env file and take effect on the next LLM call.
+
+```
+/model show
+/model set openai gpt-4.1
+/model set anthropic --toolcall-model claude-sonnet-4-20250514
+/model restore
+/model toolcall set gpt-4.1-mini
+/model
+```
+
+| Subcommand | Behavior |
+| --- | --- |
+| `show` (default) | Current provider, reasoning model, toolcall model |
+| `set <provider> [model] [--toolcall-model <m>]` | Switch provider; optional model overrides |
+| `restore [provider]` | Reset to provider default reasoning model |
+| `toolcall set <model>` | Set toolcall model for the active provider |
+
+Bare `/model` opens an interactive menu in a TTY. Provider switches require credentials for the target provider — run `/onboard` if a key is missing. See [LLM providers](/llm-providers).
+
+Shorthand: `/model set claude-sonnet-4-20250514` (no provider) updates the reasoning model for the **current** provider.
+
+### `/tools`
+
+List tools registered in this OpenSRE build for investigation and chat surfaces.
+
+```
+/tools
+/tools list
+```
+
+---
+
+## Privacy and history
+
+Full privacy controls, redaction patterns, and environment variables are on [Interactive Shell Privacy](/interactive-shell-privacy).
+
+### `/history`
+
+```
+/history
+/history clear
+/history off
+/history on
+/history retention 1000
+```
+
+| Subcommand | Behavior |
+| --- | --- |
+| (none) | Show persisted command history entries |
+| `clear` | Delete the history file; up-arrow recall resets on next launch |
+| `off` | Pause persistence for this session |
+| `on` | Resume persistence |
+| `retention <N>` | Cap entries on disk (requires redacting history backend) |
+
+Bare `/history` opens an interactive menu in a TTY.
+
+### `/privacy`
+
+Shows persistence on/off, redaction status, retention cap, history file path, and built-in pattern count, plus a short threat-model reminder.
+
+```
+/privacy
+```
+
+---
+
+## Tasks and background work
+
+### `/tasks`
+
+List up to 50 recent tasks in the current session: investigations, CLI commands, synthetic tests, watchdogs, and similar background work.
+
+```
+/tasks
+```
+
+Columns include task id, kind, status, start time, duration, and a detail line (progress, result, or error).
+
+### `/cancel`
+
+Cancel a **running** background task by id prefix.
+
+```
+/cancel abc12
+```
+
+Use `/tasks` to find ids. Ambiguous prefixes require more characters. For streaming investigations, also press **Ctrl+C** if output is still flowing.
+
+### `/stop`
+
+Prints guidance — not a hard stop:
+
+```
+/stop
+```
+
+- **Streaming investigation:** press **Ctrl+C**
+- **Background task:** `/tasks` then `/cancel <id>`
+
+---
+
+## Watchdog commands
+
+Watchdog tasks monitor a process and send Telegram alarms when thresholds are exceeded. Configure Telegram delivery before use.
+
+### `/watch`
+
+```
+/watch 12345 --max-cpu 80 --max-rss 512M --max-runtime 30m --cooldown 5m --interval 2s --once
+```
+
+| Flag | Meaning |
+| --- | --- |
+| `<pid>` | Process to watch (required, first argument) |
+| `--max-cpu` | CPU percent threshold |
+| `--max-rss` | Memory cap (`512M`, `1G`, etc.) |
+| `--max-runtime` | Max wall time (`30s`, `5m`, `1h`) |
+| `--cooldown` | Minimum time between alarms (default 5m) |
+| `--interval` | Sample interval (default 2s) |
+| `--once` | Fire at most one alarm per threshold |
+
+Returns a task id for `/watches` and `/unwatch`.
+
+### `/watches`
+
+List watchdog tasks in this session with pid, status, thresholds, and the latest resource sample.
+
+```
+/watches
+```
+
+### `/unwatch`
+
+Cancel a running watchdog by task id (not pid).
+
+```
+/unwatch abc12
+```
+
+### `/watchdog`
+
+CLI-parity entry point with flag-style arguments:
+
+```
+/watchdog --pid 12345 --max-rss 1G --max-cpu 80
+```
+
+Prefer `/watch` inside the REPL for integrated task tracking.
+
+---
+
+## Agents and alerts
+
+Agent fleet management is also covered on [Agents](/agents).
+
+### `/agents`
+
+```
+/agents
+/agents budget
+/agents budget my-agent 5.00
+/agents bus
+/agents claim feature-x cursor-agent
+/agents release feature-x
+/agents conflicts
+/agents kill 12345
+/agents trace 12345
+/agents wait 12345 --on 67890
+/agents graph
+```
+
+| Subcommand | Behavior |
+| --- | --- |
+| (none) | Registered plus discovered local agents (Cursor, Claude Code, Codex, Aider, …) |
+| `budget` | View hourly budgets; `budget <agent> <usd>` to set |
+| `bus` | Live-tail the cross-agent context bus until Ctrl+C |
+| `claim <branch> <agent>` | Claim a git branch for an agent |
+| `release <branch>` | Release a branch claim |
+| `conflicts` | Show file-write conflicts between agents |
+| `kill <pid> [--force]` | SIGTERM then SIGKILL **elevated** |
+| `trace <pid>` | Live-tail an agent's stdout |
+| `wait <pid> --on <other-pid>` | Record a wait dependency |
+| `graph` | Render the wait-on dependency graph |
+
+### `/alerts`
+
+Shows whether the local alert listener is active, queue depth, dropped count, and up to five recent ingested alerts.
+
+```
+/alerts
+```
+
+Post alerts to the listener endpoint configured during setup; the REPL surfaces them in `/status` and can route them into investigations.
+
+---
+
+## CLI parity commands
+
+These spawn `opensre …` subprocesses. Interactive wizards (e.g. `/onboard`) need a TTY.
+
+### `/onboard`
+
+```
+/onboard
+/onboard local_llm
+```
+
+Launches the setup wizard for LLM keys, integrations, and related config.
+
+### `/remote`
+
+Operate remote deployed OpenSRE instances.
+
+```
+/remote health
+/remote investigate
+/remote ops
+/remote pull
+/remote trigger
+```
+
+See [Remote runtime investigation](/remote-runtime-investigation).
+
+### `/config`
+
+```
+/config show
+/config set <key> <value>
+```
+
+Read or write `~/.opensre/config.yml`.
+
+### `/cron`
+
+```
+/cron list
+/cron add
+/cron remove <id>
+/cron run <id>
+/cron logs <id>
+```
+
+See [Cron](/cron) for scheduled delivery setup.
+
+### `/messaging`
+
+```
+/messaging pair
+/messaging allow
+/messaging revoke
+/messaging status
+```
+
+Telegram pairing and allowlist management.
+
+### `/hermes`
+
+```
+/hermes watch
+```
+
+Live-tail Hermes logs and route detected incidents. See [Hermes](/hermes).
+
+### `/guardrails`
+
+```
+/guardrails audit
+/guardrails init
+/guardrails rules
+/guardrails test
+```
+
+Manage sensitive-information masking rules.
+
+### `/tests`
+
+```
+/tests
+/tests list
+/tests run <test_id>
+/tests synthetic
+/tests cloudopsbench
+```
+
+Bare `/tests` opens an interactive test picker. `run`, `synthetic`, and `cloudopsbench` start background tasks — track them with `/tasks`.
+
+### `/update`
+
+Check PyPI for a newer OpenSRE version and upgrade if available (bounded network timeout).
+
+```
+/update
+```
+
+### `/debug`
+
+```
+/debug sentry
+```
+
+Run targeted diagnostics (subcommands match `opensre debug`).
+
+### `/uninstall`
+
+Remove OpenSRE and all local data from this machine. Destructive — requires confirmation **elevated**.
+
+```
+/uninstall
+```
+
+---
+
+## System commands
+
+### `/doctor`
+
+Runs the full local environment diagnostic suite (Python, paths, credentials, Docker, and related checks) with pass/warn/fail per check.
+
+```
+/doctor
+```
+
+### `/version`
+
+```
+/version
+```
+
+Prints OpenSRE version, Python version, and OS/architecture.
+
+### `/exit` and `/quit`
+
+Leave the REPL. On exit, OpenSRE prints a `/resume <session-id>` hint when a session file was active.
+
+```
+/exit
+/quit
+```
+
+---
+
+## Trust mode and confirmations
+
+Many commands are classified by execution tier:
+
+| Tier | Examples | Confirmation |
+| --- | --- | --- |
+| Exempt | `/help`, `/exit`, `/trust` | Never prompts |
+| Safe | `/status`, `/health`, `/investigate` | Read-only or low-risk |
+| Elevated | `/save`, `/watch`, `/cancel`, `/uninstall` | Prompts unless trust mode is on |
+
+Enable trust mode only when you accept auto-approval:
+
+```
+/trust on
+```
+
+---
+
+## Natural language routing
+
+You do not need to memorize every slash command. Describe intent in plain language and the planner selects an action:
+
+- "verify datadog" → `/integrations verify` or show flow
+- "what's my token usage" → `/cost`
+- "run the generic sample alert" → `/investigate generic`
+- "list my past sessions" → `/sessions`
+
+When the planner is uncertain, it falls back to help or asks for clarification rather than running a destructive command silently.
+
+---
+
+## Related docs
+
+- [Session History](/sessions) — `/sessions`, `/resume`, `/new` in depth
+- [Interactive Shell Privacy](/interactive-shell-privacy) — `/history`, `/privacy`, redaction
+- [Investigation overview](/investigation-overview) — RCA workflow and alert formats
+- [LLM providers](/llm-providers) — `/model` and `/effort`
+- [Agents](/agents) — `/agents` fleet coordination
+- [Cron](/cron) — `/cron` scheduled deliveries
+- [Hermes](/hermes) — `/hermes watch`
