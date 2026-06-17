@@ -197,11 +197,15 @@ class TestCompletionPreviewHint:
         assert rendered == "/plugin-cmd — Plugin-provided slash command."
 
     def test_clips_preview_to_terminal_width(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        long_meta = (
+            "Plugin-provided slash command with a deliberately long description "
+            "that must be clipped to the terminal width."
+        )
         completion = Completion(
-            "/new",
+            "/plugin-cmd",
             start_position=-1,
-            display="/new",
-            display_meta="truncated",
+            display="/plugin-cmd",
+            display_meta=long_meta,
         )
         app = _FakeApp(
             current_buffer=_FakeBuffer(
@@ -218,6 +222,7 @@ class TestCompletionPreviewHint:
         rendered = _strip_ansi(completion_preview_hint_ansi())
         assert rendered.endswith("…")
         assert len(rendered) <= 40
+        assert rendered.startswith("/plugin-cmd — ")
 
 
 class TestResolvePromptPrefix:
