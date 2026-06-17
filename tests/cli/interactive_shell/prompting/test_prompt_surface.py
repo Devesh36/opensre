@@ -2,12 +2,25 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
+import pytest
+from prompt_toolkit.completion import Completion
+
+from app.cli.interactive_shell.prompting import prompt_surface
 from app.cli.interactive_shell.prompting.prompt_surface import (
     _DEFAULT_PLACEHOLDER_TEXT,
+    completion_preview_hint_ansi,
     resolve_prompt_placeholder,
+    resolve_prompt_prefix_ansi,
 )
+from app.cli.interactive_shell.runtime import state as loop_state
 from app.cli.interactive_shell.runtime.session import ReplSession
 from app.cli.interactive_shell.runtime.tasks import TaskKind
+
+
+def _strip_ansi(text: str) -> str:
+    return text.replace("\x1b[2m", "").replace("\x1b[0m", "")
 
 
 def _placeholder_text(session: ReplSession) -> str:
@@ -53,3 +66,175 @@ class TestResolvePromptPlaceholder:
         assert "1 task running" in text
         assert "resumed: redis-incident" in text
         assert " · " in text
+
+
+@dataclass
+class _FakeCompleteState:
+    completions: list[Completion]
+    current_completion: Completion | None = None
+
+
+@dataclass
+class _FakeBuffer:
+    text: str
+    complete_state: _FakeCompleteState | None = None
+
+
+@dataclass
+class _FakeOutput:
+    columns: int = 120
+
+    def get_size(self) -> _FakeOutput:
+        return self
+
+
+@dataclass
+class _FakeApp:
+    current_buffer: _FakeBuffer
+    output: _FakeOutput
+
+
+class TestCompletionPreviewHint:
+    def test_returns_empty_when_no_app(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(prompt_surface, "get_app_or_none", lambda: None)
+        assert completion_preview_hint_ansi() == ""
+
+    def test_shows_full_slash_command_description(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        completion = Completion(
+            "/investigate",
+            start_position=-1,
+            display="/investigate",
+            display_meta="Run an RCA investigation from a file or sample templa…",
+        )
+        app = _FakeApp(
+            current_buffer=_FakeBuffer(
+                text="/",
+                complete_state=_FakeCompleteState(
+                    completions=[completion],
+                    current_completion=completion,
+                ),
+            ),
+            output=_FakeOutput(),
+        )
+        monkeypatch.setattr(prompt_surface, "get_app_or_none", lambda: app)
+
+        rendered = _strip_ansi(completion_preview_hint_ansi())
+        assert rendered.startswith("/investigate — ")
+        assert "sample template." in rendered
+        assert "…" not in rendered
+
+    def test_shows_subcommand_label_with_parent_command(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        completion = Completion(
+            "high",
+            start_position=-1,
+            display="high",
+            display_meta="favor more thorough reasoning",
+        )
+        app = _FakeApp(
+            current_buffer=_FakeBuffer(
+                text="/effort ",
+                complete_state=_FakeCompleteState(
+                    completions=[completion],
+                    current_completion=completion,
+                ),
+            ),
+            output=_FakeOutput(),
+        )
+        monkeypatch.setattr(prompt_surface, "get_app_or_none", lambda: app)
+
+        rendered = _strip_ansi(completion_preview_hint_ansi())
+        assert rendered == "/effort high — favor more thorough reasoning"
+
+    def test_falls_back_to_first_completion_when_none_selected(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        first = Completion(
+            "/help",
+            start_position=-1,
+            display="/help",
+            display_meta="Show available commands.",
+        )
+        app = _FakeApp(
+            current_buffer=_FakeBuffer(
+                text="/",
+                complete_state=_FakeCompleteState(
+                    completions=[first],
+                    current_completion=None,
+                ),
+            ),
+            output=_FakeOutput(),
+        )
+        monkeypatch.setattr(prompt_surface, "get_app_or_none", lambda: app)
+
+        rendered = _strip_ansi(completion_preview_hint_ansi())
+        assert rendered == "/help — Show available commands."
+
+    def test_clips_preview_to_terminal_width(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        completion = Completion(
+            "/new",
+            start_position=-1,
+            display="/new",
+            display_meta="truncated",
+        )
+        app = _FakeApp(
+            current_buffer=_FakeBuffer(
+                text="/",
+                complete_state=_FakeCompleteState(
+                    completions=[completion],
+                    current_completion=completion,
+                ),
+            ),
+            output=_FakeOutput(columns=40),
+        )
+        monkeypatch.setattr(prompt_surface, "get_app_or_none", lambda: app)
+
+        rendered = _strip_ansi(completion_preview_hint_ansi())
+        assert rendered.endswith("…")
+        assert len(rendered) <= 40
+
+
+class TestResolvePromptPrefix:
+    def test_prefers_inline_spinner_over_completion_preview(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            prompt_surface,
+            "completion_preview_hint_ansi",
+            lambda: "preview line",
+        )
+        spinner = loop_state.SpinnerState()
+        spinner.start()
+        prefix = resolve_prompt_prefix_ansi(
+            inline_spinner=spinner.inline_spinner_ansi(),
+            idle_hint=spinner.idle_hint_ansi(),
+        )
+        assert "preview line" not in prefix
+        assert "esc to cancel" in _strip_ansi(prefix)
+
+    def test_prefers_completion_preview_over_idle_hint(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            prompt_surface,
+            "completion_preview_hint_ansi",
+            lambda: "preview line",
+        )
+        spinner = loop_state.SpinnerState()
+        prefix = resolve_prompt_prefix_ansi(
+            inline_spinner=spinner.inline_spinner_ansi(),
+            idle_hint=spinner.idle_hint_ansi(),
+        )
+        assert prefix == "preview line"
+        assert "/ for commands" not in prefix
+
+    def test_falls_back_to_idle_hint_when_no_preview(self) -> None:
+        spinner = loop_state.SpinnerState()
+        prefix = resolve_prompt_prefix_ansi(
+            inline_spinner=spinner.inline_spinner_ansi(),
+            idle_hint=spinner.idle_hint_ansi(),
+        )
+        assert "/ for commands" in _strip_ansi(prefix)
