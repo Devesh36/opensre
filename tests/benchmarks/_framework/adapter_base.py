@@ -47,47 +47,30 @@ if TYPE_CHECKING:
 
 
 class AdapterCapabilities(BaseModel):
-    """Boolean feature flags an adapter declares to the framework.
+    """Feature flags an adapter declares to the framework.
 
-    Replaces hardcoded ``if config.benchmark != "cloudopsbench"`` checks
-    in the framework. Each capability flag describes a framework-level
-    feature the adapter explicitly opts into. The framework then enables
-    or refuses the matching config knob based on the adapter's
-    declaration — no name-based dispatch.
+    The framework uses these to validate config knobs without
+    dispatching on adapter name. Every flag defaults to ``False``: a
+    new adapter is locked down to the minimum surface until it opts in.
 
-    Default is ``False`` for every capability so a new adapter is locked
-    down to the minimum surface until it opts in deliberately. Adding a
-    new capability extends this model with another default-``False``
-    field; existing adapters keep working without changes.
-
-    Adapters declare capabilities as a class attribute:
+    Declare as a class attribute:
 
         class MyAdapter(BenchmarkAdapter):
-            capabilities = AdapterCapabilities(
-                supports_agent_variant=True,
-            )
+            capabilities = AdapterCapabilities(supports_agent_variant=True)
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     supports_agent_variant: bool = False
-    """The adapter honors the ``agent_variant`` config field.
-
-    When False, a config with ``agent_variant != "default"`` is refused
-    at validation time so the run does not silently exercise the wrong
-    agent. CloudOpsBench currently honors this via its
-    ``BenchInvestigationAgentTrimmedPrompt`` variant; other adapters
-    have no equivalent and should leave this False until they do.
-    """
+    """Adapter honors ``config.agent_variant``. If False, the framework
+    rejects any config with ``agent_variant != "default"`` instead of
+    silently running the default agent."""
 
     supports_predictor_variant: bool = False
-    """The adapter has a predictor stage and honors ``predictor_variant``.
-
-    When False, a config setting ``predictor_variant != "default"`` is
-    refused. CloudOpsBench has a predictor stage (paper-format triple
-    emission); adapters without one (pure investigation benchmarks,
-    tool-call benchmarks) keep this False.
-    """
+    """Adapter has a predictor stage and honors
+    ``config.predictor_variant``. If False, any non-default value is
+    rejected. CloudOpsBench has one (paper-format triple emission);
+    most other benchmark types don't."""
 
 
 # --------------------------------------------------------------------------- #
@@ -96,39 +79,26 @@ class AdapterCapabilities(BaseModel):
 
 
 class OverfitDimensions(BaseModel):
-    """Metadata keys that overfit guards use to extract case attributes.
+    """Metadata key names the overfit guards read from each case.
 
-    The framework's overfit module (``_framework/overfit.py``) runs
-    five guards that attribute lift across (a) the corpus's "system"
-    dimension, (b) the corpus's "stratum" / fault-category dimension,
-    and (c) per-case ground-truth objects. Different adapters emit
-    cells with different metadata layouts — CloudOpsBench uses
-    ``metadata["system"]`` / ``metadata["fault_category"]`` /
-    ``metadata["ground_truth"]["fault_object"]``; another adapter may
-    use different key names.
-
-    This model lets each adapter declare its key names without
-    requiring the framework to know about them. The defaults match
-    CloudOpsBench's schema so existing call sites continue to work;
-    other adapters override ``BenchmarkAdapter.overfit_dimensions``
-    to point at their own keys.
-
-    Phase 3 of the framework decoupling: the previous overfit guards
-    hardcoded ``c["case"]["metadata"]["system"]`` etc. inline, which
-    silently coupled the framework to CloudOpsBench's metadata shape.
+    The guards group results by three axes — system, stratum, GT
+    object — to detect concentration. Adapters override this if their
+    cases store those values under different keys. Defaults match the
+    CloudOpsBench schema.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     system_key: str = "system"
-    """``case.metadata[<key>]`` — the corpus's "system" attribute."""
+    """``case.metadata[<key>]`` — system / cluster name."""
 
     stratum_key: str = "fault_category"
-    """``case.metadata[<key>]`` — the corpus's stratum / category attribute."""
+    """``case.metadata[<key>]`` — category / stratum for per-stratum
+    uniformity checks."""
 
     gt_object_key: str = "fault_object"
-    """``case.metadata["ground_truth"][<key>]`` — the GT object name used
-    by Guard C's cluster fingerprinting."""
+    """``case.metadata["ground_truth"][<key>]`` — GT target object,
+    used by the cluster-concentration guard to fingerprint scenarios."""
 
 
 # --------------------------------------------------------------------------- #
@@ -163,59 +133,38 @@ class BenchmarkAdapter(ABC):
     See :class:`AdapterCapabilities` for the available flags."""
 
     def apply_config_overrides(self, config: Any) -> None:  # noqa: ARG002 — default no-op
-        """Optional: apply adapter-specific config-driven runtime setup.
+        """Read adapter-specific config fields before any agent runs.
 
-        Called once by the CLI after the adapter is built and BEFORE the
-        runner instantiates any agent. Adapters use this hook to honor
-        adapter-specific config knobs (e.g. ``min_tool_calls``,
-        ``agent_variant``) by patching their own class attributes / agent
-        factory methods. Default is no-op so adapters that don't expose
-        knobs don't need to implement it.
-
-        Strategy-pattern design: the framework doesn't need to know which
-        config fields any specific adapter honors. Each adapter owns its
-        own knob-handling, keeping framework/adapter coupling minimal.
+        Called once by the CLI after the adapter is built. Use for
+        config knobs only your adapter understands (CloudOpsBench reads
+        ``min_tool_calls`` and ``agent_variant`` here). Default is
+        no-op.
         """
         return None
 
     def overfit_dimensions(self) -> OverfitDimensions:
-        """Metadata keys the overfit guards should consult for this adapter.
+        """Metadata keys the overfit guards consult for this adapter.
 
-        Default returns ``OverfitDimensions()`` which matches the
-        CloudOpsBench schema (``system``, ``fault_category``,
-        ``ground_truth.fault_object``). Adapters with a different
-        metadata layout override this to point the guards at their own
-        keys.
-
-        Phase 3 of the framework decoupling: previously
-        ``_framework/overfit.py`` indexed into these keys inline,
-        coupling the framework to one adapter's metadata shape. This
-        hook moves the schema declaration to the adapter that owns it.
+        Override if your case metadata uses different key names than
+        the CloudOpsBench defaults.
         """
         return OverfitDimensions()
 
     def extend_provenance(self, provenance: dict[str, Any]) -> dict[str, Any]:
-        """Optional: inject adapter-specific fields into the provenance dict.
+        """Add adapter-specific entries to the provenance bundle.
 
-        Called by ``_framework/provenance.py::capture_provenance`` after
-        the framework finishes assembling its standard sections
-        (``code``, ``config``, ``pre_registration``, ``models``,
-        ``environment``, ``dataset``, ``run_inputs``). Adapters can:
-          - add a new top-level key (e.g. an adapter-specific run note)
-          - extend an existing section (e.g. add ``min_tool_calls`` to
-            ``run_inputs``)
-          - return the dict unchanged
+        Called by ``capture_provenance`` after the framework assembles
+        its standard sections (code, config, models, environment,
+        run_inputs). Adapters may add top-level keys, extend existing
+        sections, or return the dict unchanged.
 
-        Default is identity. The hook exists so the framework's
-        provenance module stays adapter-agnostic — it does NOT import or
-        reach into any adapter's internals to build the artifact. Before
-        Phase 4 the framework imported ``cloudopsbench.bench_agent``
-        directly to read ``min_tool_calls``; that import is gone and
-        CloudOpsBench now overrides this hook instead.
+        Default is identity. The hook exists so
+        ``_framework/provenance.py`` does not need to import any
+        specific adapter to capture adapter-specific run inputs (e.g.
+        CloudOpsBench's ``min_tool_calls``).
 
-        Implementations should mutate-and-return for performance, or
-        return a fresh dict if a non-destructive transform is needed —
-        the framework respects the return value either way.
+        Mutate-and-return is fine; the framework uses whatever the
+        hook returns.
         """
         return provenance
 

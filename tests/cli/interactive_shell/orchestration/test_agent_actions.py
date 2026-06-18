@@ -1029,7 +1029,12 @@ def test_execute_cli_actions_records_shell_failure(monkeypatch: object) -> None:
             },
         )
     ]
-    assert session.history[-1] == {"type": "shell", "text": "false", "ok": False}
+    assert session.history[-1] == {
+        "type": "shell",
+        "text": "false",
+        "ok": False,
+        "response_text": "nope\n✗ exit 2",
+    }
     output = buf.getvalue()
     assert "nope" in output
     assert "exit 2" in output
@@ -1050,7 +1055,12 @@ def test_execute_cli_actions_shell_command_times_out(monkeypatch: object) -> Non
     console, buf = _capture()
 
     assert agent_actions.execute_cli_actions("run `true`", session, console) is True
-    assert session.history[-1] == {"type": "shell", "text": "true", "ok": False}
+    assert session.history[-1] == {
+        "type": "shell",
+        "text": "true",
+        "ok": False,
+        "response_text": "command timed out after 120 seconds",
+    }
     output = buf.getvalue().lower()
     assert "timed out" in output
     assert "partial out" in output
@@ -1139,21 +1149,22 @@ def test_execute_cli_actions_routes_bang_pwd_through_builtin(monkeypatch: object
     assert "explicit shell passthrough enabled" not in captured
 
 
-def test_execute_cli_actions_declines_mutating_shell_when_user_rejects_prompt(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.execution_policy.DEFAULT_CONFIRM_FN",
-        lambda _p: "n",
-    )
+def test_execute_cli_actions_denies_restricted_shell_command() -> None:
+    """Default-allow still enforces the restricted ``deny`` floor (e.g. ``sudo``).
+
+    Under default-allow, mutating commands like ``rm`` run without a
+    confirmation prompt, but restricted commands must still be blocked outright
+    and recorded as ``ok=False``.
+    """
     session = ReplSession()
     console, buf = _capture()
 
-    assert agent_actions.execute_cli_actions("run `rm -rf /tmp/demo`", session, console) is True
-    assert session.history[-1] == {"type": "shell", "text": "rm -rf /tmp/demo", "ok": False}
+    assert (
+        agent_actions.execute_cli_actions("run `sudo rm -rf /tmp/demo`", session, console) is True
+    )
+    assert session.history[-1] == {"type": "shell", "text": "sudo rm -rf /tmp/demo", "ok": False}
     output = buf.getvalue()
-    assert "cancelled" in output.lower()
-    assert "mutating commands are blocked" in output.lower() or "confirm" in output.lower()
+    assert "blocked" in output.lower()
 
 
 def test_execute_cli_actions_blocks_ambiguous_shell_operators() -> None:

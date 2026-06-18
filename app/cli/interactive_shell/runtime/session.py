@@ -117,6 +117,13 @@ class ReplSession:
     cli_agent_messages: list[tuple[str, str]] = field(default_factory=list)
     """Assistant conversation history: alternating (\"user\"|\"assistant\", text)."""
 
+    follow_up_messages: list[tuple[str, str]] = field(default_factory=list)
+    """Follow-up Q&A pairs for the current investigation, separate from cli_agent_messages.
+
+    Scoped to the most recent investigation: reset by apply_investigation_result()
+    so that CLI-agent turns never bleed into follow-up grounding context.
+    """
+
     prompt_history_backend: History | None = None
     """The live ``prompt_toolkit.History`` object backing the input prompt.
 
@@ -148,11 +155,28 @@ class ReplSession:
     pending_prompt_default: str | None = None
     """When set, the next interactive prompt is pre-filled with this string (then cleared)."""
 
+    pending_prompt_autosubmit: bool = False
+    """When True alongside ``pending_prompt_default``, the prefilled prompt is
+    submitted automatically instead of waiting for the user to press Enter.
+
+    Used to auto-launch an interactive command the agent decided to run (e.g.
+    ``/integrations setup sentry``) so it flows through the normal
+    exclusive-stdin dispatch path — the only place an interactive child process
+    gets clean stdin."""
+
     prompt_refresh_fn: Callable[[], None] | None = field(default=None, repr=False)
     """Loop-owned hook to apply pending prefill and redraw the active prompt."""
 
     last_synthetic_observation_path: str | None = None
     """Absolute path to ``latest.json`` for the last finished synthetic run (set on failure)."""
+
+    last_command_observation: str | None = None
+    """Compact textual result of a read-only discovery command run this turn.
+
+    Set by read-only discovery slash commands (e.g. ``/integrations``) so the
+    agent can summarize what the command found into a direct answer. Reset at
+    the start of every agent turn; only consumed when the planner (not the user)
+    chose to run the discovery command."""
 
     incoming_alerts: list[IncomingAlert] = field(default_factory=list)
     """Queued incoming alerts from the HTTP listener, capped at 256 entries.
@@ -175,6 +199,25 @@ class ReplSession:
         value = self.pending_prompt_default
         self.pending_prompt_default = None
         return value or ""
+
+    def take_pending_autosubmit(self) -> bool:
+        """Return whether the pending prefill should auto-submit, and clear the flag."""
+        value = self.pending_prompt_autosubmit
+        self.pending_prompt_autosubmit = False
+        return value
+
+    def queue_auto_command(self, command: str) -> None:
+        """Queue a command to run automatically on the next prompt iteration.
+
+        Prefills the input with ``command`` and marks it for auto-submit, then
+        refreshes the active prompt so the loop submits it without waiting for
+        Enter. Lets the agent launch an interactive command (setup/connect)
+        through the normal exclusive-stdin dispatch path rather than spawning it
+        mid-turn, where it would fight the live prompt for stdin.
+        """
+        self.pending_prompt_default = command
+        self.pending_prompt_autosubmit = True
+        self.notify_prompt_changed()
 
     def notify_prompt_changed(self) -> None:
         """Redraw the active prompt (placeholder state and pending prefill)."""
@@ -229,13 +272,25 @@ class ReplSession:
             self.token_usage[bucket] = self.token_usage.get(bucket, 0) + count
         self.llm_call_count += 1
 
-    def record(self, kind: str, text: str, *, ok: bool = True) -> None:
+    def record(
+        self,
+        kind: str,
+        text: str,
+        *,
+        ok: bool = True,
+        response_text: str | None = None,
+    ) -> None:
         """Append an entry to the session history.
 
         Supports kinds: "shell", "slash", "alert", "chat", "incoming_alert", etc.
         For "incoming_alert", use record_incoming_alert() instead to preserve metadata.
         """
-        self.history.append({"type": kind, "text": text, "ok": ok})
+        entry: dict[str, Any] = {"type": kind, "text": text, "ok": ok}
+        if response_text:
+            entry["response_text"] = response_text
+
+        self.history.append(entry)
+
         from app.cli.interactive_shell.sessions.store import SessionStore
 
         SessionStore.append_turn(self, kind, text)
@@ -283,6 +338,19 @@ class ReplSession:
             if value:
                 self.accumulated_context[key] = value
 
+    def apply_investigation_result(self, state: dict[str, Any]) -> None:
+        """Record a completed investigation result and reset follow-up context.
+
+        Replaces the inline ``session.last_state = …`` +
+        ``session.accumulate_from_state(…)`` pattern at every call site so that
+        follow_up_messages is always cleared atomically with the state update.
+        This prevents CLI-agent turns from an earlier interaction from bleeding
+        into the follow-up grounding context of a new investigation.
+        """
+        self.last_state = state
+        self.follow_up_messages.clear()
+        self.accumulate_from_state(state)
+
     def clear(self, *, rotate_identity: bool = True) -> None:
         """Reset the session to a fresh state (used by /new and /resume)."""
         self.history_generation += 1
@@ -298,6 +366,7 @@ class ReplSession:
         self.token_usage.clear()
         self.llm_call_count = 0
         self.cli_agent_messages.clear()
+        self.follow_up_messages.clear()
         self.incoming_alerts.clear()
         # Keep persisted cross-session task history on disk intact.
         # /new is session-scoped, so swap in a fresh in-memory registry
@@ -317,6 +386,7 @@ class ReplSession:
         self.ctrl_c_intervention_count = 0
         self.correction_intervention_count = 0
         self.pending_prompt_default = None
+        self.pending_prompt_autosubmit = False
         self.last_synthetic_observation_path = None
         # trust_mode and reasoning_effort are intentionally preserved across /new
         if rotate_identity:

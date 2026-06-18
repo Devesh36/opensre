@@ -65,7 +65,7 @@ from tests.benchmarks.cloudopsbench.predictor import (
 )
 from tests.benchmarks.cloudopsbench.replay_backend import CloudOpsBenchReplayBackend
 from tests.benchmarks.cloudopsbench.scoring import score_case as _legacy_score_case
-from tests.benchmarks.cloudopsbench.tags import seen_shape_for
+from tests.benchmarks.cloudopsbench.tags import ALL_LABELED_SHAPES, seen_shape_for
 from tests.benchmarks.cloudopsbench.validity_scoring import (
     compute_citation_grounding,
     compute_entity_existence,
@@ -337,11 +337,23 @@ class CloudOpsBenchAdapter(BenchmarkAdapter):
             rng = random.Random(filters.seed)
             rng.shuffle(legacy_cases)
 
-        # Apply seen/unseen filter BEFORE limit so `limit=N` means
-        # "N matching cases", not "N candidates, some of which match"
+        # Shape filter runs BEFORE the limit so ``limit=N`` means
+        # "N matching cases", not "N candidates, some of which match."
+        #
+        # ``seen_shape_for`` is tri-valued: SHAPE_SEEN / SHAPE_UNSEEN /
+        # SHAPE_MID. A naive ``tag in {SHAPE_SEEN, SHAPE_UNSEEN}`` check
+        # drops every SHAPE_MID case (scheduling, service, infra — 22%
+        # of the corpus). The ``ALL_LABELED_SHAPES`` short-circuit
+        # treats ``[SHAPE_SEEN, SHAPE_UNSEEN]`` (the standard "give me
+        # everything" config) as "no filter" so SHAPE_MID also passes.
+        #
+        # Single-bucket filters (``[SHAPE_SEEN]`` only or ``[SHAPE_UNSEEN]``
+        # only) still narrow the result as expected.
         wanted_seen_shape: set[bool] | None = (
             set(filters.seen_shape) if filters.seen_shape else None
         )
+        if wanted_seen_shape is not None and wanted_seen_shape == ALL_LABELED_SHAPES:
+            wanted_seen_shape = None
         if wanted_seen_shape is not None:
             legacy_cases = [
                 c for c in legacy_cases if seen_shape_for(c.fault_category) in wanted_seen_shape

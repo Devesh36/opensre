@@ -32,7 +32,6 @@ from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.a
 from app.cli.interactive_shell.runtime.session import ReplSession
 from app.cli.interactive_shell.runtime.tasks import TaskKind, TaskStatus
 from app.cli.interactive_shell.shell.execution import ShellExecutionResult
-from app.cli.interactive_shell.shell.policy import PolicyDecision
 from app.integrations.llm_cli.base import CLIInvocation, CLIProbe
 
 
@@ -144,35 +143,37 @@ def test_run_cd_command_reports_chdir_failure(monkeypatch: pytest.MonkeyPatch) -
     assert "cd failed" in buf.getvalue()
     assert len(captured_errors) == 1
     assert isinstance(captured_errors[0], OSError)
-    assert session.history[-1] == {"type": "shell", "text": "cd /root/blocked", "ok": False}
+    assert session.history[-1] == {
+        "type": "shell",
+        "text": "cd /root/blocked",
+        "ok": False,
+        "response_text": "cd failed: permission denied",
+    }
 
 
-def test_run_shell_command_records_when_policy_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.execution_policy.evaluate_policy",
-        lambda **_: PolicyDecision(
-            allow=False,
-            classification="mutating",
-            reason="test block",
-            hint="use ! for passthrough",
-        ),
-    )
+def test_run_shell_command_records_when_policy_denies() -> None:
+    """Default-allow still blocks the restricted ``deny`` floor (e.g. ``sudo``).
 
+    The command must not run, the REPL prints a ``blocked`` notice, and the
+    attempt is recorded as ``ok=False``.
+    """
     session = ReplSession()
     buf = io.StringIO()
     console = Console(file=buf, force_terminal=False)
 
     run_shell_command(
-        "rm -rf /nope",
+        "sudo rm -rf /nope",
         session,
         console,
         confirm_fn=lambda _p: "n",
         is_tty=True,
     )
 
-    assert "test block" in buf.getvalue()
-    assert "cancelled" in buf.getvalue().lower()
-    assert session.history[-1] == {"type": "shell", "text": "rm -rf /nope", "ok": False}
+    out = buf.getvalue()
+    assert "blocked" in out.lower()
+    # The denied command must never be echoed/executed.
+    assert "$ sudo" not in out
+    assert session.history[-1] == {"type": "shell", "text": "sudo rm -rf /nope", "ok": False}
 
 
 def test_run_claude_code_implementation_starts_tracked_task(
@@ -353,7 +354,12 @@ def test_run_shell_command_failure_prints_exit_line(monkeypatch: pytest.MonkeyPa
     out = buf.getvalue()
     assert "✗" in out
     assert "exit 7" in out
-    assert session.history[-1] == {"type": "shell", "text": "false", "ok": False}
+    assert session.history[-1] == {
+        "type": "shell",
+        "text": "false",
+        "ok": False,
+        "response_text": "✗ exit 7",
+    }
 
 
 def test_run_shell_command_reports_start_failure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -380,7 +386,12 @@ def test_run_shell_command_reports_start_failure(monkeypatch: pytest.MonkeyPatch
     assert "command failed to start" in buf.getvalue()
     assert len(captured_errors) == 1
     assert isinstance(captured_errors[0], RuntimeError)
-    assert session.history[-1] == {"type": "shell", "text": "true", "ok": False}
+    assert session.history[-1] == {
+        "type": "shell",
+        "text": "true",
+        "ok": False,
+        "response_text": "command failed to start: spawn failed",
+    }
 
 
 def test_run_opensre_agents_scan_prints_clean_foreground_output(
