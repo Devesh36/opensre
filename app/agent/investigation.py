@@ -3,15 +3,25 @@
 from __future__ import annotations
 
 import contextlib
-import json
 import logging
 from collections.abc import Callable
-from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from typing import Any
 
 from app.agent.llm_invoke_errors import LLMInvokeFailure, classify_llm_invoke_failure
 from app.agent.prompt import build_system_prompt, format_alert_context
 from app.agent.result import InvestigationResult, parse_diagnosis
+from app.agent.tool_loop import (
+    AgentEventCallback,
+    _build_assistant_msg,
+    _build_synthetic_assistant_tool_call_msg,
+    _build_tool_result_messages,
+    _context_budget_ceiling_for_model,
+    _enforce_context_budget,
+    _public_tool_input,
+    _run_parallel,
+    _summarise,
+    _tool_source,
+)
 from app.cli.support.output import debug_print, get_tracker
 from app.constants.investigation import MAX_INVESTIGATION_LOOPS
 from app.services.agent_llm_client import ToolCall, get_agent_llm
@@ -21,9 +31,6 @@ from app.tools.registry import get_registered_tools
 from app.utils.tool_trace import redact_sensitive
 
 logger = logging.getLogger(__name__)
-
-_TOOL_EXECUTOR_WORKERS = 10
-_UNSET: object = object()  # sentinel distinguishing "not yet started" from a None tool result
 
 # Maps alert_source → tool source keys. Tools from these sources are auto-called
 # before the LLM loop starts when the alert source is known.
@@ -43,8 +50,10 @@ _ALERT_SOURCE_TO_TOOL_SOURCES: dict[str, list[str]] = {
     "mysql": ["mysql"],
     "mariadb": ["mariadb"],
     "mongodb": ["mongodb", "mongodb_atlas"],
+    "redis": ["redis"],
     "snowflake": ["snowflake"],
     "clickhouse": ["clickhouse"],
+    "dagster": ["dagster"],
     "rabbitmq": ["rabbitmq"],
     "supabase": ["supabase"],
     "opensearch": ["opensearch"],
@@ -53,15 +62,75 @@ _ALERT_SOURCE_TO_TOOL_SOURCES: dict[str, list[str]] = {
     "azure": ["azure", "azure_sql"],
     "splunk": ["splunk"],
     "signoz": ["signoz"],
+    "jenkins": ["jenkins"],
+    "tempo": ["tempo"],
 }
-
-# Callback type: called with (event_kind, data_dict) during the agent loop.
-# event_kind values: "tool_start", "tool_end", "llm_start", "agent_start", "agent_end"
-AgentEventCallback = Callable[[str, dict[str, Any]], None]
 
 
 class ConnectedInvestigationAgent:
     """ReAct loop scoped to the tools enabled by connected integrations."""
+
+    def _should_accept_conclusion(
+        self,
+        *,
+        evidence_count: int,  # noqa: ARG002 — used by overrides
+        iteration: int,  # noqa: ARG002 — used by overrides
+    ) -> tuple[bool, str | None]:
+        """Hook: decide what to do when the LLM stops requesting tools.
+
+        Returns ``(accept_conclusion, nudge)``:
+          - ``(True, None)`` — accept the LLM's choice, exit the loop. Default.
+          - ``(False, "...")`` — reject the bail, inject the nudge string as a
+            user message, continue the loop. ``MAX_INVESTIGATION_LOOPS`` still
+            caps the worst case so a stubborn model can't infinite-loop.
+
+        **Contract:** ``(False, None)`` is invalid and raises ``ValueError`` at
+        the call site. Rejecting the conclusion without providing a nudge
+        would spin the loop on an unchanged message history until the outer
+        iteration cap, silently burning the token budget. The type system
+        allows ``str | None`` so subclasses can use a single return type;
+        the runtime guard enforces the actual contract.
+
+        Default returns ``(True, None)`` — production agents accept whatever
+        the LLM decides. Subclasses can override to enforce minimum-evidence
+        floors, structured-stage progression, or other termination policies.
+        """
+        return True, None
+
+    def _filter_tools(
+        self,
+        tools: list[RegisteredTool],
+    ) -> list[RegisteredTool]:
+        """Hook: narrow the tool list the agent will see.
+
+        Called once at the start of ``run`` after the registry has produced
+        the candidate set for the resolved integrations and before
+        ``_build_connected_tool_context`` derives ``state["available_sources"]``
+        and ``state["available_action_names"]`` — anything dropped here is
+        also dropped from those state fields.
+
+        Default returns the input unchanged. Subclasses can override to
+        implement any policy that restricts tool availability per agent
+        instance (e.g. enforce an allowlist for an isolated execution mode).
+        """
+        return tools
+
+    def _build_system_prompt(self, state: dict[str, Any]) -> str:
+        """Hook: produce the LLM system prompt for this investigation.
+
+        Called once per ``run`` after the resolved-integrations view has
+        been written into ``state``. Default delegates to
+        :func:`app.agent.prompt.build_system_prompt` — production behavior
+        is unchanged.
+
+        Subclasses can override to swap in a fundamentally different
+        instruction shape (e.g. a minimal SRE-diagnostic prompt for a
+        pure baseline that needs to NOT inherit opensre's
+        planner/verifier instructions). Returning an empty string or
+        ``""`` is legal — the LLM will then receive no system prompt at
+        all, which is itself a meaningful experimental condition.
+        """
+        return build_system_prompt(state)
 
     def run(
         self,
@@ -96,7 +165,7 @@ class ConnectedInvestigationAgent:
             _emit("tool_end", _tool_event_payload(tc, output=output))
 
         resolved = state.get("resolved_integrations") or {}
-        tools = _get_available_tools(resolved)
+        tools = self._filter_tools(_get_available_tools(resolved))
         tool_context = _build_connected_tool_context(resolved, tools)
         state["available_sources"] = tool_context["available_sources"]
         state["available_action_names"] = tool_context["available_action_names"]
@@ -107,7 +176,7 @@ class ConnectedInvestigationAgent:
         llm = get_agent_llm()
         tool_schemas = llm.tool_schemas(tools)
 
-        system = build_system_prompt(state)
+        system = self._build_system_prompt(state)
         alert_text = format_alert_context(state)
         messages: list[dict[str, Any]] = [{"role": "user", "content": alert_text}]
 
@@ -162,9 +231,16 @@ class ConnectedInvestigationAgent:
                 _record_tool_end(tc, output)
                 debug_print(f"[seed:{tc.name}] → {_summarise(output)}")
 
+        # Size the trim ceiling to the ACTIVE model's context window. A flat
+        # ceiling overflows smaller-window models (e.g. gpt-4o at 128k) because
+        # trimming "down to" an Anthropic-sized ceiling still exceeds their cap.
+        context_ceiling = _context_budget_ceiling_for_model(getattr(llm, "_model", None))
         for iteration in range(MAX_INVESTIGATION_LOOPS):
             logger.debug("[agent] iteration=%d", iteration)
             _emit("llm_start", {"iteration": iteration})
+            _enforce_context_budget(
+                messages, system=system, tools=tool_schemas, ceiling=context_ceiling
+            )
             try:
                 response = llm.invoke(messages, system=system, tools=tool_schemas)
 
@@ -188,8 +264,28 @@ class ConnectedInvestigationAgent:
             messages.append(_build_assistant_msg(llm, response))
 
             if not response.has_tool_calls:
-                logger.debug("[agent] no tool calls — done after %d iterations", iteration + 1)
-                break
+                accept, nudge = self._should_accept_conclusion(
+                    evidence_count=len(evidence_entries),
+                    iteration=iteration,
+                )
+                if accept:
+                    logger.debug("[agent] no tool calls — done after %d iterations", iteration + 1)
+                    break
+                # Contract: rejecting the conclusion (accept=False) MUST
+                # come with a nudge so the next LLM call sees new context.
+                # Without one the loop would spin on an unchanged message
+                # history until MAX_INVESTIGATION_LOOPS, silently burning
+                # the entire token budget without making progress. Failing
+                # fast keeps buggy hook overrides loud rather than expensive.
+                if nudge is None:
+                    raise ValueError(
+                        f"{type(self).__name__}._should_accept_conclusion returned "
+                        "(False, None) — a nudge string is required when rejecting "
+                        "the conclusion, otherwise the LLM will loop on an unchanged "
+                        "message history until MAX_INVESTIGATION_LOOPS."
+                    )
+                messages.append({"role": "user", "content": nudge})
+                continue
 
             # Emit tool_start for each pending call before executing
             for tc in response.tool_calls:
@@ -420,123 +516,6 @@ def _get_alert_source(state: dict[str, Any]) -> str:
     return ""
 
 
-def _build_synthetic_assistant_tool_call_msg(
-    llm: Any,
-    tool_calls: list[ToolCall],
-) -> dict[str, Any]:
-    """Build an assistant message that looks like the LLM requested these tool calls.
-
-    This lets us inject pre-seeded tool results into the conversation in a format
-    the LLM client already understands, without adding special-case handling.
-    """
-    from app.services.agent_llm_client import (
-        AnthropicAgentClient,
-        BedrockConverseAgentClient,
-        CLIBackedAgentClient,
-        OpenAIAgentClient,
-    )
-
-    if isinstance(llm, BedrockConverseAgentClient):
-        from app.services.bedrock_converse import build_assistant_tool_use_message
-
-        return build_assistant_tool_use_message(tool_calls)
-
-    if isinstance(llm, AnthropicAgentClient):
-        content = [
-            {
-                "type": "tool_use",
-                "id": tc.id,
-                "name": tc.name,
-                "input": tc.input,
-            }
-            for tc in tool_calls
-        ]
-        return {"role": "assistant", "content": content}
-
-    if isinstance(llm, OpenAIAgentClient):
-        return {
-            "role": "assistant",
-            "content": None,
-            "tool_calls": [
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {"name": tc.name, "arguments": json.dumps(tc.input)},
-                }
-                for tc in tool_calls
-            ],
-        }
-
-    if isinstance(llm, CLIBackedAgentClient):
-        return llm.build_assistant_message("", tool_calls)
-
-    # Fallback: plain text summary
-    names = ", ".join(tc.name for tc in tool_calls)
-    return {"role": "assistant", "content": f"I will start by querying: {names}"}
-
-
-def _run_parallel(
-    tool_calls: list[ToolCall],
-    tools: list[RegisteredTool],
-    resolved_integrations: dict[str, Any],
-) -> list[Any]:
-    tool_map = {t.name: t for t in tools}
-
-    def _call(tc: ToolCall) -> Any:
-        tool = tool_map.get(tc.name)
-        if tool is None:
-            return {"error": f"unknown tool: {tc.name}"}
-        try:
-            validation_error = tool.validate_public_input(tc.input)
-            if validation_error:
-                return {"error": validation_error}
-            injected = tool.extract_params(resolved_integrations)
-            kwargs = {**injected, **tc.input}
-            return tool.run(**kwargs)
-        except Exception as exc:
-            logger.warning("[tool:%s] failed: %s", tc.name, exc)
-            return {"error": str(exc)}
-
-    if len(tool_calls) == 1:
-        return [_call(tool_calls[0])]
-
-    results: list[Any] = [_UNSET] * len(tool_calls)
-    submitted: dict[
-        Future[Any], int
-    ] = {}  # future -> index, built incrementally to survive partial submit
-    try:
-        with ThreadPoolExecutor(max_workers=min(_TOOL_EXECUTOR_WORKERS, len(tool_calls))) as pool:
-            for i, tc in enumerate(tool_calls):
-                submitted[pool.submit(_call, tc)] = i
-            for fut in as_completed(submitted):
-                try:
-                    results[submitted[fut]] = fut.result()
-                except Exception as fut_exc:  # noqa: BLE001  # lgtm[py/catch-base-exception]
-                    results[submitted[fut]] = {"error": str(fut_exc)}
-    except RuntimeError as exc:
-        # interpreter is shutting down; executor.__exit__ has already waited for submitted futures
-        logger.warning("[_run_parallel] RuntimeError – falling back to sequential: %s", exc)
-        for fut, i in submitted.items():
-            if results[i] is _UNSET and fut.done():
-                try:
-                    results[i] = fut.result()
-                except Exception as fut_exc:  # noqa: BLE001  # lgtm[py/catch-base-exception]
-                    results[i] = {"error": str(fut_exc)}
-        for i, tc in enumerate(tool_calls):
-            if results[i] is _UNSET:
-                results[i] = _call(tc)
-    return results
-
-
-def _public_tool_input(value: dict[str, Any]) -> dict[str, Any]:
-    redacted = redact_sensitive(value)
-    return {
-        key: item
-        for key, item in redacted.items()
-        if item != "[runtime object]" and item != "[redacted]"
-    }
-
-
 def _tool_event_payload(tc: ToolCall, *, output: Any | None = None) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "id": tc.id,
@@ -546,13 +525,6 @@ def _tool_event_payload(tc: ToolCall, *, output: Any | None = None) -> dict[str,
     if output is not None:
         payload["output"] = redact_sensitive(output)
     return payload
-
-
-def _tool_source(tools: list[RegisteredTool], tool_name: str) -> str:
-    for tool in tools:
-        if tool.name == tool_name:
-            return str(tool.source)
-    return "unknown"
 
 
 def _merge_tool_evidence(
@@ -602,40 +574,6 @@ def _merge_tool_evidence(
 
     if tool_name == "query_grafana_service_names":
         evidence["grafana_service_names"] = output.get("service_names", [])
-
-
-def _build_assistant_msg(llm: Any, response: Any) -> dict[str, Any]:
-    from app.services.agent_llm_client import AnthropicAgentClient, BedrockConverseAgentClient
-
-    if isinstance(llm, (AnthropicAgentClient, BedrockConverseAgentClient)):
-        return llm.build_assistant_message(response.raw_content)
-    # Use raw_content when set — preserves provider-specific fields such as
-    # Gemini's thought_signature that must be echoed back in the next request.
-    if response.raw_content is not None:
-        return response.raw_content  # type: ignore[no-any-return]
-    result: dict[str, Any] = llm.build_assistant_message(response.content, response.tool_calls)
-    return result
-
-
-def _build_tool_result_messages(
-    llm: Any,
-    tool_calls: list[ToolCall],
-    results: list[Any],
-) -> list[dict[str, Any]]:
-    from app.services.agent_llm_client import AnthropicAgentClient, OpenAIAgentClient
-
-    if isinstance(llm, AnthropicAgentClient):
-        return [llm.build_tool_result_message(tool_calls, results)]
-    if isinstance(llm, OpenAIAgentClient):
-        return llm.build_tool_result_messages(tool_calls, results)
-    return [llm.build_tool_result_message(tool_calls, results)]
-
-
-def _summarise(output: Any) -> str:
-    if isinstance(output, dict) and "error" in output:
-        return f"error: {output['error']}"
-    text = json.dumps(output, default=str)
-    return text[:120] + "…" if len(text) > 120 else text
 
 
 def _result_to_state(result: InvestigationResult) -> dict[str, Any]:

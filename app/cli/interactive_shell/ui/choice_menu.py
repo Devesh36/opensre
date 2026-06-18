@@ -21,7 +21,7 @@ from rich.markup import escape
 
 from app.cli.interactive_shell.ui import theme as ui_theme
 
-_HINT = "↑↓/j/k  Enter/Space  Esc/q"
+_HINT = "↑↓/j/k/Tab  Enter/Space  Esc/q"
 CRUMB_SEP = "  ›  "
 # Blank line after the submitted slash line before the menu header (all pickers).
 _MENU_LEADING_LINES = 1
@@ -68,6 +68,8 @@ def _read_action() -> MenuAction:
             return "cancel"
         if c in (b"\r", b"\n", b" "):
             return "enter"
+        if c == b"\t":
+            return "down"
         if c in (b"j", b"J"):
             return "down"
         if c in (b"k", b"K"):
@@ -106,6 +108,8 @@ def _read_action() -> MenuAction:
             return "cancel"
         if key_code in (10, 13, 32):
             return "enter"
+        if key_code == 9:
+            return "down"
         if data in (b"j", b"J"):
             return "down"
         if data in (b"k", b"K"):

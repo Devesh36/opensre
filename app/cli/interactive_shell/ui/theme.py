@@ -238,6 +238,7 @@ def _apply_theme(theme: CliTheme) -> None:
     global HIGHLIGHT_ANSI, BRAND_ANSI, TEXT_ANSI, DIM_ANSI, BOLD_BRAND_ANSI
     global PROMPT_ACCENT_ANSI, PROMPT_FRAME_ANSI, DIM_COUNTER_ANSI, SURFACE_BG_ANSI
     global INPUT_SURFACE_BG_ANSI, MENU_SELECTION_ROW_ANSI, MARKDOWN_THEME
+    global DEVICE_CODE_ANSI
 
     _highlight_rgb = _parse_hex_color(theme.HIGHLIGHT)
     _brand_rgb = _parse_hex_color(theme.BRAND)
@@ -254,6 +255,7 @@ def _apply_theme(theme: CliTheme) -> None:
 
     PROMPT_ACCENT_ANSI = f"\x1b[1;38;2;{_highlight_rgb[0]};{_highlight_rgb[1]};{_highlight_rgb[2]}m"
     PROMPT_FRAME_ANSI = PROMPT_ACCENT_ANSI
+    DEVICE_CODE_ANSI = PROMPT_ACCENT_ANSI
     DIM_COUNTER_ANSI = DIM_ANSI
     SURFACE_BG_ANSI = f"\x1b[48;2;{_bg_rgb[0]};{_bg_rgb[1]};{_bg_rgb[2]}m"
     INPUT_SURFACE_BG_ANSI = (
@@ -301,6 +303,9 @@ BOLD_TEXT = _LazyRichStyle("TEXT", bold=True)
 BOLD_WARNING = _LazyRichStyle("WARNING", bold=True)
 BOLD_ERROR = _LazyRichStyle("ERROR", bold=True)
 
+# GitHub/device-flow one-time codes should be easy to spot and transcribe.
+DEVICE_CODE = BOLD_HIGHLIGHT
+
 # Distinct accent for incoming alerts (visually distinct from BOLD_BRAND used for assistant)
 INCOMING_ALERT_ACCENT = BOLD_WARNING
 
@@ -324,6 +329,7 @@ BRAND_ANSI = ""
 TEXT_ANSI = ""
 DIM_ANSI = ""
 BOLD_BRAND_ANSI = ""
+DEVICE_CODE_ANSI = ""
 
 ANSI_RESET = "\x1b[0m"
 ANSI_BOLD = "\x1b[1m"

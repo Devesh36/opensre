@@ -227,7 +227,7 @@ def run_oracle_once(case: ScenarioCase, monkeypatch: pytest.MonkeyPatch) -> Orac
     passed = True
     if decision.route_kind.value != answer.route.expected_kind:
         passed = False
-    if answer.policy.should_execute:
+    if answer.policy.executes_terminal_action:
         if not executed_match:
             passed = False
     else:
@@ -237,9 +237,9 @@ def run_oracle_once(case: ScenarioCase, monkeypatch: pytest.MonkeyPatch) -> Orac
             passed = False
     # Always enforce the response contract against actual runtime output;
     # there is no bypass for handoff-only runs. The oracle captures real console
-    # output including any text printed by _execute_planned_actions or
-    # _render_plan_denied, so must_contain_any / must_contain_all must match
-    # what the runtime actually emitted.
+    # output including any text printed by _execute_planned_actions, so
+    # must_contain_any / must_contain_all must match what the runtime actually
+    # emitted. (There is no planning-stage fail-closed denial in v0.1.)
     if not any_match:
         passed = False
     if not all_match:

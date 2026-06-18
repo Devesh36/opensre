@@ -456,6 +456,24 @@ def capture_integration_verified(service: str) -> None:
     _capture(Event.INTEGRATION_VERIFIED, {"service": service})
 
 
+def identify_github_username(username: str) -> None:
+    """Attach the authenticated GitHub username as a PostHog person property.
+
+    No-op for an empty username. Best-effort: telemetry kill-switches make the
+    underlying call a no-op, and any unexpected error is swallowed to Sentry.
+    """
+    if not username:
+        return
+    try:
+        get_analytics().identify({"github_username": username})
+    except Exception as exc:
+        capture_exception(exc)
+
+
+def capture_github_login_completed(username: str) -> None:
+    _capture(Event.GITHUB_LOGIN_COMPLETED, {"github_username": username})
+
+
 def capture_tests_picker_opened() -> None:
     _capture(Event.TESTS_PICKER_OPENED)
 

@@ -11,11 +11,13 @@ from urllib.parse import urlparse
 
 import questionary
 from rich.console import Console
+from rich.markup import escape
 from rich.rule import Rule
 from rich.text import Text
 
 from app.cli.interactive_shell.ui.theme import (
     BRAND,
+    DEVICE_CODE,
     DIM,
     ERROR,
     GLYPH_ERROR,
@@ -29,6 +31,7 @@ from app.cli.interactive_shell.ui.theme import (
 from app.cli.wizard.config import PROVIDER_BY_VALUE, SUPPORTED_PROVIDERS, ProviderOption
 from app.cli.wizard.env_sync import sync_env_secret, sync_env_values, sync_provider_env
 from app.cli.wizard.integration_health import IntegrationHealthResult
+from app.cli.wizard.integration_validators.client_validators import validate_pagerduty_integration
 from app.cli.wizard.probes import ProbeResult, probe_local_target, probe_remote_target
 from app.cli.wizard.prompts import select as select_prompt
 from app.cli.wizard.store import get_store_path, load_local_config, save_local_config
@@ -51,8 +54,13 @@ DEFAULT_OPENCLAW_MCP_URL = "http://127.0.0.1:18789/"
 DEFAULT_OPENCLAW_MCP_MODE = "stdio"
 DEFAULT_OPENCLAW_MCP_COMMAND = "openclaw"
 DEFAULT_OPENCLAW_MCP_ARGS = ("mcp", "serve")
+DEFAULT_POSTHOG_MCP_URL = "https://mcp.posthog.com/mcp"
+DEFAULT_POSTHOG_MCP_MODE = "streamable-http"
+DEFAULT_SENTRY_MCP_URL = "https://mcp.sentry.dev/mcp"
+DEFAULT_SENTRY_MCP_MODE = "streamable-http"
 DEFAULT_SENTRY_URL = "https://sentry.io"
 DEFAULT_GITLAB_BASE_URL = "https://gitlab.com/api/v4"
+WIZARD_TOTAL_STEPS = 4
 
 
 # Re-export build_demo_action_response from validation as a stable module-level
@@ -90,6 +98,12 @@ def validate_coralogix_integration(**kwargs):
     return _validate(**kwargs)
 
 
+def validate_dagster_integration(**kwargs):
+    from app.cli.wizard.integration_health import validate_dagster_integration as _validate
+
+    return _validate(**kwargs)
+
+
 def validate_slack_webhook(**kwargs):
     from app.cli.wizard.integration_health import validate_slack_webhook as _validate
 
@@ -110,6 +124,12 @@ def validate_github_mcp_integration(**kwargs):
 
 def validate_gitlab_integration(**kwargs):
     from app.cli.wizard.integration_health import validate_gitlab_integration as _validate
+
+    return _validate(**kwargs)
+
+
+def validate_jenkins_integration(**kwargs):
+    from app.cli.wizard.integration_health import validate_jenkins_integration as _validate
 
     return _validate(**kwargs)
 
@@ -205,8 +225,26 @@ def validate_openclaw_integration(**kwargs):
     return _validate(**kwargs)
 
 
+def validate_posthog_mcp_integration(**kwargs):
+    from app.cli.wizard.integration_health import validate_posthog_mcp_integration as _validate
+
+    return _validate(**kwargs)
+
+
+def validate_sentry_mcp_integration(**kwargs):
+    from app.cli.wizard.integration_health import validate_sentry_mcp_integration as _validate
+
+    return _validate(**kwargs)
+
+
 def validate_splunk_integration(**kwargs):
     from app.cli.wizard.integration_health import validate_splunk_integration as _validate
+
+    return _validate(**kwargs)
+
+
+def validate_tempo_integration(**kwargs):
+    from app.cli.wizard.integration_health import validate_tempo_integration as _validate
 
     return _validate(**kwargs)
 
@@ -344,14 +382,15 @@ def _choose_model(provider: ProviderOption, *, default: str | None) -> str:
     "Enter custom model ID" escape hatch is always available.
     """
     resolved_default = (default or "").strip()
-    if not provider.models:
+    models = provider.models
+    if not models:
         return resolved_default or provider.default_model
 
     _step("Model")
 
-    curated_values = {option.value for option in provider.models}
+    curated_values = {option.value for option in models}
     curated_choices: list[Choice] = [
-        Choice(value=option.value, label=option.label) for option in provider.models
+        Choice(value=option.value, label=option.label) for option in models
     ]
 
     extra_choices: list[Choice] = []
@@ -860,6 +899,41 @@ def _configure_coralogix() -> tuple[str, str]:
         _console.print(f"[{SECONDARY}]Try again or press Ctrl+C to cancel.[/]")
 
 
+def _configure_dagster() -> tuple[str, str]:
+    _, credentials = _integration_defaults("dagster")
+    _console.print("\n[bold]Dagster Integration[/bold]")
+    _console.print(
+        f"[{SECONDARY}]Dagster webserver URL. "
+        f"OSS local dev: http://localhost:3000. "
+        f"Dagster+: https://<deployment>.dagster.cloud/<env>. "
+        f"API token required for Dagster+; leave blank for unauthenticated OSS.[/]\n"
+    )
+    while True:
+        endpoint = _prompt_value(
+            "Dagster webserver URL",
+            default=_string_value(credentials.get("endpoint"), "http://localhost:3000"),
+        )
+        api_token = _prompt_value(
+            "Dagster API token (optional for OSS)",
+            default=_string_value(credentials.get("api_token")),
+            secret=True,
+            allow_empty=True,
+        )
+        with _console.status("Validating Dagster integration...", spinner="dots"):
+            result = validate_dagster_integration(endpoint=endpoint, api_token=api_token)
+        _render_integration_result("Dagster", result)
+        if result.ok:
+            upsert_integration(
+                "dagster",
+                {"credentials": {"endpoint": endpoint, "api_token": api_token}},
+            )
+            if api_token:
+                sync_env_secret("DAGSTER_API_TOKEN", api_token)
+            env_path = sync_env_values({"DAGSTER_ENDPOINT": endpoint})
+            return "Dagster", str(env_path)
+        _console.print(f"[{SECONDARY}]Try again or press Ctrl+C to cancel.[/]")
+
+
 def _configure_slack() -> tuple[str, str]:
     _, credentials = _integration_defaults("slack")
     while True:
@@ -969,6 +1043,79 @@ def _configure_aws() -> tuple[str, str]:
         _console.print(f"[{SECONDARY}]Try again or press Ctrl+C to cancel.[/]")
 
 
+def _github_wizard_browser_authorize() -> str | None:
+    """Run GitHub device-flow browser authorization inside the wizard."""
+    from app.integrations.github_mcp_oauth import (
+        GitHubDeviceCode,
+        GitHubDeviceFlowError,
+        authorize_github_via_device_flow,
+    )
+
+    def _show(code: GitHubDeviceCode) -> None:
+        user_code = escape(code.user_code)
+        _console.print()
+        _console.print(f"  1. Your browser will open [bold]{code.verification_uri}[/]")
+        _console.print(f"     [{SECONDARY}](if it doesn't open, visit that URL yourself).[/]")
+        _console.print(
+            f"  2. Enter this one-time code when GitHub asks: [{DEVICE_CODE}]{user_code}[/]"
+        )
+        _console.print("  3. Approve the request for OpenSRE.")
+        _console.print()
+        _console.print(f"  [{SECONDARY}]Waiting for you to approve in the browser…[/]")
+
+    _console.print()
+    _console.print("Sign in to GitHub in your browser (device authorization):")
+    _console.print(f"[{SECONDARY}]Requesting a one-time code from GitHub…[/]")
+    try:
+        token = authorize_github_via_device_flow(on_prompt=_show)
+    except GitHubDeviceFlowError as err:
+        _console.print(f"Browser authorization unavailable: {err}")
+        return None
+    except Exception as err:  # network/transport issues
+        _console.print(f"Browser authorization failed: {err}")
+        return None
+    _console.print("[bold]Authorized.[/] Saved a GitHub token from the browser sign-in.")
+    return token.access_token
+
+
+def _github_wizard_auth_token(mode: str, credentials: Mapping[str, object]) -> str:
+    """Resolve a GitHub MCP auth token, offering browser sign-in for remote modes."""
+    existing = _string_value(credentials.get("auth_token"))
+    if mode == "stdio":
+        return _prompt_value(
+            "GitHub PAT / auth token (optional if the server already authenticates upstream)",
+            default=existing,
+            secret=True,
+            allow_empty=True,
+        )
+
+    method = _choose(
+        "How do you want to connect OpenSRE to GitHub?",
+        [
+            Choice(
+                value="browser",
+                label="Sign in with GitHub in your browser (opens a page, enter a one-time code)",
+            ),
+            Choice(value="token", label="Paste a personal access token (PAT)"),
+            Choice(value="none", label="Skip — the MCP server authenticates upstream"),
+        ],
+        default="browser",
+    )
+    if method == "none":
+        return ""
+    if method == "browser":
+        token = _github_wizard_browser_authorize()
+        if token:
+            return token
+        _console.print("Falling back to manual token entry.")
+    return _prompt_value(
+        "GitHub PAT / auth token",
+        default=existing,
+        secret=True,
+        allow_empty=True,
+    )
+
+
 def _configure_github_mcp() -> tuple[str, str]:
     _, credentials = _integration_defaults("github")
     default_mode = _string_value(credentials.get("mode"), DEFAULT_GITHUB_MCP_MODE)
@@ -1016,12 +1163,7 @@ def _configure_github_mcp() -> tuple[str, str]:
                 ),
             )
         )
-        auth_token = _prompt_value(
-            "GitHub PAT / auth token (optional if the server already authenticates upstream)",
-            default=_string_value(credentials.get("auth_token")),
-            secret=True,
-            allow_empty=True,
-        )
+        auth_token = _github_wizard_auth_token(mode, credentials)
 
         repo_view = _choose(
             "Which repository view should we use to verify access?",
@@ -1214,6 +1356,203 @@ def _configure_openclaw() -> tuple[str, str]:
         _console.print(f"[{SECONDARY}]Try again or press Ctrl+C to cancel.[/]")
 
 
+def _configure_posthog_mcp() -> tuple[str, str]:
+    _, credentials = _integration_defaults("posthog_mcp")
+    default_mode = _string_value(credentials.get("mode"), DEFAULT_POSTHOG_MCP_MODE)
+
+    while True:
+        mode = _choose(
+            "Choose the PostHog MCP transport:",
+            [
+                Choice(value="streamable-http", label="Streamable HTTP (recommended)"),
+                Choice(value="sse", label="SSE"),
+                Choice(value="stdio", label="stdio (local server)"),
+            ],
+            default=default_mode,
+        )
+
+        url = ""
+        command = ""
+        args: list[str] = []
+        if mode == "stdio":
+            command = _prompt_value(
+                "PostHog MCP command",
+                default=_string_value(credentials.get("command"), "npx"),
+            )
+            args_raw = _prompt_value(
+                "PostHog MCP args",
+                default=_joined_values(
+                    credentials.get("args"),
+                    separator=" ",
+                    fallback="-y @posthog/mcp-server@latest",
+                ),
+                allow_empty=True,
+            )
+            args = [part for part in args_raw.split() if part]
+        else:
+            url = _prompt_value(
+                "PostHog MCP URL",
+                default=_string_value(credentials.get("url"), DEFAULT_POSTHOG_MCP_URL),
+            )
+
+        auth_token = _prompt_value(
+            "PostHog personal API key (MCP Server preset)",
+            default=_string_value(credentials.get("auth_token")),
+            secret=True,
+        )
+        project_id = _prompt_value(
+            "PostHog project ID (optional)",
+            default=_string_value(credentials.get("project_id")),
+            allow_empty=True,
+        )
+
+        credentials = {
+            **credentials,
+            "url": url,
+            "mode": mode,
+            "auth_token": auth_token,
+            "command": command,
+            "args": args,
+            "project_id": project_id,
+            "read_only": True,
+        }
+
+        with _console.status("Validating PostHog MCP...", spinner="dots"):
+            result = validate_posthog_mcp_integration(
+                url=url,
+                mode=mode,
+                auth_token=auth_token,
+                command=command,
+                args=args,
+                project_id=project_id,
+                read_only=True,
+            )
+        _render_integration_result("PostHog MCP", result)
+        if result.ok:
+            credentials_dict = {
+                "url": url,
+                "mode": mode,
+                "auth_token": auth_token,
+                "command": command,
+                "args": args,
+                "project_id": project_id,
+                "read_only": True,
+            }
+            upsert_integration("posthog_mcp", {"credentials": credentials_dict})
+            sync_env_secret("POSTHOG_MCP_AUTH_TOKEN", auth_token)
+            env_path = sync_env_values(
+                {
+                    "POSTHOG_MCP_URL": url,
+                    "POSTHOG_MCP_MODE": mode,
+                    "POSTHOG_MCP_COMMAND": command,
+                    "POSTHOG_MCP_ARGS": " ".join(args),
+                    "POSTHOG_MCP_PROJECT_ID": project_id,
+                }
+            )
+            _console.print(f"[{HIGHLIGHT}]PostHog MCP · ready[/]")
+            _console.print(
+                f"[{SECONDARY}]Verify:[/] [bold]uv run opensre integrations verify posthog_mcp[/]"
+            )
+            return "PostHog MCP", str(env_path)
+        default_mode = mode
+        _console.print(f"[{SECONDARY}]Try again or press Ctrl+C to cancel.[/]")
+
+
+def _configure_sentry_mcp() -> tuple[str, str]:
+    _, credentials = _integration_defaults("sentry_mcp")
+    default_mode = _string_value(credentials.get("mode"), DEFAULT_SENTRY_MCP_MODE)
+
+    while True:
+        mode = _choose(
+            "Choose the Sentry MCP transport:",
+            [
+                Choice(value="streamable-http", label="Streamable HTTP (recommended)"),
+                Choice(value="sse", label="SSE"),
+                Choice(value="stdio", label="stdio (local server)"),
+            ],
+            default=default_mode,
+        )
+
+        url = ""
+        command = ""
+        args: list[str] = []
+        if mode == "stdio":
+            command = _prompt_value(
+                "Sentry MCP command",
+                default=_string_value(credentials.get("command"), "npx"),
+            )
+            args_raw = _prompt_value(
+                "Sentry MCP args",
+                default=_joined_values(
+                    credentials.get("args"),
+                    separator=" ",
+                    fallback="@sentry/mcp-server@latest",
+                ),
+                allow_empty=True,
+            )
+            args = [part for part in args_raw.split() if part]
+        else:
+            url = _prompt_value(
+                "Sentry MCP URL",
+                default=_string_value(credentials.get("url"), DEFAULT_SENTRY_MCP_URL),
+            )
+
+        auth_token = _prompt_value(
+            "Sentry user auth token",
+            default=_string_value(credentials.get("auth_token")),
+            secret=True,
+        )
+        if mode != "stdio" and not auth_token:
+            _console.print(
+                f"[{SECONDARY}]A user auth token is required for the hosted Sentry MCP server.[/]"
+            )
+            continue
+
+        host = _prompt_value(
+            "Self-hosted Sentry host (optional)",
+            default=_string_value(credentials.get("host")),
+            allow_empty=True,
+        )
+
+        with _console.status("Validating Sentry MCP...", spinner="dots"):
+            result = validate_sentry_mcp_integration(
+                url=url,
+                mode=mode,
+                auth_token=auth_token,
+                command=command,
+                args=args,
+                host=host,
+            )
+        _render_integration_result("Sentry MCP", result)
+        if result.ok:
+            credentials_dict = {
+                "url": url,
+                "mode": mode,
+                "auth_token": auth_token,
+                "command": command,
+                "args": args,
+                "host": host,
+            }
+            upsert_integration("sentry_mcp", {"credentials": credentials_dict})
+            sync_env_secret("SENTRY_MCP_AUTH_TOKEN", auth_token)
+            env_path = sync_env_values(
+                {
+                    "SENTRY_MCP_URL": url,
+                    "SENTRY_MCP_MODE": mode,
+                    "SENTRY_MCP_COMMAND": command,
+                    "SENTRY_MCP_ARGS": " ".join(args),
+                    "SENTRY_MCP_HOST": host,
+                }
+            )
+            _console.print(f"[{HIGHLIGHT}]Sentry MCP · ready[/]")
+            _console.print(
+                f"[{SECONDARY}]Verify:[/] [bold]uv run opensre integrations verify sentry_mcp[/]"
+            )
+            return "Sentry MCP", str(env_path)
+        default_mode = mode
+        _console.print(f"[{SECONDARY}]Try again or press Ctrl+C to cancel.[/]")
+
+
 def _configure_gitlab() -> tuple[str, str]:
     _, credentials = _integration_defaults("gitlab")
 
@@ -1241,6 +1580,43 @@ def _configure_gitlab() -> tuple[str, str]:
                 }
             )
             return "Gitlab", str(env_path)
+        _console.print(f"[{SECONDARY}]Try again or press Ctrl+C to cancel.[/]")
+
+
+def _configure_jenkins() -> tuple[str, str]:
+    _, credentials = _integration_defaults("jenkins")
+
+    while True:
+        base_url = _prompt_value(
+            "Jenkins URL (e.g. http://localhost:8080)",
+            default=_string_value(credentials.get("base_url")),
+        )
+        username = _prompt_value(
+            "Jenkins username",
+            default=_string_value(credentials.get("username")),
+        )
+        api_token = _prompt_value(
+            "Jenkins API token",
+            default=_string_value(credentials.get("api_token")),
+            secret=True,
+        )
+
+        with _console.status("Validating Jenkins integration...", spinner="dots"):
+            result = validate_jenkins_integration(
+                base_url=base_url, username=username, api_token=api_token
+            )
+        _render_integration_result("Jenkins", result)
+        if result.ok:
+            credentials = {"base_url": base_url, "username": username, "api_token": api_token}
+            upsert_integration("jenkins", {"credentials": credentials})
+            sync_env_secret("JENKINS_API_TOKEN", api_token)
+            env_path = sync_env_values(
+                {
+                    "JENKINS_URL": base_url,
+                    "JENKINS_USER": username,
+                }
+            )
+            return "Jenkins", str(env_path)
         _console.print(f"[{SECONDARY}]Try again or press Ctrl+C to cancel.[/]")
 
 
@@ -1546,6 +1922,31 @@ def _configure_opsgenie() -> tuple[str, str]:
         _console.print(f"[{SECONDARY}]Try again or press Ctrl+C to cancel.[/]")
 
 
+def _configure_pagerduty() -> tuple[str, str]:
+    _, credentials = _integration_defaults("pagerduty")
+    while True:
+        api_key = _prompt_value(
+            "PagerDuty API key",
+            default=_string_value(credentials.get("api_key")),
+            secret=True,
+        )
+        base_url = _prompt_value(
+            "PagerDuty API base URL (press Enter to use default)",
+            default=_string_value(credentials.get("base_url"), "https://api.pagerduty.com"),
+        )
+        with _console.status("Validating PagerDuty integration...", spinner="dots"):
+            result = validate_pagerduty_integration(api_key=api_key, base_url=base_url)
+        _render_integration_result("PagerDuty", result)
+        if result.ok:
+            upsert_integration(
+                "pagerduty",
+                {"credentials": {"api_key": api_key, "base_url": base_url}},
+            )
+            env_path = sync_env_values({})
+            return "PagerDuty", str(env_path)
+        _console.print(f"[{SECONDARY}]Try again or press Ctrl+C to cancel.[/]")
+
+
 def _configure_incident_io() -> tuple[str, str]:
     _, credentials = _integration_defaults("incident_io")
     while True:
@@ -1678,6 +2079,75 @@ def _configure_telegram() -> tuple[str, str]:
                     "deliveries need TELEGRAM_DEFAULT_CHAT_ID to send messages.[/]"
                 )
             return "Telegram", str(env_path)
+        _console.print(f"[{SECONDARY}]Try again or press Ctrl+C to cancel.[/]")
+
+
+def _configure_tempo() -> tuple[str, str]:
+    _, credentials = _integration_defaults("tempo")
+    _console.print(
+        f"[{SECONDARY}]Tempo commonly runs without auth behind a gateway — a URL alone is enough.[/]"
+    )
+    _console.print(
+        f"[{SECONDARY}]For auth, provide either a bearer token OR a username/password (not both).[/]"
+    )
+    while True:
+        url = _prompt_value(
+            "Tempo URL (e.g. http://localhost:3200)",
+            default=_string_value(credentials.get("url")),
+        )
+        api_key = _prompt_value(
+            "Tempo bearer token (optional, leave blank if using basic auth or none)",
+            default=_string_value(credentials.get("api_key")),
+            secret=True,
+            allow_empty=True,
+        )
+        username = _prompt_value(
+            "Tempo username (optional, for basic auth)",
+            default=_string_value(credentials.get("username")),
+            allow_empty=True,
+        )
+        password = _prompt_value(
+            "Tempo password (optional, for basic auth)",
+            default=_string_value(credentials.get("password")),
+            secret=True,
+            allow_empty=True,
+        )
+        org_id = _prompt_value(
+            "Tempo tenant / X-Scope-OrgID (optional, leave blank if single-tenant)",
+            default=_string_value(credentials.get("org_id")),
+            allow_empty=True,
+        )
+        with _console.status("Validating Tempo integration...", spinner="dots"):
+            result = validate_tempo_integration(
+                url=url,
+                api_key=api_key,
+                username=username,
+                password=password,
+                org_id=org_id,
+            )
+        _render_integration_result("Tempo", result)
+        if result.ok:
+            creds: dict[str, str] = {"url": url}
+            if api_key:
+                creds["api_key"] = api_key
+            if username:
+                creds["username"] = username
+            if password:
+                creds["password"] = password
+            if org_id:
+                creds["org_id"] = org_id
+            upsert_integration("tempo", {"credentials": creds})
+            env_values: dict[str, str] = {"TEMPO_URL": url}
+            if api_key:
+                env_values["TEMPO_API_KEY"] = api_key
+            if username:
+                env_values["TEMPO_USERNAME"] = username
+            if password:
+                env_values["TEMPO_PASSWORD"] = password
+            if org_id:
+                env_values["TEMPO_ORG_ID"] = org_id
+            env_path = sync_env_values(env_values)
+            return "Tempo", str(env_path)
         _console.print(f"[{SECONDARY}]Try again or press Ctrl+C to cancel.[/]")
 
 
@@ -1879,6 +2349,11 @@ def _configure_selected_integrations() -> tuple[list[str], str | None]:
         ),
         Choice(value="gitlab", label="Gitlab", hint="Let the agent inspect repos, PRs, and issues"),
         Choice(
+            value="jenkins",
+            label="Jenkins",
+            hint="Correlate failed builds and deployments with incidents",
+        ),
+        Choice(
             value="google_docs",
             label="Google Docs",
             hint="Create shareable incident postmortem reports",
@@ -1889,6 +2364,11 @@ def _configure_selected_integrations() -> tuple[list[str], str | None]:
             hint=(
                 "Deployments, build output, and logs tools; runtime-log API can lag the dashboard"
             ),
+        ),
+        Choice(
+            value="dagster",
+            label="Dagster",
+            hint="Pipeline runs, asset materializations, and tick history",
         ),
         Choice(
             value="betterstack",
@@ -1911,6 +2391,11 @@ def _configure_selected_integrations() -> tuple[list[str], str | None]:
             hint="Investigate alerts and triage state from OpsGenie",
         ),
         Choice(
+            value="pagerduty",
+            label="PagerDuty",
+            hint="Fetch incidents, on-call schedules, and service topology from PagerDuty",
+        ),
+        Choice(
             value="incident_io",
             label="incident.io",
             hint="Read incident context and updates from incident.io",
@@ -1925,11 +2410,26 @@ def _configure_selected_integrations() -> tuple[list[str], str | None]:
             label="OpenClaw (recommended)",
             hint="Connect OpenSRE to OpenClaw for editor-driven RCA, setup checks, and write-back",
         ),
+        Choice(
+            value="posthog_mcp",
+            label="PostHog (MCP)",
+            hint="Query PostHog analytics, feature flags, error tracking, and HogQL via MCP",
+        ),
+        Choice(
+            value="sentry_mcp",
+            label="Sentry (MCP)",
+            hint="Query Sentry issues, events, traces, and Seer root-cause analysis via MCP",
+        ),
         Choice(value="splunk", label="Splunk", hint="Query logs from Splunk"),
         Choice(
             value="opensearch",
             label="OpenSearch / Elasticsearch",
             hint="Query logs and indices from OpenSearch or Elasticsearch clusters",
+        ),
+        Choice(
+            value="tempo",
+            label="Grafana Tempo",
+            hint="Query distributed traces from a standalone Tempo backend",
         ),
         Choice(
             value="skip",
@@ -1958,17 +2458,23 @@ def _configure_selected_integrations() -> tuple[list[str], str | None]:
         "github": _configure_github_mcp,
         "sentry": _configure_sentry,
         "gitlab": _configure_gitlab,
+        "jenkins": _configure_jenkins,
         "google_docs": _configure_google_docs,
         "vercel": _configure_vercel,
+        "dagster": _configure_dagster,
         "betterstack": _configure_betterstack,
         "jira": _configure_jira,
         "alertmanager": _configure_alertmanager,
         "opsgenie": _configure_opsgenie,
+        "pagerduty": _configure_pagerduty,
         "incident_io": _configure_incident_io,
         "notion": _configure_notion,
         "openclaw": _configure_openclaw,
+        "posthog_mcp": _configure_posthog_mcp,
+        "sentry_mcp": _configure_sentry_mcp,
         "opensearch": _configure_opensearch,
         "splunk": _configure_splunk,
+        "tempo": _configure_tempo,
     }
     _SERVICE_LABELS = {
         "grafana_local": "grafana local",
@@ -1983,15 +2489,21 @@ def _configure_selected_integrations() -> tuple[list[str], str | None]:
         "github": "github mcp",
         "sentry": "sentry",
         "gitlab": "gitlab",
+        "jenkins": "jenkins",
         "google_docs": "google docs",
         "vercel": "vercel",
+        "dagster": "dagster",
         "jira": "jira",
         "alertmanager": "alertmanager",
         "opsgenie": "opsgenie",
+        "pagerduty": "pagerduty",
         "incident_io": "incident.io",
         "notion": "notion",
         "openclaw": "openclaw",
+        "posthog_mcp": "posthog mcp",
+        "sentry_mcp": "sentry mcp",
         "opensearch": "opensearch",
+        "tempo": "grafana tempo",
     }
 
     _step(f"Service · {_SERVICE_LABELS.get(selected_service, selected_service)}")
@@ -2163,7 +2675,7 @@ def run_wizard(_argv: list[str] | None = None) -> int:
         else SUPPORTED_PROVIDERS[0].value
     )
 
-    _step_header(1, 4, "Setup Mode")
+    _step_header(1, WIZARD_TOTAL_STEPS, "Setup Mode")
     wizard_mode = _choose(
         "How do you want to get started?",
         [
@@ -2203,7 +2715,7 @@ def run_wizard(_argv: list[str] | None = None) -> int:
     provider: ProviderOption
     model: str
     while True:
-        _step_header(2, 4, "LLM Provider")
+        _step_header(2, WIZARD_TOTAL_STEPS, "LLM Provider")
         saved_provider = (
             PROVIDER_BY_VALUE.get(saved_provider_value) if saved_provider_value else None
         )
@@ -2302,7 +2814,7 @@ def run_wizard(_argv: list[str] | None = None) -> int:
     )
     env_path = sync_provider_env(provider=provider, model=model)
 
-    _step_header(3, 4, "Integrations")
+    _step_header(3, WIZARD_TOTAL_STEPS, "Integrations")
     try:
         configured_integrations, integration_env_path = _configure_selected_integrations()
     except KeyboardInterrupt:
@@ -2315,6 +2827,7 @@ def run_wizard(_argv: list[str] | None = None) -> int:
 
     summary_env_path = integration_env_path or str(env_path)
 
+    _step_header(4, WIZARD_TOTAL_STEPS, "Summary")
     _render_saved_summary(
         provider_label=provider.label,
         model=model,

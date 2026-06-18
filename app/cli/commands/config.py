@@ -91,7 +91,7 @@ def _load_config() -> dict[str, Any]:
         return {}
 
     try:
-        import yaml  # type: ignore[import-untyped]
+        import yaml
 
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
     except Exception as exc:  # noqa: BLE001
@@ -108,7 +108,7 @@ def _load_config() -> dict[str, Any]:
 
 
 def _save_config(data: dict[str, Any]) -> None:
-    import yaml  # type: ignore[import-untyped]
+    import yaml
 
     path = _config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -177,7 +177,7 @@ def config_show() -> None:
         click.echo(json.dumps(payload))
         return
 
-    import yaml  # type: ignore[import-untyped]
+    import yaml
 
     path = _config_path()
     click.echo(f"# {path} (on-disk values; environment variables do not override this output)")

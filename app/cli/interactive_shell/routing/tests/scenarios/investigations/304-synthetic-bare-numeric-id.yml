@@ -16,13 +16,10 @@ available_capabilities:
   - rds_postgres
 notes: []
 route:
-  expected_kind: cli_agent
-  expected_signals: []
+  expected_kind: handle_message_with_agent
   expected_command_text: null
 policy:
-  should_execute: true
-  has_unhandled_clause: false
-  fail_closed: false
+  executes_terminal_action: true
 planned_actions:
 - kind: synthetic_test
   content: rds_postgres:005-failover

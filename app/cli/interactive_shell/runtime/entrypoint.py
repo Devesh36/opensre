@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import platform
 import sys
 
 from rich.console import Console
@@ -22,12 +24,25 @@ from app.cli.interactive_shell.ui import DIM, render_banner
 log = logging.getLogger(__name__)
 
 
+def _hydrate_configured_integrations(session: ReplSession) -> None:
+    """Record configured integrations (env + local store) on the session.
+
+    Without this the agent can't answer "is X installed?" and the integration
+    guards stay dead (``configured_integrations_known`` never flips). Delegates
+    to :meth:`ReplSession.hydrate_configured_integrations` so boot-time
+    hydration and post-mutation refresh resolve the same env + store set.
+    Best-effort: any failure leaves the session in its default "unknown" state.
+    """
+    session.hydrate_configured_integrations()
+
+
 async def repl_main(initial_input: str | None = None, _config: ReplConfig | None = None) -> int:
     from app.cli.interactive_shell.ui.theme import get_active_theme_name
 
     cfg = _config or ReplConfig.load()
     session = ReplSession()
     session.active_theme_name = get_active_theme_name()
+    _hydrate_configured_integrations(session)
     session.task_registry = TaskRegistry.persistent()
     pt_session = _prompt_surface._build_prompt_session()
     session.prompt_history_backend = pt_session.history
@@ -72,6 +87,61 @@ async def repl_main(initial_input: str | None = None, _config: ReplConfig | None
         SessionStore.flush(session)
 
 
+def _github_login_explicitly_bypassed() -> bool:
+    """Cheap, dependency-free check for contexts where the GitHub gate is intentionally skipped.
+
+    Used only as the *error* fallback for the first-launch gate. It must not import
+    the gate module (that import may be exactly what failed), so it re-derives the
+    documented bypasses directly:
+
+    * ``OPENSRE_SKIP_GITHUB_LOGIN`` — the user-facing escape hatch.
+    * Non-eligible operating systems — the gate only runs on macOS/Windows.
+    * Non-interactive stdin — scripted / CI runs have no prompt to drive.
+    """
+    if os.getenv("OPENSRE_SKIP_GITHUB_LOGIN", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return True
+    if platform.system() not in {"Darwin", "Windows"}:
+        return True
+    try:
+        return not sys.stdin.isatty()
+    except Exception:
+        return True
+
+
+def _maybe_require_github_login(console: Console) -> bool:
+    """Enforce the first-launch GitHub login gate.
+
+    Returns True when the REPL should start (gate not required, or login
+    succeeded) and False when startup must not proceed (user quit at the gate, or
+    the gate could not run in a context where GitHub sign-in is mandatory).
+
+    On an unexpected error we deliberately do NOT fail open into the REPL: that
+    would let a gate bug silently skip the mandatory sign-in. Instead we only
+    allow startup when an explicit, documented bypass applies (skip env var,
+    ineligible OS, or non-TTY); otherwise we block and point the user at the
+    escape hatch so a real outage can never permanently lock them out.
+    """
+    try:
+        from app.cli.first_launch_github import (
+            require_github_login_on_first_launch,
+            should_require_github_login,
+        )
+
+        if not should_require_github_login():
+            return True
+        return require_github_login_on_first_launch(console)
+    except Exception:
+        log.warning("First-launch GitHub login gate failed.", exc_info=True)
+        if _github_login_explicitly_bypassed():
+            return True
+        console.print(
+            "GitHub sign-in is required to use OpenSRE, but the sign-in step could not run. "
+            "Set [bold]OPENSRE_SKIP_GITHUB_LOGIN=1[/bold] to bypass this, then relaunch "
+            "[bold]opensre[/bold]."
+        )
+        return False
+
+
 def run_repl(initial_input: str | None = None, config: ReplConfig | None = None) -> int:
     cfg = config or ReplConfig.load()
     if not cfg.enabled:
@@ -89,6 +159,8 @@ def run_repl(initial_input: str | None = None, config: ReplConfig | None = None)
             legacy_windows=False,
         )
         render_banner(real_console)
+        if not _maybe_require_github_login(real_console):
+            return 0
 
     try:
         return asyncio.run(repl_main(initial_input=initial_input, _config=cfg))

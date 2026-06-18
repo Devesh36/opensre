@@ -10,8 +10,12 @@ from rich.console import Console
 from rich.markup import escape
 
 import app.cli.interactive_shell.command_registry.repl_data as repl_data
-from app.cli.interactive_shell.command_registry.types import ExecutionTier, SlashCommand
+from app.cli.interactive_shell.command_registry.types import (
+    ExecutionTier,
+    SlashCommand,
+)
 from app.cli.interactive_shell.runtime import ReplSession
+from app.cli.interactive_shell.token_accounting import format_token_total
 from app.cli.interactive_shell.ui import (
     BOLD_BRAND,
     DIM,
@@ -28,6 +32,7 @@ from app.cli.interactive_shell.ui.choice_menu import (
     repl_section_break,
     repl_tty_interactive,
 )
+from app.cli.interactive_shell.ui.time_format import format_repl_duration, format_repl_timestamp
 from app.llm_reasoning_effort import (
     REASONING_EFFORT_OPTIONS,
     describe_reasoning_effort_default,
@@ -101,6 +106,11 @@ def _cmd_trust(session: ReplSession, console: Console, args: list[str]) -> bool:
 
 
 def _cmd_status(session: ReplSession, console: Console, _args: list[str]) -> bool:
+    # The cli/docs grounding sources self-register on import, which may not have
+    # happened yet if /status runs before the first grounding turn. Import them
+    # so their cache rows always appear.
+    import app.cli.interactive_shell.references.cli_reference  # noqa: F401
+    import app.cli.interactive_shell.references.docs_reference  # noqa: F401
     from app.cli.interactive_shell.references.grounding_diagnostics import iter_grounding_sources
 
     table = repl_table(title="Session status\n", title_style=BOLD_BRAND, show_header=False)
@@ -133,18 +143,22 @@ def _cmd_status(session: ReplSession, console: Console, _args: list[str]) -> boo
 
 
 def _cmd_cost(session: ReplSession, console: Console, _args: list[str]) -> bool:
-    table = repl_table(title="Session cost\n", title_style=BOLD_BRAND, show_header=False)
+    title = "Session cost"
+    if session.token_usage_has_estimates:
+        title = "Session cost (includes estimates)"
+    table = repl_table(title=f"{title}\n", title_style=BOLD_BRAND, show_header=False)
     table.add_column("key", style="bold")
     table.add_column("value")
-    table.add_row("interactions", str(len(session.history)))
+    table.add_row("history entries", str(len(session.history)))
+    if session.llm_call_count:
+        table.add_row("llm calls", str(session.llm_call_count))
 
     if session.token_usage:
-        inp = session.token_usage.get("input", 0)
-        out = session.token_usage.get("output", 0)
-        table.add_row("input tokens", f"{inp:,}")
-        table.add_row("output tokens", f"{out:,}")
+        for direction in ("input", "output"):
+            label, value = format_token_total(session, direction=direction)
+            table.add_row(label, value)
     else:
-        table.add_row("token usage", f"[{DIM}]not available (not wired yet)[/]")
+        table.add_row("token usage", f"[{DIM}]no LLM usage recorded yet[/]")
 
     print_repl_table(console, table)
     return True
@@ -268,18 +282,6 @@ _EFFORT_FIRST_ARGS: tuple[tuple[str, str], ...] = (
 )
 
 
-def _format_duration(duration_secs: int | None) -> str:
-    if duration_secs is None:
-        return "—"
-    if duration_secs < 60:
-        return f"{duration_secs}s"
-    if duration_secs < 3600:
-        return f"{duration_secs // 60}m {duration_secs % 60}s"
-    h = duration_secs // 3600
-    m = (duration_secs % 3600) // 60
-    return f"{h}h {m}m"
-
-
 def _record_resume_slash(
     session: ReplSession,
     args: list[str],
@@ -331,24 +333,17 @@ def _cmd_sessions(session: ReplSession, console: Console, _args: list[str]) -> b
         else:
             name_col = escape(name) if name else f"[{DIM}]—[/]"
 
-        started_raw = entry.get("started_at") or ""
-        try:
-            started_dt = datetime.fromisoformat(started_raw)
-            started_str = started_dt.astimezone().strftime("%Y-%m-%d %H:%M")
-        except Exception:
-            started_str = started_raw[:16] if started_raw else "—"
+        started_str = format_repl_timestamp(entry.get("started_at"), style="table")
 
         duration_secs = entry.get("duration_secs")
         if is_current:
-            try:
+            with contextlib.suppress(OSError, OverflowError, ValueError):
                 elapsed = int(
                     (
                         datetime.now(UTC) - datetime.fromtimestamp(session.started_at, tz=UTC)
                     ).total_seconds()
                 )
                 duration_secs = elapsed
-            except Exception:
-                pass
 
         total = entry.get("total_turns")
         investigations = entry.get("investigation_turns")
@@ -358,7 +353,7 @@ def _cmd_sessions(session: ReplSession, console: Console, _args: list[str]) -> b
             short_id,
             name_col,
             started_str,
-            _format_duration(duration_secs),
+            format_repl_duration(duration_secs),
             str(total) if total is not None else "—",
             str(investigations) if investigations is not None else "—",
         )
@@ -369,8 +364,6 @@ def _cmd_sessions(session: ReplSession, console: Console, _args: list[str]) -> b
 
 def _interactive_resume_menu(session: ReplSession, console: Console) -> bool:
     """Show a numbered list of recent sessions and resume the selected one."""
-    from datetime import datetime
-
     from app.cli.interactive_shell.sessions.store import SessionStore
 
     entries = [e for e in SessionStore.load_recent(10) if e["session_id"] != session.session_id]
@@ -383,11 +376,7 @@ def _interactive_resume_menu(session: ReplSession, console: Console) -> bool:
         sid = entry["session_id"]
         short_id = sid[:8]
         name = entry.get("name") or f"[{short_id}]"
-        started_raw = entry.get("started_at") or ""
-        try:
-            started_str = datetime.fromisoformat(started_raw).astimezone().strftime("%m-%d %H:%M")
-        except Exception:
-            started_str = "—"
+        started_str = format_repl_timestamp(entry.get("started_at"), style="compact")
         label = f"{name[:40]:<40}  {short_id}  {started_str}"
         choices.append((sid, label))
     choices.append(("done", "done"))
@@ -682,7 +671,12 @@ COMMANDS: list[SlashCommand] = [
         first_arg_completions=_VERBOSE_FIRST_ARGS,
     ),
     SlashCommand("/compact", "Trim old session history to free memory.", _cmd_compact),
-    SlashCommand("/sessions", "List recent REPL sessions.", _cmd_sessions),
+    SlashCommand(
+        "/sessions",
+        "List recent REPL sessions.",
+        _cmd_sessions,
+        usage=("/sessions",),
+    ),
     SlashCommand(
         "/resume",
         "Resume a previous session by restoring its conversation context.",

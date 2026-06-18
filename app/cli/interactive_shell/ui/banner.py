@@ -23,7 +23,7 @@ Rendered output legend (colour roles)
 # [SECONDARY]  "opensre" product name label · cwd · tip / note body
 # [DIM]        subtitle description · rule lines · box chrome · dividers
 # [TEXT]       provider/model values · greeting
-# [WARNING]    read-only or trust-mode notice
+# [WARNING]    read-only or trust-mode notice · incomplete-integration marker
 """
 
 from __future__ import annotations
@@ -227,6 +227,135 @@ _TIPS: tuple[str, ...] = (
     "Use /investigate for runnable demos/templates",
 )
 
+# Display-name overrides for known integration service slugs.
+_SERVICE_DISPLAY_NAMES: dict[str, str] = {
+    "grafana": "Grafana",
+    "datadog": "Datadog",
+    "honeycomb": "Honeycomb",
+    "coralogix": "Coralogix",
+    "aws": "AWS",
+    "github": "GitHub",
+    "sentry": "Sentry",
+    "prometheus": "Prometheus",
+    "loki": "Loki",
+    "elasticsearch": "Elasticsearch",
+    "bigquery": "BigQuery",
+    "pagerduty": "PagerDuty",
+    "slack": "Slack",
+    "telegram": "Telegram",
+    "signoz": "SigNoz",
+    "jira": "Jira",
+    "gitlab": "GitLab",
+    "vercel": "Vercel",
+    "mongodb": "MongoDB",
+    "postgresql": "PostgreSQL",
+    "mysql": "MySQL",
+    "redis": "Redis",
+    "kafka": "Kafka",
+    "rabbitmq": "RabbitMQ",
+    "clickhouse": "ClickHouse",
+    "mariadb": "MariaDB",
+    "kubernetes": "Kubernetes",
+    "betterstack": "Better Stack",
+    "snowflake": "Snowflake",
+    "newrelic": "New Relic",
+    "opsgenie": "OpsGenie",
+    "linear": "Linear",
+    "supabase": "Supabase",
+}
+
+
+def _load_integration_health() -> list[tuple[str, str]]:
+    """Return ``(display_name, status)`` for each configured integration.
+
+    ``status`` is ``"ok"`` or ``"incomplete"`` (e.g. a hosted MCP record saved
+    without an API token). Offline and best-effort: never raises and never makes
+    network calls, so the banner reflects health without slowing startup.
+    """
+    try:
+        from app.integrations.catalog import (  # lazy — avoids circular deps
+            configured_integration_health,
+        )
+
+        return [
+            (_SERVICE_DISPLAY_NAMES.get(service, service.title()), status)
+            for service, status in configured_integration_health()
+        ]
+    except Exception:
+        return []
+
+
+def _is_alert_listener_active() -> bool:
+    """Return True if the alert listener is enabled in config. Never raises."""
+    try:
+        from app.cli.interactive_shell.config import ReplConfig
+
+        # ``ReplConfig.load()`` re-applies the configured palette as a side effect.
+        # This is a passive read while rendering the welcome panel, so preserve the
+        # caller's active theme (e.g. one set via ``/theme``) instead of snapping
+        # it back to the config default.
+        current_theme = ui_theme.get_active_theme_name()
+        try:
+            return ReplConfig.load().alert_listener_enabled
+        finally:
+            ui_theme.set_active_theme(current_theme)
+    except Exception:
+        return False
+
+
+def _build_ambient_right_column(session: object = None) -> Text:
+    """Right column for returning users: live integration status and alert listener state."""
+    parts: list[Text] = []
+
+    # Integrations — annotate by offline health so the banner never implies a
+    # half-configured integration (e.g. a hosted MCP record with no API token)
+    # is connected. A "⚠" + dim name marks an integration missing credentials.
+    parts.append(Text("Integrations", style=f"bold {ui_theme.BRAND}"))
+    entries = _load_integration_health()
+    if entries:
+        _MAX_SHOWN = 6
+        shown = entries[:_MAX_SHOWN]
+        overflow = len(entries) - len(shown)
+        name_line = Text(overflow="fold")
+        for idx, (name, status) in enumerate(shown):
+            if idx:
+                name_line.append("  ·  ", style=ui_theme.DIM)
+            if status == "incomplete":
+                name_line.append(f"{name} ⚠", style=ui_theme.DIM)
+            else:
+                name_line.append(name, style=ui_theme.SECONDARY)
+        if overflow:
+            name_line.append(f"  +{overflow}", style=ui_theme.DIM)
+        parts.append(name_line)
+        if any(status == "incomplete" for _name, status in entries):
+            parts.append(Text("⚠ incomplete — run /integrations verify", style=ui_theme.WARNING))
+    else:
+        parts.append(Text("run /onboard to connect tools", style=ui_theme.DIM))
+
+    parts.append(Text("───", style=ui_theme.DIM))
+
+    # Alert listener
+    parts.append(Text("Alert listener", style=f"bold {ui_theme.BRAND}"))
+    if _is_alert_listener_active():
+        listener_line = Text()
+        listener_line.append("● ", style=f"bold {ui_theme.HIGHLIGHT}")
+        listener_line.append("active", style=ui_theme.SECONDARY)
+        parts.append(listener_line)
+    else:
+        parts.append(Text("○  not configured", style=ui_theme.DIM))
+
+    # Session summary — only shown when /clear is used mid-session with history
+    if session is not None:
+        history: list[object] = getattr(session, "history", [])
+        if history:
+            parts.append(Text("───", style=ui_theme.DIM))
+            parts.append(Text("This session", style=f"bold {ui_theme.BRAND}"))
+            count = len(history)
+            noun = "interaction" if count == 1 else "interactions"
+            parts.append(Text(f"{count} {noun}", style=ui_theme.SECONDARY))
+
+    return Text("\n").join(parts)
+
 
 # Panel geometry. The body switches to a stacked layout on narrow terminals,
 # and otherwise expands to fill the full console width while keeping the left
@@ -246,7 +375,30 @@ _LOGO_MARK_ROWS: tuple[tuple[str, str], ...] = (
 )
 
 
+def _github_username() -> str:
+    """Return the saved GitHub login for the configured GitHub integration, or "".
+
+    Best-effort and never raises: the welcome greeting must render even when the
+    integration store is unreadable or GitHub is not configured.
+    """
+    try:
+        from app.integrations.store import get_integration
+
+        record = get_integration("github")
+        if not record:
+            return ""
+        credentials = record.get("credentials") or {}
+        return str(credentials.get("username") or "").strip()
+    except Exception:
+        return ""
+
+
 def _get_username() -> str:
+    # Prefer the authenticated GitHub handle once it is known, so the greeting
+    # reflects the user's GitHub identity rather than the local system account.
+    github = _github_username()
+    if github:
+        return github
     try:
         return getpass.getuser()
     except Exception:
@@ -351,13 +503,16 @@ def build_ready_panel(
     panel_title.append(f"v{version} ", style=ui_theme.BRAND)
 
     left = _build_identity_block(provider, model, trust_mode=trust_mode)
-    right = Text("\n").join(
-        [
-            _build_notes_block("Tips for getting started", _TIPS),
-            Text("───", style=ui_theme.DIM),
-            _build_notes_block("What's new", WHATS_NEW),
-        ]
-    )
+    if _is_first_run():
+        right = Text("\n").join(
+            [
+                _build_notes_block("Tips for getting started", _TIPS),
+                Text("───", style=ui_theme.DIM),
+                _build_notes_block("What's new", WHATS_NEW),
+            ]
+        )
+    else:
+        right = _build_ambient_right_column(session=session)
 
     body: Group | Table
     if console.width - _PANEL_FRAME_WIDTH >= _MIN_TWO_COLUMN_CONTENT_WIDTH:

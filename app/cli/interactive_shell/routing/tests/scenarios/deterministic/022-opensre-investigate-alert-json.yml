@@ -19,14 +19,10 @@ notes:
 - Execution uses /investigate (SAFE tier) so no Proceed? confirmation prompt.
 
 route:
-  expected_kind: slash
-  expected_signals:
-  - opensre_investigate
+  expected_kind: handle_message_with_agent
   expected_command_text: /investigate alert.json
 policy:
-  should_execute: true
-  has_unhandled_clause: false
-  fail_closed: false
+  executes_terminal_action: true
 planned_actions:
 - kind: slash
   source: deterministic

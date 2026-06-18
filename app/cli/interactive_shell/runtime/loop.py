@@ -17,6 +17,7 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.formatted_text import ANSI
 from prompt_toolkit.patch_stdout import patch_stdout
 from rich.console import Console
+from rich.file_proxy import FileProxy
 from rich.markup import escape
 
 from app.agents.sampler import start_sampler
@@ -132,7 +133,7 @@ class StreamingConsole(Console):
         high column. Rich output that follows (tables, follow-up status lines,
         section rules) must start at column zero or lines appear broken.
         """
-        if not self._spinner.streaming:
+        if not self._spinner.streaming and not isinstance(sys.stdout, FileProxy):
             from app.cli.interactive_shell.ui.choice_menu import (
                 ensure_tty_column_zero,
                 prepare_repl_output_line,
@@ -160,7 +161,7 @@ async def run_interactive(
     inbox: _alert_inbox.AlertInbox | None = None,
 ) -> None:
     if pt_session is None:
-        pt_session = _prompt_surface._build_prompt_session()
+        pt_session = _prompt_surface._build_prompt_session(session)
         session.prompt_history_backend = pt_session.history
     spinner = SpinnerState()
     state = ReplState()
@@ -175,8 +176,7 @@ async def run_interactive(
     session.main_loop = main_loop
     state.bind_loop(main_loop)
 
-    def _invalidate_prompt() -> None:
-        main_loop.call_soon_threadsafe(pt_app.invalidate)
+    _invalidate_prompt = _prompt_surface.wire_prompt_refresh(session, pt_app, main_loop)
 
     def _request_exit() -> None:
         state.request_exit()
@@ -296,7 +296,10 @@ async def run_interactive(
         if state.is_awaiting_confirmation():
             confirm_text = state.confirm_prompt_text
             return ANSI(f"{confirm_text}\n{base}")
-        prefix = spinner.inline_spinner_ansi() or spinner.idle_hint_ansi()
+        prefix = _prompt_surface.resolve_prompt_prefix_ansi(
+            inline_spinner=spinner.inline_spinner_ansi(),
+            idle_hint=spinner.idle_hint_ansi(),
+        )
         return ANSI(f"{prefix}\n{base}")
 
     async def _spinner_ticker() -> None:
@@ -339,21 +342,35 @@ async def run_interactive(
                 await asyncio.sleep(0.05)
                 drain_stale_cpr_bytes()
                 try:
-                    text = await pt_session.prompt_async(
-                        message=_message_with_spinner,
-                        bottom_toolbar=spinner.toolbar_ansi,
-                        refresh_interval=PROMPT_REFRESH_INTERVAL_S,
-                    )
+                    prefilled = session.take_pending_prompt_default()
+                    if prefilled and session.take_pending_autosubmit():
+                        # An agent-queued command (e.g. /integrations setup) was
+                        # set before this prompt opened; auto-submit it without
+                        # waiting for input so it dispatches with exclusive stdin.
+                        text = prefilled
+                    else:
+                        text = await pt_session.prompt_async(
+                            message=_message_with_spinner,
+                            bottom_toolbar=spinner.toolbar_ansi,
+                            refresh_interval=PROMPT_REFRESH_INTERVAL_S,
+                            placeholder=lambda: _prompt_surface.resolve_prompt_placeholder(session),
+                            default=prefilled,
+                        )
                 except EOFError:
                     if state.is_dispatch_running():
                         state.cancel_current_dispatch()
                         continue
+                    if session.session_id:
+                        echo_console.print()
+                        echo_console.print("Resume this session with:")
+                        echo_console.print(f"/resume {session.session_id}")
+                        echo_console.print("Goodbye!")
                     return
                 except KeyboardInterrupt:
                     if state.is_dispatch_running():
                         state.cancel_current_dispatch()
                         continue
-                    if repl_prompt_note_ctrl_c(echo_console):
+                    if repl_prompt_note_ctrl_c(echo_console, session.session_id):
                         return
                     continue
                 else:
@@ -396,27 +413,25 @@ async def run_interactive(
         state.request_exit()
         state.cancel_current_dispatch()
         sampler_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await sampler_task
         processor_task.cancel()
         alert_watcher_task.cancel()
         spinner_ticker_task.cancel()
-        try:
-            await processor_task
-        except asyncio.CancelledError:
-            # Expected during shutdown after explicit task cancellation.
-            pass
-        except Exception as exc:
-            log.debug("Processor task shutdown raised exception: %s", exc)
-        try:
-            await alert_watcher_task
-        except asyncio.CancelledError:
-            # Expected during shutdown after explicit task cancellation.
-            pass
-        except Exception as exc:
-            log.debug("Alert watcher shutdown raised exception: %s", exc)
-        with contextlib.suppress(asyncio.CancelledError):
-            await spinner_ticker_task
+        shutdown_labels = (
+            "sampler",
+            "processor",
+            "alert watcher",
+            "spinner ticker",
+        )
+        shutdown_results = await asyncio.gather(
+            sampler_task,
+            processor_task,
+            alert_watcher_task,
+            spinner_ticker_task,
+            return_exceptions=True,
+        )
+        for label, result in zip(shutdown_labels, shutdown_results, strict=True):
+            if isinstance(result, Exception) and not isinstance(result, asyncio.CancelledError):
+                log.debug("%s task shutdown raised exception: %s", label, result)
 
 
 __all__ = ["StreamingConsole", "run_interactive"]

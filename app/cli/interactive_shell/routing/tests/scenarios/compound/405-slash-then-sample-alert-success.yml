@@ -19,13 +19,10 @@ notes:
   with two supported sequential actions executes successfully without fail-closing.
 
 route:
-  expected_kind: cli_agent
-  expected_signals: []
+  expected_kind: handle_message_with_agent
   expected_command_text: null
 policy:
-  should_execute: true
-  has_unhandled_clause: false
-  fail_closed: false
+  executes_terminal_action: true
 planned_actions:
 - kind: slash
   content: /health
