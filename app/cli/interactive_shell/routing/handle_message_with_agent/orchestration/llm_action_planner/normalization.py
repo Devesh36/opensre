@@ -18,6 +18,9 @@ def _normalize_tool_args(
         parsed_args = [str(item).strip() for item in raw_args] if isinstance(raw_args, list) else []
         if command == "/integrations" and not parsed_args:
             parsed_args = ["list"]
+        if command == "/verify":
+            command = "/integrations"
+            parsed_args = ["verify", *parsed_args]
         if not command.startswith("/"):
             return None
 
