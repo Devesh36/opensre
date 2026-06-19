@@ -18,24 +18,25 @@ def _normalize_tool_args(
         parsed_args = [str(item).strip() for item in raw_args] if isinstance(raw_args, list) else []
         if command == "/integrations" and not parsed_args:
             parsed_args = ["list"]
-        if command == "/verify":
-            command = "/integrations"
-            parsed_args = ["verify", *parsed_args]
         if not command.startswith("/"):
             return None
 
         from app.cli.interactive_shell.commands import SLASH_COMMANDS
 
-        if command.split(maxsplit=1)[0].lower() not in SLASH_COMMANDS:
+        command_name = command.split(maxsplit=1)[0].lower()
+        if command_name not in SLASH_COMMANDS:
             return None
         capability_map = getattr(session, "available_capabilities", {}) or {}
         available_slash = capability_map.get("slash_commands")
         if (
             isinstance(available_slash, tuple)
             and available_slash
-            and command.split(maxsplit=1)[0] not in set(available_slash)
+            and command_name not in set(available_slash)
         ):
             return None
+        if command == "/verify":
+            command = "/integrations"
+            parsed_args = ["verify", *parsed_args]
 
         configured_known = bool(getattr(session, "configured_integrations_known", False))
         configured = set(getattr(session, "configured_integrations", ()) or ())

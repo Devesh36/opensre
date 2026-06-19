@@ -162,6 +162,8 @@ def _print_verify_summary(
 ) -> None:
     failed = [r for r in results if r.get("status") in ("failed", "missing")]
     if single_service:
+        if not results:
+            return
         service = escape(str(results[0].get("service", "?")))
         style = WARNING if failed else HIGHLIGHT
         detail = "needs attention" if failed else "ok"
@@ -428,7 +430,7 @@ _MCP_FIRST_ARGS: tuple[tuple[str, str], ...] = (
 COMMANDS: list[SlashCommand] = [
     SlashCommand(
         "/verify",
-        "Verify configured integrations (alias for /integrations verify).",
+        "Verify configured integration connectivity.",
         _cmd_verify_route,
         usage=("/verify", "/verify <service>"),
         execution_tier=ExecutionTier.ELEVATED,

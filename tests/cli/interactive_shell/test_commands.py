@@ -498,13 +498,21 @@ class TestIntegrationsCommand:
                 "detail": "ok",
             }
 
+        monkeypatch.setattr(
+            "app.integrations.registry.SUPPORTED_VERIFY_SERVICES",
+            ("datadog",),
+        )
         monkeypatch.setattr(repl_data_module, "verify_integration", _verify_one)
         console, buf = _capture()
         dispatch_slash("/verify datadog", ReplSession(), console)
         assert verified == ["datadog"]
         assert "datadog ok" in buf.getvalue()
 
-    def test_verify_unsupported_service(self) -> None:
+    def test_verify_unsupported_service(self, monkeypatch: object) -> None:
+        monkeypatch.setattr(
+            "app.integrations.registry.SUPPORTED_VERIFY_SERVICES",
+            ("datadog",),
+        )
         session = ReplSession()
         console, buf = _capture()
         dispatch_slash("/verify not_a_real_service", session, console)
