@@ -22,13 +22,16 @@ from app.cli.interactive_shell.command_registry.integrations import (
 from app.cli.interactive_shell.command_registry.investigation import (
     COMMANDS as INVESTIGATION_COMMANDS,
 )
-from app.cli.interactive_shell.command_registry.model import COMMANDS as MODEL_COMMANDS
+from app.cli.interactive_shell.command_registry.model import (
+    COMMANDS as MODEL_COMMANDS,
+)
 from app.cli.interactive_shell.command_registry.model import (
     switch_llm_provider,
     switch_reasoning_model,
     switch_toolcall_model,
 )
 from app.cli.interactive_shell.command_registry.privacy_cmds import COMMANDS as PRIVACY_COMMANDS
+from app.cli.interactive_shell.command_registry.rca_cmds import COMMANDS as RCA_COMMANDS
 from app.cli.interactive_shell.command_registry.repl_data import (
     load_llm_settings,
     load_verified_integrations,
@@ -56,6 +59,7 @@ _MERGED_SEQUENCE = tuple(
         MODEL_COMMANDS,
         TOOLS_COMMANDS,
         INVESTIGATION_COMMANDS,
+        RCA_COMMANDS,
         TASK_COMMANDS,
         WATCH_COMMANDS,
         PRIVACY_COMMANDS,
