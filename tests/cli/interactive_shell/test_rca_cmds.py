@@ -228,8 +228,6 @@ def test_rca_save_to_new_folder_adds_default_filename(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.cli.interactive_shell.command_registry import rca_cmds
-
     monkeypatch.setattr("app.constants.OPENSRE_HOME_DIR", tmp_path)
     session = ReplSession()
     SessionStore.open_session(session)
@@ -247,6 +245,28 @@ def test_rca_save_to_new_folder_adds_default_filename(
     assert saved.exists()
     assert "folder save" in saved.read_text(encoding="utf-8")
     assert "saved:" in buf.getvalue()
+
+
+def test_rca_save_unknown_id_reports_not_found(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.constants.OPENSRE_HOME_DIR", tmp_path)
+    session = ReplSession()
+    SessionStore.open_session(session)
+    SessionStore.append_investigation_result(
+        session.session_id,
+        {"root_cause": "existing issue", "problem_md": "existing report"},
+        trigger="/investigate generic",
+    )
+
+    dest = tmp_path / "report.md"
+    console, buf = _capture()
+    assert dispatch_slash(f"/rca save badid {dest}", ReplSession(), console) is True
+    output = buf.getvalue()
+    assert "RCA report not found" in output
+    assert "no persisted RCA reports yet" not in output
+    assert not dest.exists()
 
 
 def test_normalize_rca_save_path_strips_quotes() -> None:

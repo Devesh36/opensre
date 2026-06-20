@@ -646,17 +646,13 @@ class SessionStore:
         return results[:n]
 
     @staticmethod
-    def load_investigation(investigation_id_prefix: str) -> dict[str, Any] | None:
-        """Load one persisted RCA record by investigation_id prefix."""
-        normalized = investigation_id_prefix.strip().lower()
-        if not normalized:
-            return None
-
+    def _scan_investigation_prefix(normalized: str) -> tuple[dict[str, Any] | None, int]:
         sessions_dir = _sessions_dir()
         if not sessions_dir.exists():
-            return None
+            return None, 0
 
         match: dict[str, Any] | None = None
+        count = 0
         for path in sessions_dir.glob("*.jsonl"):
             with contextlib.suppress(Exception):
                 lines = path.read_text(encoding="utf-8").splitlines()
@@ -664,25 +660,31 @@ class SessionStore:
                     inv_id = str(rec.get("investigation_id") or "").lower()
                     if not inv_id.startswith(normalized):
                         continue
-                    if match is not None:
-                        return None
-                    match = rec
-        return match
+                    count += 1
+                    if count == 1:
+                        match = rec
+                    elif count > 1:
+                        return None, count
+        return match, count
+
+    @staticmethod
+    def lookup_investigation(investigation_id_prefix: str) -> tuple[dict[str, Any] | None, int]:
+        """Return ``(record, match_count)`` for a prefix lookup.
+
+        ``record`` is populated only when ``match_count == 1``.
+        """
+        normalized = investigation_id_prefix.strip().lower()
+        if not normalized:
+            return None, 0
+        return SessionStore._scan_investigation_prefix(normalized)
+
+    @staticmethod
+    def load_investigation(investigation_id_prefix: str) -> dict[str, Any] | None:
+        """Load one persisted RCA record by investigation_id prefix."""
+        record, count = SessionStore.lookup_investigation(investigation_id_prefix)
+        return record if count == 1 else None
 
     @staticmethod
     def count_investigation_prefix_matches(prefix: str) -> int:
-        normalized = prefix.strip().lower()
-        if not normalized:
-            return 0
-        sessions_dir = _sessions_dir()
-        if not sessions_dir.exists():
-            return 0
-        count = 0
-        for path in sessions_dir.glob("*.jsonl"):
-            with contextlib.suppress(Exception):
-                lines = path.read_text(encoding="utf-8").splitlines()
-                for rec in SessionStore._collect_investigation_records(path, lines=lines):
-                    inv_id = str(rec.get("investigation_id") or "").lower()
-                    if inv_id.startswith(normalized):
-                        count += 1
+        _, count = SessionStore.lookup_investigation(prefix)
         return count

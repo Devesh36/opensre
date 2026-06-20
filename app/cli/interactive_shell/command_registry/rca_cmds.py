@@ -97,6 +97,21 @@ def _rca_record_export_state(record: dict[str, object]) -> dict[str, object]:
     }
 
 
+def _print_rca_lookup_failure(
+    console: Console,
+    investigation_id: str,
+    *,
+    match_count: int,
+) -> None:
+    if match_count > 1:
+        console.print(
+            f"[{WARNING}]ambiguous id prefix:[/] {escape(investigation_id)} "
+            f"[{DIM}]({match_count} matches — use more characters)[/]"
+        )
+        return
+    console.print(f"[{ERROR}]RCA report not found:[/] {escape(investigation_id)}")
+
+
 def _resolve_rca_record(
     investigation_id: str | None,
     *,
@@ -363,17 +378,14 @@ def _cmd_rca_show(
     *,
     record: dict[str, object] | None = None,
 ) -> bool:
-    resolved = record or SessionStore.load_investigation(investigation_id)
-    if resolved is None:
-        matches = SessionStore.count_investigation_prefix_matches(investigation_id)
-        if matches > 1:
-            console.print(
-                f"[{WARNING}]ambiguous id prefix:[/] {escape(investigation_id)} "
-                f"[{DIM}]({matches} matches — use more characters)[/]"
-            )
-        else:
-            console.print(f"[{ERROR}]RCA report not found:[/] {escape(investigation_id)}")
-        return True
+    if record is not None:
+        resolved = record
+    else:
+        loaded, match_count = SessionStore.lookup_investigation(investigation_id)
+        if match_count != 1:
+            _print_rca_lookup_failure(console, investigation_id, match_count=match_count)
+            return True
+        resolved = loaded
 
     _print_rca_record_header(console, resolved)
     render_investigation_report(
@@ -391,10 +403,16 @@ def _cmd_rca_save(
     investigation_id: str | None,
     dest_path: str,
 ) -> bool:
-    record = _resolve_rca_record(investigation_id)
-    if record is None:
-        _print_rca_empty(console)
-        return True
+    if investigation_id:
+        record, match_count = SessionStore.lookup_investigation(investigation_id)
+        if match_count != 1:
+            _print_rca_lookup_failure(console, investigation_id, match_count=match_count)
+            return True
+    else:
+        record = _resolve_rca_record(None)
+        if record is None:
+            _print_rca_empty(console)
+            return True
     return _save_rca_record(console, record, dest_path)
 
 
