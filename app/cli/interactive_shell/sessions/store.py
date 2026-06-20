@@ -530,7 +530,7 @@ class SessionStore:
         trigger: str,
         investigation_id: str | None = None,
     ) -> dict[str, Any]:
-        report = state.get("problem_md") or state.get("slack_message") or ""
+        report = state.get("problem_md") or state.get("slack_message") or state.get("report") or ""
         return {
             "type": "investigation_result",
             "investigation_id": investigation_id or uuid.uuid4().hex[:8],

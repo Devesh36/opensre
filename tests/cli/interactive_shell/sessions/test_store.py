@@ -812,6 +812,21 @@ def test_append_investigation_result_writes_record(tmp_path: Path) -> None:
     assert inv["trigger"] == "/investigate generic"
 
 
+def test_append_investigation_result_uses_report_fallback(tmp_path: Path) -> None:
+    session = _make_session()
+    with _patch_dir(tmp_path):
+        SessionStore.open_session(session)
+        SessionStore.append_investigation_result(
+            session.session_id,
+            {"root_cause": "api error", "report": "report-only payload"},
+            trigger="/investigate generic",
+        )
+
+    records = _read_lines(tmp_path / f"{session.session_id}.jsonl")
+    inv = next(r for r in records if r["type"] == "investigation_result")
+    assert inv["report"] == "report-only payload"
+
+
 def test_load_investigation_history_returns_newest_first(tmp_path: Path) -> None:
     session_a = _make_session()
     session_b = ReplSession()
