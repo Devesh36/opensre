@@ -385,6 +385,9 @@ def _cmd_rca_show(
         if match_count != 1:
             _print_rca_lookup_failure(console, investigation_id, match_count=match_count)
             return True
+        if loaded is None:
+            _print_rca_lookup_failure(console, investigation_id, match_count=0)
+            return True
         resolved = loaded
 
     _print_rca_record_header(console, resolved)
@@ -407,6 +410,9 @@ def _cmd_rca_save(
         record, match_count = SessionStore.lookup_investigation(investigation_id)
         if match_count != 1:
             _print_rca_lookup_failure(console, investigation_id, match_count=match_count)
+            return True
+        if record is None:
+            _print_rca_lookup_failure(console, investigation_id, match_count=0)
             return True
     else:
         record = _resolve_rca_record(None)
