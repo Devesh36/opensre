@@ -852,7 +852,9 @@ def test_load_investigation_by_prefix(tmp_path: Path) -> None:
     assert loaded["root_cause"] == "disk full"
 
 
-def test_apply_investigation_result_persists_record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_apply_investigation_result_persists_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr("app.constants.OPENSRE_HOME_DIR", tmp_path)
     session = ReplSession()
     SessionStore.open_session(session)

@@ -146,10 +146,10 @@ def _strip_outer_quotes(value: str) -> str:
 
 def _normalize_rca_save_path(raw_path: str, *, investigation_id: str = "") -> Path:
     """Normalize user-entered save paths (strip quotes, expand ~, folder → file)."""
-    dest = Path(_strip_outer_quotes(raw_path.strip())).expanduser()
-    if dest.suffix.lower() not in _EXPORT_SUFFIXES and (
-        dest.as_posix().endswith("/") or dest.is_dir()
-    ):
+    value = _strip_outer_quotes(raw_path.strip())
+    treat_as_dir = value.endswith(("/", "\\"))
+    dest = Path(value).expanduser()
+    if dest.suffix.lower() not in _EXPORT_SUFFIXES and (treat_as_dir or dest.is_dir()):
         dest = dest / f"rca-{investigation_id[:8] or 'report'}.md"
     return dest
 

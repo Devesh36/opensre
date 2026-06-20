@@ -175,7 +175,10 @@ def test_rca_save_writes_markdown(
     dest = tmp_path / "report.md"
     console, buf = _capture()
     assert dispatch_slash(f"/rca save {dest}", ReplSession(), console) is True
-    assert dest.read_text(encoding="utf-8") == "## Root Cause\n\nredis timeout\n\n## Report\n\ncache unavailable\n"
+    assert (
+        dest.read_text(encoding="utf-8")
+        == "## Root Cause\n\nredis timeout\n\n## Report\n\ncache unavailable\n"
+    )
     assert "saved:" in buf.getvalue()
 
 
@@ -217,9 +220,7 @@ def test_rca_save_strips_quoted_path(
 
     dest = tmp_path / "quoted.md"
     console, buf = _capture()
-    assert (
-        dispatch_slash(f"/rca save {inv_id[:4]} '{dest}'", ReplSession(), console) is True
-    )
+    assert dispatch_slash(f"/rca save {inv_id[:4]} '{dest}'", ReplSession(), console) is True
     assert dest.read_text(encoding="utf-8").startswith("## Root Cause")
     assert "saved:" in buf.getvalue()
 
@@ -244,6 +245,28 @@ def test_rca_save_to_new_folder_adds_default_filename(
     saved = folder / f"rca-{inv_id[:8]}.md"
     assert saved.exists()
     assert "folder save" in saved.read_text(encoding="utf-8")
+    assert "saved:" in buf.getvalue()
+
+
+def test_rca_save_to_new_folder_trailing_slash_creates_subdirectory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.constants.OPENSRE_HOME_DIR", tmp_path)
+    session = ReplSession()
+    SessionStore.open_session(session)
+    inv_id = SessionStore.append_investigation_result(
+        session.session_id,
+        {"root_cause": "nested save", "problem_md": "inside new folder"},
+        trigger="/investigate generic",
+    )
+
+    folder = tmp_path / "new_rca_folder"
+    console, buf = _capture()
+    assert dispatch_slash(f"/rca save {inv_id[:4]} {folder}/", ReplSession(), console) is True
+    saved = folder / f"rca-{inv_id[:8]}.md"
+    assert saved.exists()
+    assert "nested save" in saved.read_text(encoding="utf-8")
     assert "saved:" in buf.getvalue()
 
 

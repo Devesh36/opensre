@@ -663,8 +663,8 @@ class SessionStore:
                     count += 1
                     if count == 1:
                         match = rec
-                    elif count > 1:
-                        return None, count
+                    else:
+                        match = None
         return match, count
 
     @staticmethod
