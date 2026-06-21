@@ -729,7 +729,8 @@ def write_daily_archive(update: DailyUpdate, *, output_dir: Path | None = None) 
     archive_path = target_dir / f"{update.window.london_date.isoformat()}.mdx"
     archive_path.write_text(render_markdown(update), encoding="utf-8")
     regenerate_overview(target_dir)
-    update_docs_navigation(target_dir)
+    # Changelog nav disabled — re-enable the Changelog tab in docs/docs.json and uncomment below.
+    # update_docs_navigation(target_dir)
     return archive_path
 
 
