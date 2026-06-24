@@ -1,0 +1,98 @@
+name: Investigation Scorecard (offline)
+
+on:
+  pull_request:
+    branches: [main, issue/1367]
+    paths:
+      - "app/agent/**"
+      - "app/pipeline/**"
+      - "app/state/**"
+      - "tests/eval/**"
+      - "tests/synthetic/**"
+      - "docs/eval/**"
+      - "Makefile"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/investigation-scorecard.yml"
+  push:
+    branches: [issue/1367]
+    paths:
+      - "app/agent/**"
+      - "app/pipeline/**"
+      - "app/state/**"
+      - "tests/eval/**"
+      - "tests/synthetic/**"
+      - "docs/eval/**"
+      - "Makefile"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/investigation-scorecard.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: investigation-scorecard-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  scorecard-offline:
+    name: scorecard-offline
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: make install
+
+      - name: Run offline scorecard
+        run: make test-scorecard-offline
+
+      - name: Upload scorecard report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scorecard-report-offline
+          path: scorecard-report.json
+          if-no-files-found: ignore
+
+      - name: Comment PR with scorecard summary
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            if (!fs.existsSync('scorecard-report.json')) {
+              core.info('No scorecard report found; skipping comment.');
+              return;
+            }
+            const report = JSON.parse(fs.readFileSync('scorecard-report.json', 'utf8'));
+            const agg = report.aggregate;
+            const status = report.thresholds.passed ? 'PASS' : 'FAIL';
+            const body = [
+              '## Investigation quality scorecard (offline)',
+              '',
+              `**Status:** ${status}`,
+              '',
+              '| Metric | Value |',
+              '| --- | ---: |',
+              `| precision_at_1 | ${(agg.precision_at_1 * 100).toFixed(1)}% |`,
+              `| top3_recall | ${(agg.top3_recall * 100).toFixed(1)}% |`,
+              `| evidence_grounding_rate | ${(agg.evidence_grounding_rate * 100).toFixed(1)}% |`,
+              `| actionability_rate | ${(agg.actionability_rate * 100).toFixed(1)}% |`,
+              `| cases | ${agg.case_count} |`,
+            ].join('\n');
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });

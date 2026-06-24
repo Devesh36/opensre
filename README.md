@@ -183,7 +183,7 @@ framework layers, see [AGENT_ARCHITECTURE.md](AGENT_ARCHITECTURE.md).
 
 ## Benchmark
 
-Regenerate cost/latency numbers with **`make benchmark`**; refresh the README table via **`make benchmark-update-readme`**. Investigation **quality** rubric and gold manifest: [Investigation Quality Scorecard](https://www.opensre.com/docs/eval/investigation-quality-scorecard).
+Regenerate cost/latency numbers with **`make benchmark`**; refresh the README table via **`make benchmark-update-readme`**. Investigation **quality** offline gate: `make test-scorecard-offline`. Docs: [Investigation Quality Scorecard](https://www.opensre.com/docs/eval/investigation-quality-scorecard).
 
 See **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#benchmark)** for benchmark runner details.
 

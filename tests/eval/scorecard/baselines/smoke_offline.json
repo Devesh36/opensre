@@ -1,0 +1,12 @@
+{
+  "tier": "offline",
+  "git_sha": "63133441bac8976d7bd1e1b5d85d9b1df37a6ae4",
+  "aggregate": {
+    "precision_at_1": 1.0,
+    "top3_recall": 1.0,
+    "evidence_grounding_rate": 1.0,
+    "false_confidence_rate": 0.0,
+    "actionability_rate": 0.8333333333333333,
+    "case_count": 11
+  }
+}
