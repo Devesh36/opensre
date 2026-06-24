@@ -52,7 +52,6 @@ _EXCLUSIVE_STDIN_MENU_COMMANDS: frozenset[str] = frozenset(
         "/model",
         "/tools",
         "/template",
-        "/theme",
         "/trust",
         "/verbose",
         "/?",

@@ -5,9 +5,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-import os
-import re
-import select
 import sys
 import threading
 from collections.abc import Callable
@@ -24,6 +21,12 @@ from app.cli.interactive_shell import alert_inbox as _alert_inbox
 from app.cli.interactive_shell.alert_renderer import drain_and_render_incoming
 from app.cli.interactive_shell.error_handling.exception_reporting import report_exception
 from app.cli.interactive_shell.prompting import prompt_surface as _prompt_surface
+from app.cli.interactive_shell.runtime.background_runner import drain_background_notices
+from app.cli.interactive_shell.runtime.cpr import (
+    contains_cpr_sequence,
+    drain_stale_cpr_bytes,
+    strip_cpr_sequences,
+)
 from app.cli.interactive_shell.runtime.dispatch import (
     DispatchCancelled,
     build_cancel_key_bindings,
@@ -50,52 +53,6 @@ from app.cli.interactive_shell.ui.prompt_support import (
 from app.fleet_monitoring.sampler import start_sampler
 
 log = logging.getLogger(__name__)
-
-_CPR_SEQUENCE_RE = re.compile(
-    r"(?:\x1b\[|\x9b)\d{1,4};\d{1,4}R"  # ESC [ row ; col R
-    r"|\[\d{1,4};\d{1,4}R"  # [row;colR without ESC (leaked into input)
-    r"|\d{1,4};\d{1,4}R"  # row;colR without ESC or [
-    r"|\d{1,4}R(?=[\[\d])"  # trailing rowR before another CPR fragment
-)
-
-
-def drain_stale_cpr_bytes() -> None:
-    """Discard any CPR escape-sequence bytes left in stdin after a prompt_async teardown.
-
-    When prompt_async returns (e.g. after the user types Y to confirm), the
-    prompt_toolkit Application tears down its input-reader thread.  CPR responses
-    (ESC[row;colR) that the bottom-toolbar refresh sent but that arrived just after
-    the reader stopped are left sitting in the OS stdin buffer.  The *next*
-    prompt_async call reads those bytes with a fresh vt100 parser, which has no
-    open escape-sequence context; the bytes then appear as literal keystrokes in
-    the input field.
-
-    This function does a non-blocking drain of stdin between prompt_async calls —
-    exactly when no Application is active and it is safe to read from stdin
-    directly.  Only called on TTY stdin on POSIX; silently skipped otherwise.
-    """
-    if os.name == "nt" or not sys.stdin.isatty():
-        return
-    try:
-        fd = sys.stdin.fileno()
-        while select.select([fd], [], [], 0)[0]:
-            chunk = os.read(fd, 256)
-            if not chunk:
-                break
-    except OSError:
-        # Draining stdin is best-effort; ignore when the fd is not readable.
-        pass
-
-
-def strip_cpr_sequences(text: str | None) -> str:
-    """Remove terminal cursor-position replies that leaked into submitted text."""
-    if not text:
-        return ""
-    return _CPR_SEQUENCE_RE.sub("", text)
-
-
-def _contains_cpr_sequence(text: str | None) -> bool:
-    return bool(text and _CPR_SEQUENCE_RE.search(text))
 
 
 class StreamingConsole(Console):
@@ -295,8 +252,6 @@ async def run_interactive(
             state.queue.task_done()
 
     def _message_with_spinner() -> ANSI:
-        from app.cli.interactive_shell.runtime.loop import strip_cpr_sequences
-
         base = _prompt_surface._prompt_message(session).value
         if state.is_awaiting_confirmation():
             confirm_text = state.confirm_prompt_text
@@ -337,6 +292,10 @@ async def run_interactive(
                         drain_and_render_incoming(session, echo_console, inbox)
                     except Exception as exc:
                         log.warning("Error draining alerts at turn start: %s", exc)
+                try:
+                    drain_background_notices(session, echo_console)
+                except Exception as exc:
+                    log.warning("Error draining background notices at turn start: %s", exc)
 
                 # Drain any CPR bytes (ESC[row;colR) left in stdin from the
                 # previous prompt_async's bottom-toolbar refresh cycles.
@@ -387,7 +346,7 @@ async def run_interactive(
                     repl_reset_ctrl_c_gate()
                     raw_text = text
                     text = strip_cpr_sequences(text)
-                    if not text.strip() and _contains_cpr_sequence(raw_text):
+                    if not text.strip() and contains_cpr_sequence(raw_text):
                         continue
 
                 if state.exit_requested:

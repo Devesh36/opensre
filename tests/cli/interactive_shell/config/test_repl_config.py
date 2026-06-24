@@ -336,3 +336,13 @@ class TestThemeRegistry:
         active = set_active_theme("does-not-exist")
         assert active.name == DEFAULT_THEME_NAME
         assert get_active_theme().name == DEFAULT_THEME_NAME
+
+    def test_load_without_apply_active_theme_leaves_global_palette(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.cli.interactive_shell.ui.theme import get_active_theme_name, set_active_theme
+
+        monkeypatch.delenv("OPENSRE_THEME", raising=False)
+        set_active_theme("pink")
+        ReplConfig.load(apply_active_theme=False)
+        assert get_active_theme_name() == "pink"

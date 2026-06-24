@@ -40,6 +40,9 @@ def _quick_access_section() -> HelpSection:
 def _raw_help_sections() -> list[HelpSection]:
     from app.cli.interactive_shell.command_registry.agents import COMMANDS as AGENTS_CMDS
     from app.cli.interactive_shell.command_registry.alerts import COMMANDS as ALERTS_CMDS
+    from app.cli.interactive_shell.command_registry.background_cmds import (
+        COMMANDS as BACKGROUND_CMDS,
+    )
     from app.cli.interactive_shell.command_registry.cli_parity import (
         COMMANDS as PARITY_COMMANDS,
     )
@@ -63,7 +66,13 @@ def _raw_help_sections() -> list[HelpSection]:
     return [
         _quick_access_section(),
         ("Help", list(COMMANDS)),
-        ("Session", list(SESSION_CMDS) + list(SETTINGS_CMDS) + list(DIAGNOSTICS_CMDS)),
+        (
+            "Session",
+            list(SESSION_CMDS)
+            + list(BACKGROUND_CMDS)
+            + list(SETTINGS_CMDS)
+            + list(DIAGNOSTICS_CMDS),
+        ),
         ("Integrations, Models & Tools", list(INT_CMDS) + list(MODEL_CMDS) + list(TOOLS_CMDS)),
         ("Investigation", list(INV_CMDS)),
         ("Privacy", list(PRIVACY_CMDS)),

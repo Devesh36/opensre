@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import threading
 import time
 import uuid
 from collections.abc import Callable
@@ -14,6 +15,10 @@ if TYPE_CHECKING:
 
     from app.cli.interactive_shell.alert_inbox import IncomingAlert
 
+from app.cli.interactive_shell.runtime.background import (
+    BackgroundInvestigationRecord,
+    BackgroundNotificationPreferences,
+)
 from app.cli.interactive_shell.runtime.tasks import TaskRegistry
 from app.llm_reasoning_effort import ReasoningEffortChoice
 
@@ -160,6 +165,24 @@ class ReplSession:
     task_registry: TaskRegistry = field(default_factory=TaskRegistry)
     """Recent in-flight and completed shell tasks for /tasks and /cancel."""
 
+    background_mode_enabled: bool = False
+    """Whether new investigations should run as session-local background tasks."""
+
+    background_investigations: dict[str, BackgroundInvestigationRecord] = field(
+        default_factory=dict
+    )
+    """Completed or in-flight background RCA summaries, keyed by task id."""
+
+    background_notification_preferences: BackgroundNotificationPreferences = field(
+        default_factory=BackgroundNotificationPreferences
+    )
+    """Preferred notification channels for background RCA completion events."""
+
+    background_notices: list[str] = field(default_factory=list)
+    """Thread-safe queue of Rich markup messages drained by the REPL main loop."""
+
+    _background_notices_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+
     history_generation: int = 0
     """Incremented on /new so background synthetic watchers can skip stale history writes."""
 
@@ -249,6 +272,19 @@ class ReplSession:
         """Redraw the active prompt (placeholder state and pending prefill)."""
         if self.prompt_refresh_fn is not None:
             self.prompt_refresh_fn()
+
+    def enqueue_background_notice(self, message: str) -> None:
+        """Queue a background-thread status line for the main REPL loop to print."""
+        with self._background_notices_lock:
+            self.background_notices.append(message)
+        self.notify_prompt_changed()
+
+    def drain_background_notices(self) -> list[str]:
+        """Return and clear any queued background status lines."""
+        with self._background_notices_lock:
+            notices = list(self.background_notices)
+            self.background_notices.clear()
+        return notices
 
     def suggest_synthetic_failure_follow_up(self, *, label: str = "") -> None:
         """Queue RCA prefill after a failed synthetic run and refresh the active prompt."""
@@ -448,6 +484,12 @@ class ReplSession:
         self.pending_prompt_default = None
         self.pending_prompt_autosubmit = False
         self.last_synthetic_observation_path = None
+        self.background_mode_enabled = False
+        self.background_investigations.clear()
+        # Preserve notification channel prefs across /new like trust_mode.
+        # Only reset when the user explicitly changes them via /background notify.
+        with self._background_notices_lock:
+            self.background_notices.clear()
         # trust_mode and reasoning_effort are intentionally preserved across /new
         if rotate_identity:
             # Rotate session identity so the new post-reset session gets its own ID and file.

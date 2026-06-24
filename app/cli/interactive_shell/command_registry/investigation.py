@@ -12,6 +12,10 @@ from app.cli.interactive_shell.command_registry.types import ExecutionTier, Slas
 from app.cli.interactive_shell.error_handling.errors import OpenSREError
 from app.cli.interactive_shell.error_handling.exception_reporting import report_exception
 from app.cli.interactive_shell.runtime import ReplSession, TaskKind
+from app.cli.interactive_shell.runtime.background_runner import (
+    start_background_template_investigation,
+    start_background_text_investigation,
+)
 from app.cli.interactive_shell.ui import (
     DIM,
     ERROR,
@@ -161,6 +165,15 @@ def _cmd_investigate_file(session: ReplSession, console: Console, args: list[str
     # in the working directory. Users can still force file mode with an explicit
     # path form (for example: ``/investigate ./generic``).
     if template_name:
+        if session.background_mode_enabled:
+            start_background_template_investigation(
+                template_name=template_name,
+                session=session,
+                console=console,
+                display_command=f"/investigate {template_name}",
+            )
+            session.record("alert", f"/investigate {template_name}")
+            return True
         task = session.task_registry.create(
             TaskKind.INVESTIGATION, command=f"/investigate {template_name}"
         )
@@ -223,6 +236,16 @@ def _cmd_investigate_file(session: ReplSession, console: Console, args: list[str
         report_exception(exc, context="interactive_shell.investigate_file.read")
         console.print(f"[{ERROR}]cannot read file:[/] {escape(str(exc))}")
         session.mark_latest(ok=False, kind="slash")
+        return True
+
+    if session.background_mode_enabled:
+        start_background_text_investigation(
+            alert_text=text,
+            session=session,
+            console=console,
+            display_command=f"/investigate {path}",
+        )
+        session.record("alert", args[0])
         return True
 
     task = session.task_registry.create(TaskKind.INVESTIGATION, command=f"/investigate {path}")

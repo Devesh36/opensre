@@ -69,25 +69,20 @@ def _make_state(**overrides: Any) -> dict[str, Any]:
 
 def _patch_generate_report_deps(monkeypatch: pytest.MonkeyPatch) -> None:
     """Patch all heavy dependencies of generate_report so we can run it in tests."""
+    from app.agent.stages.publish_findings.formatters.messages import ReportMessages
+
     monkeypatch.setattr(
         "app.agent.stages.publish_findings.node.build_report_context",
         lambda _state: {},
     )
     monkeypatch.setattr(
-        "app.agent.stages.publish_findings.node.format_slack_message",
-        lambda _ctx: "slack report text",
-    )
-    monkeypatch.setattr(
-        "app.agent.stages.publish_findings.node.format_telegram_message",
-        lambda _ctx: "telegram report text",
-    )
-    monkeypatch.setattr(
-        "app.agent.stages.publish_findings.node.format_whatsapp_message",
-        lambda _ctx: "whatsapp report text",
-    )
-    monkeypatch.setattr(
-        "app.agent.stages.publish_findings.node.build_slack_blocks",
-        lambda _ctx: [],
+        "app.agent.stages.publish_findings.node.build_report_messages",
+        lambda _ctx: ReportMessages(
+            slack_text="slack report text",
+            telegram_html="telegram report text",
+            whatsapp_text="whatsapp report text",
+            slack_blocks=[],
+        ),
     )
     monkeypatch.setattr(
         "app.agent.stages.publish_findings.node.create_investigation_and_attach_url",
@@ -206,6 +201,34 @@ def test_gitlab_writeback_failure_does_not_raise(monkeypatch: pytest.MonkeyPatch
         result = generate_report(_make_state())  # type: ignore[arg-type]
 
     assert "slack_message" in result  # report returned despite write-back failure
+
+
+def test_generate_report_can_skip_terminal_render_and_editor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_generate_report_deps(monkeypatch)
+
+    mock_send_slack = MagicMock(return_value=(False, None))
+    mock_build_action_blocks = MagicMock(return_value=[])
+    mock_render_report = MagicMock()
+    mock_open_in_editor = MagicMock()
+
+    with (
+        patch("app.utils.slack_delivery.send_slack_report", mock_send_slack),
+        patch("app.utils.slack_delivery.build_action_blocks", mock_build_action_blocks),
+        patch("app.agent.stages.publish_findings.node.render_report", mock_render_report),
+        patch("app.agent.stages.publish_findings.node.open_in_editor", mock_open_in_editor),
+    ):
+        from app.agent.stages.publish_findings.node import generate_report
+
+        generate_report(
+            _make_state(),  # type: ignore[arg-type]
+            render_terminal=False,
+            open_editor=False,
+        )
+
+    mock_render_report.assert_not_called()
+    mock_open_in_editor.assert_not_called()
 
 
 def test_openclaw_writeback_calls_delivery_when_configured(

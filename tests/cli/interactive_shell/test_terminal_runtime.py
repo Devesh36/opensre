@@ -30,6 +30,7 @@ from app.cli.interactive_shell.prompting.prompt_surface import (
     _build_prompt_style,
     _tab_expand_or_menu,
 )
+from app.cli.interactive_shell.runtime import cpr as cpr_module
 from app.cli.interactive_shell.runtime import dispatch as loop_dispatch
 from app.cli.interactive_shell.runtime import execution as loop_execution
 from app.cli.interactive_shell.runtime import loop as loop_module
@@ -74,7 +75,7 @@ def test_strip_cpr_sequences_removes_terminal_cursor_replies(
     text: str,
     expected: str,
 ) -> None:
-    assert loop_module.strip_cpr_sequences(text) == expected
+    assert cpr_module.strip_cpr_sequences(text) == expected
 
 
 def test_repl_input_lexer_highlights_first_slash_token() -> None:
@@ -377,6 +378,43 @@ def test_shell_completer_investigate_includes_template_hints() -> None:
     )
     assert any(c.text == "generic" for c in completions)
     assert any(c.text == "splunk" for c in completions)
+
+
+def test_run_text_investigation_uses_background_launcher_when_mode_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from rich.console import Console
+
+    from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.action_executor.investigation_runner import (
+        run_text_investigation,
+    )
+
+    launches: list[tuple[str, str]] = []
+
+    def _fake_start_background_text_investigation(
+        *,
+        alert_text: str,
+        session: ReplSession,
+        console: Console,
+        display_command: str,
+    ) -> str:
+        _ = (session, console)
+        launches.append((alert_text, display_command))
+        return "bg123"
+
+    monkeypatch.setattr(
+        "app.cli.interactive_shell.runtime.background_runner.start_background_text_investigation",
+        _fake_start_background_text_investigation,
+    )
+
+    session = ReplSession()
+    session.background_mode_enabled = True
+    console = Console(file=io.StringIO(), force_terminal=False, highlight=False)
+
+    run_text_investigation("High CPU alert", session, console)
+
+    assert launches == [("High CPU alert", "background free-text investigation")]
+    assert session.task_registry.list_recent(10) == []
 
 
 def test_dispatch_one_turn_reports_slash_dispatch_error(

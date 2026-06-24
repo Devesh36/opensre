@@ -95,7 +95,7 @@ def test_repl_choose_one_starts_at_initial_value(monkeypatch) -> None:
     actions = iter(["enter"])
     monkeypatch.setattr(choice_menu, "repl_tty_interactive", lambda: True)
     monkeypatch.setattr(
-        "app.cli.interactive_shell.runtime.loop.drain_stale_cpr_bytes",
+        "app.cli.interactive_shell.runtime.cpr.drain_stale_cpr_bytes",
         lambda: None,
     )
     monkeypatch.setattr(sys, "stdout", out)

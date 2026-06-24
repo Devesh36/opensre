@@ -4,12 +4,12 @@ import html
 from collections.abc import Callable
 from typing import Any
 
+from app.agent.stages.publish_findings.context import ReportContext
 from app.agent.stages.publish_findings.formatters.base import (
     format_html_link,
     format_slack_link,
     shorten_text,
 )
-from app.agent.stages.publish_findings.report_context import ReportContext
 from app.agent.stages.publish_findings.urls.aws import (
     build_datadog_logs_url,
     build_grafana_explore_url,
@@ -112,7 +112,7 @@ def _format_tool_calls_line(
             None,
         ),
         "get_failed_tools": (
-            "tracer tools",
+            "failed tools",
             lambda e: f"{len(e.get('failed_tools', []))} failed" if e.get("failed_tools") else None,
             None,
         ),

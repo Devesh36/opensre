@@ -235,7 +235,7 @@ def repl_choose_one(
     ``breadcrumb`` is a slash-separated path shown dimly below the title, e.g.
     ``/model › set``.  Only call when :func:`repl_tty_interactive` is True.
     """
-    from app.cli.interactive_shell.runtime.loop import drain_stale_cpr_bytes
+    from app.cli.interactive_shell.runtime.cpr import drain_stale_cpr_bytes
 
     if not choices or not repl_tty_interactive():
         return None

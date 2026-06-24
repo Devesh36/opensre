@@ -180,7 +180,7 @@ def test_refresh_welcome_poster_drains_cpr_after_clear(monkeypatch: pytest.Monke
         lambda: drains.append("clear"),
     )
     monkeypatch.setattr(
-        "app.cli.interactive_shell.runtime.loop.drain_stale_cpr_bytes",
+        "app.cli.interactive_shell.runtime.cpr.drain_stale_cpr_bytes",
         lambda: drains.append("drain"),
     )
     monkeypatch.setattr(

@@ -45,6 +45,7 @@ from app.integrations._verification_adapters import (
     _verify_sentry_mcp,
     _verify_signoz,
     _verify_slack_without_test,
+    _verify_smtp,
     _verify_snowflake,
     _verify_splunk,
     _verify_supabase,
@@ -385,6 +386,13 @@ INTEGRATION_SPECS: tuple[IntegrationSpec, ...] = (
         skip_classification=True,
         setup_order=9,
         verify_order=8,
+    ),
+    IntegrationSpec(
+        service="smtp",
+        verifier=_verify_smtp,
+        direct_effective=True,
+        setup_order=36,
+        verify_order=47,
     ),
     IntegrationSpec(
         service="tracer",

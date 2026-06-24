@@ -42,6 +42,20 @@ def run_sample_alert(
         return
 
     console.print(f"[bold]sample alert:[/bold] {escape(template_name)}")
+    if session.background_mode_enabled:
+        from app.cli.interactive_shell.runtime.background_runner import (
+            start_background_template_investigation,
+        )
+
+        start_background_template_investigation(
+            template_name=template_name,
+            session=session,
+            console=console,
+            display_command=f"sample alert:{template_name}",
+        )
+        session.record("alert", f"sample:{template_name}")
+        return
+
     task = session.task_registry.create(
         TaskKind.INVESTIGATION, command=f"sample alert:{template_name}"
     )
@@ -102,6 +116,20 @@ def run_text_investigation(
         return
 
     console.print(f"[bold]investigation:[/bold] {escape(alert_text)}")
+    if session.background_mode_enabled:
+        from app.cli.interactive_shell.runtime.background_runner import (
+            start_background_text_investigation,
+        )
+
+        start_background_text_investigation(
+            alert_text=alert_text,
+            session=session,
+            console=console,
+            display_command="background free-text investigation",
+        )
+        session.record("alert", alert_text)
+        return
+
     task = session.task_registry.create(TaskKind.INVESTIGATION, command=f"investigate:{alert_text}")
     task.mark_running()
     try:

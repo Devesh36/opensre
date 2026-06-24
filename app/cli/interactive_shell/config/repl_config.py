@@ -98,14 +98,19 @@ class ReplConfig:
         cli_enabled: bool | None = None,
         cli_layout: str | None = None,
         cli_theme: str | None = None,
+        apply_active_theme: bool = True,
     ) -> ReplConfig:
         """Resolve config from all three tiers.
 
         Priority (highest wins):
-            1. CLI flag   — ``cli_enabled`` / ``cli_layout`` params
-            2. Env var    — ``OPENSRE_INTERACTIVE`` / ``OPENSRE_LAYOUT``
+            1. CLI flag   — ``cli_enabled`` / ``cli_layout`` / ``cli_theme`` params
+            2. Env var    — ``OPENSRE_INTERACTIVE`` / ``OPENSRE_LAYOUT`` / ``OPENSRE_THEME``
             3. Config file — ``~/.opensre/config.yml`` ``interactive`` section
-            4. Built-in defaults (enabled=True, layout="classic")
+            4. Built-in defaults (enabled=True, layout="classic", theme="green")
+
+        When ``apply_active_theme`` is False, resolve the theme string without
+        calling :func:`set_active_theme` (for passive config reads during a live
+        REPL session, e.g. banner rendering).
         """
         file_conf = _read_config_file()
 
@@ -131,6 +136,7 @@ class ReplConfig:
         # --- theme ---
         from app.cli.interactive_shell.ui.theme import (
             DEFAULT_THEME_NAME,
+            get_theme,
             list_theme_names,
             set_active_theme,
         )
@@ -157,8 +163,11 @@ class ReplConfig:
                 )
                 theme = DEFAULT_THEME_NAME
 
-        active_theme = set_active_theme(theme)
-        theme = active_theme.name
+        if apply_active_theme:
+            active_theme = set_active_theme(theme)
+            theme = active_theme.name
+        else:
+            theme = get_theme(theme).name
 
         # --- alert_listener_enabled ---
         if (env_val := os.getenv("OPENSRE_ALERT_LISTENER_ENABLED")) is not None:
