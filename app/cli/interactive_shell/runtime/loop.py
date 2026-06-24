@@ -59,7 +59,7 @@ _CPR_SEQUENCE_RE = re.compile(
 )
 
 
-def _drain_stale_cpr_bytes() -> None:
+def drain_stale_cpr_bytes() -> None:
     """Discard any CPR escape-sequence bytes left in stdin after a prompt_async teardown.
 
     When prompt_async returns (e.g. after the user types Y to confirm), the
@@ -87,7 +87,7 @@ def _drain_stale_cpr_bytes() -> None:
         pass
 
 
-def _strip_cpr_sequences(text: str | None) -> str:
+def strip_cpr_sequences(text: str | None) -> str:
     """Remove terminal cursor-position replies that leaked into submitted text."""
     if not text:
         return ""
@@ -175,6 +175,8 @@ async def run_interactive(
 
     pt_app = pt_session.app
     main_loop = asyncio.get_running_loop()
+    session.pt_style_app = pt_app
+    session.main_loop = main_loop
     state.bind_loop(main_loop)
 
     _invalidate_prompt = _prompt_surface.wire_prompt_refresh(session, pt_app, main_loop)
@@ -250,7 +252,7 @@ async def run_interactive(
             # Investigation Rich Live + bottom-toolbar CPR can leave bytes in stdin;
             # drain before the next prompt_async so they are not typed into the field.
             await asyncio.sleep(0.05)
-            _drain_stale_cpr_bytes()
+            drain_stale_cpr_bytes()
 
     async def _alert_watcher() -> None:
         if inbox is None:
@@ -293,13 +295,17 @@ async def run_interactive(
             state.queue.task_done()
 
     def _message_with_spinner() -> ANSI:
+        from app.cli.interactive_shell.runtime.loop import strip_cpr_sequences
+
         base = _prompt_surface._prompt_message(session).value
         if state.is_awaiting_confirmation():
             confirm_text = state.confirm_prompt_text
             return ANSI(f"{confirm_text}\n{base}")
-        prefix = _prompt_surface.resolve_prompt_prefix_ansi(
-            inline_spinner=spinner.inline_spinner_ansi(),
-            idle_hint=spinner.idle_hint_ansi(),
+        prefix = strip_cpr_sequences(
+            _prompt_surface.resolve_prompt_prefix_ansi(
+                inline_spinner=spinner.inline_spinner_ansi(),
+                idle_hint=spinner.idle_hint_ansi(),
+            )
         )
         return ANSI(f"{prefix}\n{base}")
 
@@ -340,8 +346,11 @@ async def run_interactive(
                 # Application's fresh vt100 parser.
                 # The brief sleep lets in-transit terminal responses land in the
                 # buffer before the non-blocking select drain runs.
+                if session.pending_theme_refresh:
+                    session.pending_theme_refresh = False
+                    _prompt_surface.refresh_prompt_theme(session)
                 await asyncio.sleep(0.05)
-                _drain_stale_cpr_bytes()
+                drain_stale_cpr_bytes()
                 try:
                     prefilled = session.take_pending_prompt_default()
                     if prefilled and session.take_pending_autosubmit():
@@ -377,7 +386,7 @@ async def run_interactive(
                 else:
                     repl_reset_ctrl_c_gate()
                     raw_text = text
-                    text = _strip_cpr_sequences(text)
+                    text = strip_cpr_sequences(text)
                     if not text.strip() and _contains_cpr_sequence(raw_text):
                         continue
 
