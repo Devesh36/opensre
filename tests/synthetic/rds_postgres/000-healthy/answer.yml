@@ -1,4 +1,9 @@
 root_cause_category: healthy
+canonical_root_cause: no active failure detected
+contributing_factors:
+  - healthy
+min_actionability_keywords:
+  - no failure
 required_keywords:
   - normal bounds
   - no failure

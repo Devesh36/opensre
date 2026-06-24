@@ -1,0 +1,23 @@
+# Investigation quality scorecard — gold smoke manifest (phase 0)
+# Adapter mapping is defined in docs/eval/investigation-quality-scorecard.mdx
+version: 1
+owner: platform-eval
+
+smoke_offline:
+  - rds/000-healthy
+  - rds/001-replication-lag
+  - rds/002-connection-exhaustion
+  - rds/003-storage-full
+  - rds/004-cpu-saturation-bad-query
+  - rds/005-failover
+  - rds/006-replication-lag-cpu-redherring
+  - rds/007-connection-pressure-noisy-healthy
+  - hermes_rca/000-healthy
+  - hermes_rca/001-codex-empty-response
+  - hermes_rca/040-determinism-engine-missing
+
+smoke_live:
+  - rds/006-replication-lag-cpu-redherring
+  - rds/009-dual-fault-connection-cpu
+  - hermes_rca/002-openrouter-400-all-models
+  - hermes_rca/040-determinism-engine-missing

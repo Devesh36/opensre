@@ -1,6 +1,13 @@
 root_cause_category: replication_lag
 equivalent_root_cause_categories:
   - replication_lag_wal_volume
+canonical_root_cause: replication lag despite elevated CPU from analytics workload
+contributing_factors:
+  - replication lag
+  - write-heavy workload
+min_actionability_keywords:
+  - replica
+  - replication
 required_keywords:
   - replication
   - replication lag

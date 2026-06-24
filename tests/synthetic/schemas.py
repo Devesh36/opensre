@@ -204,6 +204,10 @@ class AnswerKeySchema(TypedDict):
     root_cause_category: str
     required_keywords: list[str]
     model_response: str
+    # Scorecard gold labels (optional — smoke manifest scenarios only in v1)
+    canonical_root_cause: NotRequired[str]
+    contributing_factors: NotRequired[list[str]]
+    min_actionability_keywords: NotRequired[list[str]]
     # Additional categories that pass the category gate alongside root_cause_category
     equivalent_root_cause_categories: NotRequired[list[str]]
     # Optional adversarial constraints (level 2+ scenarios)
@@ -544,6 +548,18 @@ def validate_answer_key(data: dict[str, Any]) -> AnswerKeySchema:
     if max_loops is not None and (not isinstance(max_loops, int) or max_loops < 1):
         raise ValueError(
             "answer.yml: 'max_investigation_loops' must be a positive integer when present"
+        )
+    for scorecard_list_field in (
+        "contributing_factors",
+        "min_actionability_keywords",
+    ):
+        _require_non_empty_str_list(data, scorecard_list_field, "answer.yml")
+    canonical_root_cause = data.get("canonical_root_cause")
+    if canonical_root_cause is not None and (
+        not isinstance(canonical_root_cause, str) or not canonical_root_cause.strip()
+    ):
+        raise ValueError(
+            "answer.yml: 'canonical_root_cause' must be a non-empty string when present"
         )
     for axis2_list_field in ("ruling_out_keywords", "required_queries"):
         _require_non_empty_str_list(data, axis2_list_field, "answer.yml")

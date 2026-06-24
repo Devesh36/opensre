@@ -1,0 +1,121 @@
+---
+title: Investigation Quality Scorecard
+description: Unified RCA accuracy rubric and gold evaluation manifest for OpenSRE investigations.
+---
+
+# Investigation Quality Scorecard
+
+OpenSRE tracks investigation quality with five headline metrics. Together they answer: **Was the root cause right, grounded in evidence, and actionable — without false confidence?**
+
+This page is **phase 0** of [#1367](https://github.com/Tracer-Cloud/opensre/issues/1367): the rubric, gold manifest, and optional `answer.yml` fields. Automated PR gates, live cron, and trend dashboards are planned for later phases.
+
+## Headline metrics
+
+### precision_at_1
+
+**Definition:** The agent's top-ranked root cause matches the gold label.
+
+- Synthetic suites: `root_cause_category` matches gold (including equivalent categories) and a non-empty root-cause narrative is present.
+- CloudOpsBench: strict triple match at rank 1 (`a1`).
+
+**Planned PR threshold:** No regression greater than 2 percentage points vs the committed offline baseline.
+
+### top3_recall
+
+**Definition:** At least one gold contributing factor appears in the agent's top three hypotheses.
+
+- Synthetic: gold `contributing_factors` from `answer.yml` checked against `top_hypotheses` when present; falls back to category match when factors are omitted.
+- CloudOpsBench: correct fault triple in top 3 (`a3`).
+
+**Planned PR threshold:** No regression greater than 5 percentage points vs baseline.
+
+### evidence_grounding_rate
+
+**Definition:** Fraction of final claims that link to evidence the agent actually collected.
+
+- Synthetic: required evidence sources populated **and** validated claims include `[evidence: …]` tags referencing those sources.
+- CloudOpsBench: `citation_grounding_rate` heuristic over finding text vs collected evidence.
+
+**Planned PR threshold:** ≥ 0.85 offline; target ≥ 0.90 on live smoke.
+
+### false_confidence_rate
+
+**Definition:** Share of cases where `validity_score ≥ 0.70` but `precision_at_1` is false.
+
+Requires a live investigation path — not measured on offline-only PR gates ([#1888](https://github.com/Tracer-Cloud/opensre/issues/1888)).
+
+**Planned weekly threshold:** ≤ 0.15 on live smoke; alert if > 0.20.
+
+### actionability_rate
+
+**Definition:** Final output includes clear next steps.
+
+- Synthetic: `min_actionability_keywords` from `answer.yml` appear in report or `remediation_steps`; falls back to required keyword presence when omitted.
+- CloudOpsBench: `kubectl_actionability_rate` for K8s scenarios.
+- Hermes: required keywords present in scored output.
+
+**Planned PR threshold:** ≥ 0.70 offline.
+
+## Gold manifest (phase 0)
+
+The smoke manifest lives at [`tests/eval/manifest.yml`](https://github.com/Tracer-Cloud/opensre/blob/main/tests/eval/manifest.yml).
+
+| Tier | Purpose | LLM required |
+| --- | --- | --- |
+| `smoke_offline` | Future PR merge gate | No |
+| `smoke_live` | Future weekly trend cron | Yes |
+
+Entries are `suite/scenario` ids (for example `rds/001-replication-lag`). Adapter mapping by suite prefix:
+
+| Prefix | Offline adapter (planned) | Live adapter (planned) |
+| --- | --- | --- |
+| `rds/` | `synthetic_rds_offline` | `synthetic_rds_live` |
+| `hermes_rca/` | `hermes_offline` | `hermes_live` |
+| `cloudopsbench/` | `cloudopsbench_offline` | `cloudopsbench_live` |
+
+**Ownership:** Changes to the manifest require review from investigation and synthetic maintainers. Bump `version` when cases are added or removed.
+
+Validate locally:
+
+```bash
+uv run python -m pytest tests/eval/test_scorecard_manifest.py -q
+```
+
+## Optional `answer.yml` fields (smoke cases)
+
+Smoke scenarios may include scorecard-specific gold labels:
+
+| Field | Purpose |
+| --- | --- |
+| `canonical_root_cause` | Expected root-cause narrative for `precision_at_1` |
+| `contributing_factors` | Gold factors for `top3_recall` |
+| `min_actionability_keywords` | Keywords for `actionability_rate` |
+
+These fields are optional on non-smoke scenarios.
+
+## Planned rollout
+
+| Phase | Deliverable |
+| --- | --- |
+| **0 (now)** | Rubric doc, manifest, optional `answer.yml` fields |
+| **1** | Offline scorecard runner + PR gate |
+| **2** | Live weekly cron + trend log |
+| **3** | Required branch protection + `--evaluate` UX polish |
+
+## 90-day success targets
+
+| Metric | Target |
+| --- | --- |
+| precision_at_1 | +20% vs first live baseline week |
+| evidence_grounding_rate | > 90% on live smoke |
+| false_confidence_rate | 50% reduction vs first live baseline week |
+
+## Closed-loop learning
+
+When a production investigation misses:
+
+1. Anonymize the alert and evidence snapshot.
+2. Add a synthetic scenario under `tests/synthetic/`.
+3. Register the scenario in `manifest.yml`.
+
+See [#1371](https://github.com/Tracer-Cloud/opensre/issues/1371) for the full closed-loop proposal.

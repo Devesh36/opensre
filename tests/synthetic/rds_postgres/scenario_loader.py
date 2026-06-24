@@ -61,6 +61,9 @@ class ScenarioAnswerKey:
     root_cause_category: str
     required_keywords: list[str]
     model_response: str
+    canonical_root_cause: str = ""
+    contributing_factors: tuple[str, ...] = ()
+    min_actionability_keywords: tuple[str, ...] = ()
     equivalent_root_cause_categories: tuple[str, ...] = ()
     forbidden_categories: list[str] = ()  # type: ignore[assignment]
     forbidden_keywords: list[str] = ()  # type: ignore[assignment]
@@ -289,10 +292,23 @@ def _parse_answer_yaml(path: Path) -> ScenarioAnswerKey:
         str(item).strip() for item in equivalent_raw if str(item).strip()
     )
 
+    contributing_raw = validated.get("contributing_factors") or []
+    contributing_factors = tuple(
+        str(item).strip() for item in contributing_raw if str(item).strip()
+    )
+    actionability_raw = validated.get("min_actionability_keywords") or []
+    min_actionability_keywords = tuple(
+        str(item).strip() for item in actionability_raw if str(item).strip()
+    )
+    canonical_root_cause = str(validated.get("canonical_root_cause") or "").strip()
+
     return ScenarioAnswerKey(
         root_cause_category=validated["root_cause_category"].strip(),
         required_keywords=[k.strip() for k in validated["required_keywords"]],
         model_response=validated["model_response"].strip(),
+        canonical_root_cause=canonical_root_cause,
+        contributing_factors=contributing_factors,
+        min_actionability_keywords=min_actionability_keywords,
         equivalent_root_cause_categories=equivalent_root_cause_categories,
         forbidden_categories=list(validated.get("forbidden_categories") or []),
         forbidden_keywords=list(validated.get("forbidden_keywords") or []),

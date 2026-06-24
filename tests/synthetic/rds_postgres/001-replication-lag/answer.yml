@@ -1,4 +1,12 @@
 root_cause_category: replication_lag
+canonical_root_cause: write-heavy workload caused replication lag on read replica
+contributing_factors:
+  - replication lag
+  - write-heavy workload
+  - wal replay delay
+min_actionability_keywords:
+  - replica
+  - reduce batch
 required_keywords:
   - replication lag
   - write-heavy workload
