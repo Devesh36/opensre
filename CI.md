@@ -123,7 +123,27 @@ Routing live tests always run with live coverage enabled. Do not use deselection
 
 In CI, [`.github/workflows/routing-live.yml`](.github/workflows/routing-live.yml) runs two jobs on same-repo PRs and post-merge `main` pushes: a no-LLM `routing-checks` gate (deterministic routing + fixture integrity, `-m "not live_llm"`) and the sharded `routing-live` job (8 shards, live coverage). The no-LLM gate is a fast guardrail, not a substitute for live coverage.
 
-## 7) CI-only tests
+## 7) Investigation quality scorecard (offline)
+
+When investigation logic, synthetic fixtures, or scorecard code changes, run:
+
+```bash
+make test-scorecard-offline
+```
+
+This executes the unified RCA rubric ([#1367](https://github.com/Tracer-Cloud/opensre/issues/1367)) against the offline smoke manifest and checks thresholds against [`tests/eval/scorecard/baselines/smoke_offline.json`](tests/eval/scorecard/baselines/smoke_offline.json).
+
+CI: [`.github/workflows/investigation-scorecard.yml`](.github/workflows/investigation-scorecard.yml) runs the offline gate on investigation-path PRs targeting `main` or `issue/1367`.
+
+Docs: [`docs/eval/investigation-quality-scorecard.mdx`](docs/eval/investigation-quality-scorecard.mdx)
+
+Regenerate the offline baseline after intentional rubric or gold-label changes:
+
+```bash
+uv run python -m tests.eval.scorecard run --tier offline --write-baseline
+```
+
+## 8) CI-only tests
 
 Some paths require live infrastructure and are excluded from `make test-cov`:
 

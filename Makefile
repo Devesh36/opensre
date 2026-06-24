@@ -1,7 +1,7 @@
 -include .env
 export
 
-.PHONY: install onboard benchmark benchmark-update-readme test test-full demo alert-template investigate-alert opensre-hub-fetch opensre-hub-export opensre-hub-investigate verify-integrations check-docker grafana-local-up grafana-local-down grafana-local-seed clean lint format deploy deploy-lambda deploy-prefect deploy-flink destroy destroy-lambda destroy-prefect destroy-flink prefect-local-test simulate-k8s-alert test-k8s-local test-k8s test-k8s-datadog chaos-mesh-up chaos-mesh-down chaos-engineering-apply chaos-engineering-delete chaos-lab-up chaos-lab-down chaos-experiment-list chaos-experiment-up chaos-experiment-down deploy-dd-monitors cleanup-dd-monitors deploy-eks destroy-eks test-k8s-eks datadog-demo crashloop-demo regen-trigger-config test-rca test-rca-grafana test-synthetic test-rds-synthetic test-cli-smoke deploy-vercel destroy-vercel test-vercel deploy-ec2 destroy-ec2 test-ec2 deploy-ec2-hello destroy-ec2-hello deploy-remote destroy-remote deploy-bedrock destroy-bedrock test-bedrock download-cloudopsbench-hf mirror-cloudopsbench-s3 validate-cloudopsbench test-openclaw test-openclaw-synthetic test-hermes test-hermes-synthetic test-hermes-synthetic-only refresh-hermes-tuples
+.PHONY: install onboard benchmark benchmark-update-readme test test-full demo alert-template investigate-alert opensre-hub-fetch opensre-hub-export opensre-hub-investigate verify-integrations check-docker grafana-local-up grafana-local-down grafana-local-seed clean lint format deploy deploy-lambda deploy-prefect deploy-flink destroy destroy-lambda destroy-prefect destroy-flink prefect-local-test simulate-k8s-alert test-k8s-local test-k8s test-k8s-datadog chaos-mesh-up chaos-mesh-down chaos-engineering-apply chaos-engineering-delete chaos-lab-up chaos-lab-down chaos-experiment-list chaos-experiment-up chaos-experiment-down deploy-dd-monitors cleanup-dd-monitors deploy-eks destroy-eks test-k8s-eks datadog-demo crashloop-demo regen-trigger-config test-rca test-rca-grafana test-synthetic test-rds-synthetic test-scorecard-offline test-cli-smoke deploy-vercel destroy-vercel test-vercel deploy-ec2 destroy-ec2 test-ec2 deploy-ec2-hello destroy-ec2-hello deploy-remote destroy-remote deploy-bedrock destroy-bedrock test-bedrock download-cloudopsbench-hf mirror-cloudopsbench-s3 validate-cloudopsbench test-openclaw test-openclaw-synthetic test-hermes test-hermes-synthetic test-hermes-synthetic-only refresh-hermes-tuples
 
 
 ifneq ($(wildcard .venv/bin/python),)
@@ -126,6 +126,11 @@ test-rca:
 # Run synthetic tests via pytest markers (fixture-based, no live infra required)
 test-synthetic:
 	$(PYTHON) -m pytest -m synthetic -v tests/synthetic/
+
+# Investigation quality scorecard — offline smoke (PR gate, no LLM)
+test-scorecard-offline:
+	$(PYTHON) -m pytest tests/eval/scorecard/tests/ -q
+	$(PYTHON) -m tests.eval.scorecard run --tier offline --check-thresholds
 
 # Run synthetic RDS PostgreSQL RCA benchmark suite via the CLI runner (supports --json, --scenario)
 test-rds-synthetic:
