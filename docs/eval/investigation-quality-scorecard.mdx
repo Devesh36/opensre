@@ -7,7 +7,7 @@ description: Unified RCA accuracy rubric and gold evaluation manifest for OpenSR
 
 OpenSRE tracks investigation quality with five headline metrics. Together they answer: **Was the root cause right, grounded in evidence, and actionable — without false confidence?**
 
-This page tracks [#1367](https://github.com/Tracer-Cloud/opensre/issues/1367): the rubric, gold manifest, and offline PR gate (phase 1). Live cron and trend dashboards are planned for phase 2.
+This page tracks [#1367](https://github.com/Tracer-Cloud/opensre/issues/1367): the rubric, gold manifest, offline PR gate (phase 1), and live weekly trends (phase 2).
 
 ## Quick reference
 
@@ -15,7 +15,9 @@ This page tracks [#1367](https://github.com/Tracer-Cloud/opensre/issues/1367): t
 | --- | --- |
 | `make test-scorecard-offline` | Run offline smoke eval and check thresholds (PR gate) |
 | `uv run python -m tests.eval.scorecard run --tier offline` | Same as above |
+| `uv run python -m tests.eval.scorecard run --tier live` | Live LLM smoke eval (requires API key) |
 | `uv run python -m tests.eval.scorecard run --tier offline --write-baseline` | Regenerate committed offline baseline |
+| `uv run python -m tests.eval.scorecard run --tier live --write-trends` | Append trend row + refresh latest snapshot |
 
 ## Headline metrics
 
@@ -44,7 +46,7 @@ This page tracks [#1367](https://github.com/Tracer-Cloud/opensre/issues/1367): t
 - Synthetic: required evidence sources populated **and** validated claims include `[evidence: …]` tags referencing those sources.
 - CloudOpsBench: `citation_grounding_rate` heuristic over finding text vs collected evidence.
 
-**PR threshold:** ≥ 0.85 offline; target ≥ 0.90 on live smoke (phase 2).
+**PR threshold:** ≥ 0.85 offline; target ≥ 0.90 on live smoke.
 
 ### false_confidence_rate
 
@@ -52,7 +54,7 @@ This page tracks [#1367](https://github.com/Tracer-Cloud/opensre/issues/1367): t
 
 Requires a live investigation path — not measured on offline-only PR gates ([#1888](https://github.com/Tracer-Cloud/opensre/issues/1888)).
 
-**Planned weekly threshold:** ≤ 0.15 on live smoke; alert if > 0.20.
+**Weekly threshold:** ≤ 0.15 on live smoke; alert if > 0.20.
 
 ### actionability_rate
 
@@ -71,21 +73,30 @@ The smoke manifest lives at [`tests/eval/manifest.yml`](https://github.com/Trace
 | Tier | Purpose | LLM required |
 | --- | --- | --- |
 | `smoke_offline` | PR merge gate (11 cases) | No |
-| `smoke_live` | Weekly trend cron (phase 2) | Yes |
+| `smoke_live` | Weekly trend cron (4 cases) | Yes |
 
 Entries are `suite/scenario` ids (for example `rds/001-replication-lag`). Adapter mapping by suite prefix:
 
-| Prefix | Offline adapter | Live adapter (phase 2) |
+| Prefix | Offline adapter | Live adapter |
 | --- | --- | --- |
 | `rds/` | `synthetic_rds_offline` | `synthetic_rds_live` |
 | `hermes_rca/` | `hermes_offline` | `hermes_live` |
 | `cloudopsbench/` | `cloudopsbench_offline` | `cloudopsbench_live` |
+
+**Ownership:** Changes to the manifest require review from investigation and synthetic maintainers. Bump `version` when cases are added or removed.
 
 Validate locally:
 
 ```bash
 make test-scorecard-offline
 ```
+
+## Weekly trends (phase 2)
+
+- Append-only history: [`docs/eval/scorecard-trends.jsonl`](https://github.com/Tracer-Cloud/opensre/blob/main/docs/eval/scorecard-trends.jsonl)
+- Latest snapshot: [`docs/eval/scorecard-latest.md`](https://github.com/Tracer-Cloud/opensre/blob/main/docs/eval/scorecard-latest.md)
+
+The live cron runs weekly on `Tracer-Cloud/opensre` (Mon 06:00 UTC) via [`.github/workflows/investigation-scorecard.yml`](https://github.com/Tracer-Cloud/opensre/blob/main/.github/workflows/investigation-scorecard.yml).
 
 ## Optional `answer.yml` fields (smoke cases)
 
@@ -104,8 +115,8 @@ These fields are optional on non-smoke scenarios.
 | Phase | Deliverable |
 | --- | --- |
 | **0** | Rubric doc, manifest, optional `answer.yml` fields |
-| **1 (now)** | Offline scorecard runner + PR gate |
-| **2** | Live weekly cron + trend log |
+| **1** | Offline scorecard runner + PR gate |
+| **2 (now)** | Live weekly cron + trend log |
 | **3** | Required branch protection + `--evaluate` UX polish |
 
 ## 90-day success targets
