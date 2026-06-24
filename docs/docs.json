@@ -102,7 +102,7 @@
               "masking",
               "interactive-shell-privacy",
               "sessions",
-              "agents",
+              "fleet",
               "cron",
               "multi-instance-integrations"
             ]
@@ -124,6 +124,7 @@
               "datadog",
               "grafana",
               "grafana_annotations",
+              "groundcover",
               "hermes",
               "honeycomb",
               "incident_io",
@@ -309,18 +310,6 @@
                   "comparisons/Tracer_vs_AWS_CloudWatch"
                 ]
               }
-            ]
-          }
-        ]
-      },
-      {
-        "tab": "Changelog",
-        "icon": "clock",
-        "groups": [
-          {
-            "group": "Daily updates",
-            "pages": [
-              "daily-updates/overview"
             ]
           }
         ]

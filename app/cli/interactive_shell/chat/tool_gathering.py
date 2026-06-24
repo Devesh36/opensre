@@ -21,15 +21,17 @@ Design notes:
 
 from __future__ import annotations
 
+import contextlib
 import json
 from typing import Any
 
 from rich.console import Console
 from rich.markup import escape
 
+from app.agent.utils.alert_source import SECONDARY_TOOL_SOURCES
+from app.cli.interactive_shell.error_handling.exception_reporting import report_exception
 from app.cli.interactive_shell.runtime.session import ReplSession
 from app.cli.interactive_shell.ui import DIM
-from app.cli.support.exception_reporting import report_exception
 
 # Keep the gathering loop short: this runs inline on a REPL turn, so it must stay
 # responsive. A handful of iterations is enough to fetch the data needed to
@@ -47,7 +49,7 @@ def _resolve_session_integrations(session: ReplSession) -> dict[str, Any]:
     if session.resolved_integrations_cache is not None:
         return session.resolved_integrations_cache
 
-    from app.agent.context import resolve_integrations
+    from app.agent.stages.resolve_integrations import resolve_integrations
 
     resolved = resolve_integrations({})  # type: ignore[arg-type]  # env/store resolution path
     session.resolved_integrations_cache = resolved
@@ -70,6 +72,37 @@ def _format_observation(executed: list[tuple[Any, Any]]) -> str:
             f"Tool: {tc.name}\nArguments: {args}\nResult: {_truncate(body, _MAX_PER_TOOL_CHARS)}"
         )
     return _truncate("\n\n".join(blocks), _MAX_OBSERVATION_CHARS)
+
+
+def _persist_tool_calls(session: ReplSession, executed: list[tuple[Any, Any]]) -> None:
+    """Record each gathered tool-call result into the session log.
+
+    Closes the observability gap where a turn's actual integration/API evidence
+    was never persisted (only the final prose answer was). Arguments and results
+    are redacted and bounded before writing; failures are swallowed so logging
+    never breaks the turn.
+    """
+    from app.cli.interactive_shell.sessions.store import SessionStore
+    from app.utils.tool_trace import redact_sensitive
+
+    for tc, output in executed:
+        with contextlib.suppress(Exception):
+            ok = not (isinstance(output, dict) and "error" in output)
+            body = (
+                output
+                if isinstance(output, str)
+                else json.dumps(redact_sensitive(output), default=str)
+            )
+            arguments = (
+                redact_sensitive(tc.input) if isinstance(tc.input, dict) else {"value": tc.input}
+            )
+            SessionStore.append_tool_call(
+                session.session_id,
+                tool=str(tc.name),
+                arguments=arguments,
+                result=_truncate(body, _MAX_PER_TOOL_CHARS),
+                ok=ok,
+            )
 
 
 def _build_gather_system_prompt(session: ReplSession) -> str:
@@ -111,13 +144,15 @@ def gather_tool_evidence(
     never break the conversational turn.
     """
     try:
-        from app.agent.investigation import _get_available_tools
+        from app.agent.stages.investigate.tools import get_available_tools
         from app.agent.tool_loop import run_tool_calling_loop
         from app.services.agent_llm_client import get_agent_llm
 
         resolved = _resolve_session_integrations(session)
-        tools = _get_available_tools(resolved)
+        tools = get_available_tools(resolved)
         if not tools:
+            return None
+        if not any(str(tool.source) not in SECONDARY_TOOL_SOURCES for tool in tools):
             return None
 
         try:
@@ -152,6 +187,7 @@ def gather_tool_evidence(
 
     if not result.executed:
         return None
+    _persist_tool_calls(session, result.executed)
     return _format_observation(result.executed)
 
 

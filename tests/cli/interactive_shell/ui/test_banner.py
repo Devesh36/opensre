@@ -7,6 +7,7 @@ import io
 from rich.console import Console
 
 from app.cli.interactive_shell.ui import banner as banner_module
+from app.cli.interactive_shell.ui import banner_state as banner_state_module
 from app.cli.interactive_shell.ui import rendering as rendering_module
 
 
@@ -99,13 +100,13 @@ def test_ambient_column_marks_incomplete_integration(monkeypatch: object) -> Non
     # A hosted MCP record saved without an API token is "present" but cannot
     # connect; the banner must mark it rather than imply it works.
     monkeypatch.setattr(
-        banner_module,
+        banner_state_module,
         "_load_integration_health",
         lambda: [("Sentry", "ok"), ("Posthog_Mcp", "incomplete")],
     )
-    monkeypatch.setattr(banner_module, "_is_alert_listener_active", lambda: False)
+    monkeypatch.setattr(banner_state_module, "_is_alert_listener_active", lambda: False)
 
-    text = banner_module._build_ambient_right_column().plain
+    text = banner_state_module._build_ambient_right_column().plain
 
     assert "Sentry" in text
     assert "Posthog_Mcp ⚠" in text
@@ -114,13 +115,13 @@ def test_ambient_column_marks_incomplete_integration(monkeypatch: object) -> Non
 
 def test_ambient_column_no_warning_when_all_healthy(monkeypatch: object) -> None:
     monkeypatch.setattr(
-        banner_module,
+        banner_state_module,
         "_load_integration_health",
         lambda: [("Sentry", "ok"), ("GitHub", "ok")],
     )
-    monkeypatch.setattr(banner_module, "_is_alert_listener_active", lambda: False)
+    monkeypatch.setattr(banner_state_module, "_is_alert_listener_active", lambda: False)
 
-    text = banner_module._build_ambient_right_column().plain
+    text = banner_state_module._build_ambient_right_column().plain
 
     assert "Sentry" in text
     assert "GitHub" in text

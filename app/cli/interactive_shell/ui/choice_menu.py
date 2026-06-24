@@ -14,12 +14,13 @@ import os
 import select
 import shutil
 import sys
-from typing import Any, Literal, cast
+from typing import Literal
 
 from rich.console import Console
 from rich.markup import escape
 
 from app.cli.interactive_shell.ui import theme as ui_theme
+from app.cli.interactive_shell.ui.key_reader import read_key_unix, read_key_windows
 
 _HINT = "↑↓/j/k/Tab  Enter/Space  Esc/q"
 CRUMB_SEP = "  ›  "
@@ -59,88 +60,20 @@ def repl_section_break(console: Console) -> None:
 
 
 def _read_action() -> MenuAction:
-    """Return up | down | enter | cancel | eof."""
-    if os.name == "nt":
-        import msvcrt
+    """Map a raw keypress to a menu action.
 
-        c = msvcrt.getch()  # type: ignore[attr-defined]
-        if c in (b"\x03",):
-            return "cancel"
-        if c in (b"\r", b"\n", b" "):
-            return "enter"
-        if c == b"\t":
-            return "down"
-        if c in (b"j", b"J"):
-            return "down"
-        if c in (b"k", b"K"):
-            return "up"
-        if c in (b"q", b"Q"):
-            return "cancel"
-        if c in (b"\xe0", b"\x00"):
-            c2 = msvcrt.getch()  # type: ignore[attr-defined]
-            if c2 == b"H":
-                return "up"
-            if c2 == b"P":
-                return "down"
-            if c2 == b"M":
-                return "enter"
-            if c2 == b"K":
-                return "ignore"
-            return "ignore"
-        if c == b"\x1b":
-            return "cancel"
+    Delegates terminal I/O to :mod:`key_reader` and applies
+    choice_menu-specific overrides: Tab → ``"down"``,
+    right-arrow → ``"enter"``, left-arrow → ``"ignore"``.
+    """
+    key = read_key_windows() if os.name == "nt" else read_key_unix()
+    if key == "tab":
+        return "down"
+    if key == "right":
+        return "enter"
+    if key == "left":
         return "ignore"
-
-    import termios
-    import tty
-
-    fd = sys.stdin.fileno()
-    # ``termios`` / ``tty`` are POSIX-only; stubs expose no attributes when
-    # typechecking with ``mypy --platform win32``.
-    old_attrs: Any = termios.tcgetattr(fd)  # type: ignore[attr-defined]
-    try:
-        tty.setraw(fd)  # type: ignore[attr-defined]
-        data = os.read(fd, 1)
-        if not data:
-            return "eof"
-        key_code = cast(int, data[0])
-        if key_code in (3, 4):
-            return "cancel"
-        if key_code in (10, 13, 32):
-            return "enter"
-        if key_code == 9:
-            return "down"
-        if data in (b"j", b"J"):
-            return "down"
-        if data in (b"k", b"K"):
-            return "up"
-        if data in (b"q", b"Q"):
-            return "cancel"
-        if key_code == 27:
-            if select.select([fd], [], [], 0.05)[0]:
-                seq = os.read(fd, 1)
-                if seq == b"[":
-                    ch = os.read(fd, 1)
-                    if ch == b"A":
-                        return "up"
-                    if ch == b"B":
-                        return "down"
-                    if ch == b"C":
-                        return "enter"
-                    if ch == b"D":
-                        return "ignore"
-                    # CPR (ESC [ row ; col R) and other CSI — consume, do not treat as Esc.
-                    while ch:
-                        if ch[0] in range(0x40, 0x7E):
-                            return "ignore"
-                        if not select.select([fd], [], [], 0.05)[0]:
-                            return "ignore"
-                        ch = os.read(fd, 1)
-                    return "ignore"
-            return "cancel"
-        return "ignore"
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_attrs)  # type: ignore[attr-defined]
+    return key  # type: ignore[return-value]
 
 
 def read_menu_action() -> MenuAction:
@@ -175,17 +108,12 @@ def _menu_height(crumb: str, labels: list[str]) -> int:
     return _MENU_LEADING_LINES + 1 + (1 if crumb else 0) + 1 + 1 + len(labels) + 1 + 1
 
 
-def _write_menu_line(text: str = "") -> None:
-    """Write a menu line at column zero even while the terminal is in raw mode."""
+def write_menu_line(text: str = "") -> None:
+    """Write one inline-menu line at column zero even while the terminal is in raw mode."""
     if text:
         sys.stdout.write(f"\r{text}{_TERMINAL_NEWLINE}")
         return
     sys.stdout.write(_TERMINAL_NEWLINE)
-
-
-def write_menu_line(text: str = "") -> None:
-    """Write one inline-menu line at column zero."""
-    _write_menu_line(text)
 
 
 def _erase_menu_block(height: int) -> None:
@@ -223,26 +151,26 @@ def _draw_menu(
     if erase_lines:
         _erase_menu_block(erase_lines)
     for _ in range(_MENU_LEADING_LINES):
-        _write_menu_line()
+        write_menu_line()
     # title
-    _write_menu_line(f"{ui_theme.PROMPT_ACCENT_ANSI}{title}{ui_theme.ANSI_RESET}")
+    write_menu_line(f"{ui_theme.PROMPT_ACCENT_ANSI}{title}{ui_theme.ANSI_RESET}")
     # breadcrumb path
     if crumb:
-        _write_menu_line(f"{ui_theme.DIM_COUNTER_ANSI}{crumb}{ui_theme.ANSI_RESET}")
+        write_menu_line(f"{ui_theme.DIM_COUNTER_ANSI}{crumb}{ui_theme.ANSI_RESET}")
     # separator below header
-    _write_menu_line(f"{ui_theme.DIM_COUNTER_ANSI}{_rule(w)}{ui_theme.ANSI_RESET}")
-    _write_menu_line()
+    write_menu_line(f"{ui_theme.DIM_COUNTER_ANSI}{_rule(w)}{ui_theme.ANSI_RESET}")
+    write_menu_line()
     # choices
     for i, label in enumerate(labels):
         here = i == index
         sym = ">" if here else " "
         padded = _pad(sym, label, w)
         if here:
-            _write_menu_line(f"{ui_theme.MENU_SELECTION_ROW_ANSI}{padded}{ui_theme.ANSI_RESET}")
+            write_menu_line(f"{ui_theme.MENU_SELECTION_ROW_ANSI}{padded}{ui_theme.ANSI_RESET}")
         else:
-            _write_menu_line(f"{ui_theme.DIM_COUNTER_ANSI}{padded}{ui_theme.ANSI_RESET}")
-    _write_menu_line()
-    _write_menu_line(f"{ui_theme.DIM_COUNTER_ANSI}{_HINT}{ui_theme.ANSI_RESET}")
+            write_menu_line(f"{ui_theme.DIM_COUNTER_ANSI}{padded}{ui_theme.ANSI_RESET}")
+    write_menu_line()
+    write_menu_line(f"{ui_theme.DIM_COUNTER_ANSI}{_HINT}{ui_theme.ANSI_RESET}")
     out.flush()
 
 

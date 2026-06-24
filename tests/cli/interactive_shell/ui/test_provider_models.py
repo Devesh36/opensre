@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.cli.interactive_shell.ui.provider_models import resolve_provider_models
+from app.cli.interactive_shell.ui.provider import resolve_provider_models
 
 
 def test_antigravity_cli_reads_model_env(monkeypatch: object) -> None:

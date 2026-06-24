@@ -20,9 +20,9 @@ from rich.console import Console
 from rich.file_proxy import FileProxy
 from rich.markup import escape
 
-from app.agents.sampler import start_sampler
 from app.cli.interactive_shell import alert_inbox as _alert_inbox
 from app.cli.interactive_shell.alert_renderer import drain_and_render_incoming
+from app.cli.interactive_shell.error_handling.exception_reporting import report_exception
 from app.cli.interactive_shell.prompting import prompt_surface as _prompt_surface
 from app.cli.interactive_shell.runtime.dispatch import (
     DispatchCancelled,
@@ -35,6 +35,7 @@ from app.cli.interactive_shell.runtime.dispatch import (
     looks_like_confirmation_answer,
     route_confirm_through_prompt,
 )
+from app.cli.interactive_shell.runtime.repl_progress import repl_safe_progress_scope
 from app.cli.interactive_shell.runtime.session import ReplSession
 from app.cli.interactive_shell.runtime.state import (
     PROMPT_REFRESH_INTERVAL_S,
@@ -42,9 +43,11 @@ from app.cli.interactive_shell.runtime.state import (
     SpinnerState,
 )
 from app.cli.interactive_shell.ui import ERROR, WARNING
-from app.cli.support.exception_reporting import report_exception
-from app.cli.support.prompt_support import repl_prompt_note_ctrl_c, repl_reset_ctrl_c_gate
-from app.cli.support.repl_progress import repl_safe_progress_scope
+from app.cli.interactive_shell.ui.prompt_support import (
+    repl_prompt_note_ctrl_c,
+    repl_reset_ctrl_c_gate,
+)
+from app.fleet_monitoring.sampler import start_sampler
 
 log = logging.getLogger(__name__)
 
@@ -206,7 +209,7 @@ async def run_interactive(
             color_system="truecolor",
             legacy_windows=False,
         )
-        from app.cli.support.output import set_prompt_suppress_fn  # lazy — avoids circular import
+        from app.cli.interactive_shell.ui.output import set_prompt_suppress_fn
 
         show_spinner = dispatch_should_show_spinner(text, session)
         if show_spinner:

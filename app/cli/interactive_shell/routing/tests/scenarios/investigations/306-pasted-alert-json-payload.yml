@@ -1,18 +1,14 @@
 id: 306-pasted-alert-json-payload
 title: Pasted alert JSON payload
 intent_class: investigation
-risk_level: medium
 input:
   prompt: 'investigate this alert: {"alertname": "HighCPU", "severity": "critical"}'
-  surface: interactive_cli
 session:
   has_prior_state: false
-  remote_connected: false
   configured_integrations: []
-available_capabilities:
-  slash_commands: []
-  cli_commands: []
-  synthetic_suites: []
+  # Pin an empty resolved store so this scenario is isolated from the developer's
+  # local ~/.opensre integrations.
+  resolved_integrations: {}
 notes: []
 route:
   expected_kind: handle_message_with_agent
@@ -41,5 +37,4 @@ history:
     ok: true
   - type: alert
     ok: true
-tier: full
 runs: 3

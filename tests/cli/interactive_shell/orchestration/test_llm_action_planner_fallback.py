@@ -7,14 +7,14 @@ from unittest.mock import patch
 import pytest
 
 from app.cli.interactive_shell.routing.handle_message_with_agent.errors import PlannerLLMError
-from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.llm_action_planner.constants import (
-    _SYSTEM_PROMPT_BASE,
-)
 from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.llm_action_planner.planner import (
     plan_actions_with_llm_result,
 )
 from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.llm_action_planner.prompting import (
     _system_prompt,
+)
+from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.llm_action_planner.system_prompt import (
+    _SYSTEM_PROMPT_BASE,
 )
 from app.integrations.llm_cli.failure_explain import is_context_length_overflow
 
@@ -45,6 +45,29 @@ def test_system_prompt_permits_read_only_discovery_for_factual_questions() -> No
     # The planner is explicitly permitted to emit a read-only discovery action
     # for current-state questions instead of always handing off.
     assert "may emit that read-only discovery action" in prompt
+
+
+def test_system_prompt_gates_diagnostic_dispatch_on_connected_integrations() -> None:
+    """Investigation-intent diagnostic questions dispatch only when integrations are
+    connected; explicit investigate instructions dispatch regardless.
+
+    This encodes the Option A behavior change: the planner must read the
+    CONNECTED INTEGRATIONS line and dispatch investigation_start for diagnostic
+    questions only when at least one integration is connected.
+    """
+    import re
+
+    prompt = re.sub(r"\s+", " ", _system_prompt().lower())
+    # The gate line the planner reads.
+    assert "connected integrations" in prompt
+    # Diagnostic questions are an investigation request gated on integrations.
+    assert "diagnostic question" in prompt
+    assert "investigation_start" in prompt
+    # Explicit investigate instructions are NOT gated.
+    assert "regardless of" in prompt
+    # The figure-out / query-sources phrasing is now a dispatch candidate, not a
+    # hardcoded handoff.
+    assert "figure out why x is crashing" in prompt
 
 
 @pytest.mark.parametrize(
@@ -119,3 +142,81 @@ def test_plan_actions_with_llm_result_re_raises_timeout_too_long_errors() -> Non
         pytest.raises(PlannerLLMError, match="too long"),
     ):
         plan_actions_with_llm_result("check cpu usage")
+
+
+class _RaisingClient:
+    """Stand-in classification client whose invoke always fails."""
+
+    def __init__(self, error: Exception) -> None:
+        self._error = error
+
+    def bind_tools(self, _specs: object) -> _RaisingClient:
+        return self
+
+    def invoke(self, _prompt: object) -> object:
+        raise self._error
+
+
+def _patch_planner_llm(monkeypatch, error: Exception) -> None:
+    from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration import (
+        llm_action_planner,
+    )
+
+    monkeypatch.setattr(
+        llm_action_planner.llm_client,
+        "_tool_specs_for_provider",
+        lambda _session: [],
+    )
+    monkeypatch.setattr(
+        "app.services.llm_client.get_llm_for_classification",
+        lambda: _RaisingClient(error),
+    )
+
+
+def test_call_llm_prefixes_fallback_provider_context(monkeypatch) -> None:
+    # Configured openai but only anthropic has a key: the user-visible planner
+    # error must say the call fell back to anthropic, instead of an opaque
+    # "Anthropic credit balance too low" that contradicts their config.
+    from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.llm_action_planner.llm_client import (  # noqa: E501
+        _call_llm,
+    )
+    from app.cli.interactive_shell.runtime.session import ReplSession
+
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setattr(
+        "app.config.resolve_llm_api_key",
+        lambda env_var: "sk-present" if env_var == "ANTHROPIC_API_KEY" else "",
+    )
+    _patch_planner_llm(
+        monkeypatch,
+        RuntimeError("Anthropic request rejected (HTTP 400): Your credit balance is too low"),
+    )
+
+    with pytest.raises(PlannerLLMError) as excinfo:
+        _call_llm("show me the logs", ReplSession())
+
+    message = str(excinfo.value)
+    assert message.startswith("[LLM provider: anthropic — fell back from configured 'openai'")
+    assert "OPENAI_API_KEY not set" in message
+    assert "credit balance is too low" in message
+
+
+def test_call_llm_prefixes_active_provider_context_without_fallback(monkeypatch) -> None:
+    from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.llm_action_planner.llm_client import (  # noqa: E501
+        _call_llm,
+    )
+    from app.cli.interactive_shell.runtime.session import ReplSession
+
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setattr(
+        "app.config.resolve_llm_api_key",
+        lambda env_var: "sk-present" if env_var == "OPENAI_API_KEY" else "",
+    )
+    _patch_planner_llm(monkeypatch, RuntimeError("OpenAI billing quota exceeded."))
+
+    with pytest.raises(PlannerLLMError) as excinfo:
+        _call_llm("show me the logs", ReplSession())
+
+    message = str(excinfo.value)
+    assert message.startswith("[LLM provider: openai]")
+    assert "billing quota exceeded" in message

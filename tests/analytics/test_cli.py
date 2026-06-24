@@ -28,12 +28,16 @@ class _StubAnalytics:
     def __init__(self) -> None:
         self.events: list[tuple[Event, dict[str, object] | None]] = []
         self.identified: list[dict[str, object]] = []
+        self.persistent_properties: dict[str, object] = {}
 
     def capture(self, event: Event, properties: dict[str, object] | None = None) -> None:
         self.events.append((event, properties))
 
     def identify(self, set_properties: dict[str, object]) -> None:
         self.identified.append(set_properties)
+
+    def set_persistent_property(self, key: str, value: object) -> None:
+        self.persistent_properties[key] = value
 
 
 def test_capture_cli_invoked_uses_safe_capture(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -71,6 +75,7 @@ def test_identify_github_username_sets_person_property(monkeypatch: pytest.Monke
     cli.identify_github_username("octocat")
 
     assert stub.identified == [{"github_username": "octocat"}]
+    assert stub.persistent_properties == {"github_username": "octocat"}
 
 
 def test_identify_github_username_noop_on_empty(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -305,3 +310,24 @@ def test_track_investigation_nested_context_dedupes(monkeypatch: pytest.MonkeyPa
     emitted_events = [event for event, _ in stub.events]
     assert emitted_events == [Event.INVESTIGATION_STARTED, Event.INVESTIGATION_COMPLETED]
     _assert_investigation_events_have_source(stub.events)
+
+
+def test_capture_diagnosis_category_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    stub = _StubAnalytics()
+    monkeypatch.setattr(cli, "get_analytics", lambda: stub)
+
+    cli.capture_diagnosis_category_mismatch(
+        root_cause_category="dns_resolution_failure",
+        mismatch_reason="root cause text signals database (2 keyword hits)",
+    )
+
+    assert stub.events == [
+        (
+            Event.DIAGNOSIS_CATEGORY_MISMATCH,
+            {
+                "category_text_mismatch": True,
+                "root_cause_category": "dns_resolution_failure",
+                "mismatch_reason": "root cause text signals database (2 keyword hits)",
+            },
+        )
+    ]

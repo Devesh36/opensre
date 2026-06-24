@@ -10,7 +10,7 @@ render_ready_box(console, session=None)
     DIM-bordered two-column welcome panel:
       left  → ◉ OpenSRE · provider · model · mode · cwd
       right → "Tips for getting started" + "What's new"
-    Called after startup; refreshed (with splash) on /clear, /theme, /welcome via rendering.
+    Called after the splash and on /clear, /welcome, and greeting aliases.
 
 render_banner(console)
     Backward-compatible shim: render_splash + render_ready_box in one call.
@@ -41,83 +41,18 @@ from rich.table import Table
 from rich.text import Text
 
 from app.cli.interactive_shell.config import WHATS_NEW
-from app.cli.interactive_shell.ui import theme as ui_theme
-from app.cli.interactive_shell.ui.provider_models import resolve_provider_models
-from app.config import LLMSettings
-from app.utils.figlet import render_figlet
+from app.cli.interactive_shell.ui.banner_art import _render_art
+from app.cli.interactive_shell.ui.banner_state import _build_ambient_right_column
+from app.cli.interactive_shell.ui.provider import detect_provider_model
+from app.cli.interactive_shell.ui.theme import (
+    BRAND,
+    DIM,
+    HIGHLIGHT,
+    SECONDARY,
+    TEXT,
+    WARNING,
+)
 from app.version import get_version
-
-# ── Splash art ───────────────────────────────────────────────────────────────
-# Pre-rendered during development and checked into this module as a static string.
-# Colour codes are stripped; HIGHLIGHT is re-applied at render time.
-#
-# SPLASH_ART         block font, 59 cols, solid ██ fills
-# SPLASH_ART_NARROW  simpleBlock font, 72 cols, pure ASCII fallback
-# _FALLBACK_ART      minimal art, 44 cols, last resort
-
-SPLASH_ART = """\
- ██████╗ ██████╗ ███████╗███╗   ██╗███████╗██████╗ ███████╗
-██╔═══██╗██╔══██╗██╔════╝████╗  ██║██╔════╝██╔══██╗██╔════╝
-██║   ██║██████╔╝█████╗  ██╔██╗ ██║███████╗██████╔╝█████╗
-██║   ██║██╔═══╝ ██╔══╝  ██║╚██╗██║╚════██║██╔══██╗██╔══╝
-╚██████╔╝██║     ███████╗██║ ╚████║███████║██║  ██║███████╗
- ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝╚══════╝"""
-
-SPLASH_ART_NARROW = """\
-    _|_|    _|_|_|    _|_|_|_|  _|      _|    _|_|_|  _|_|_|    _|_|_|_|
-  _|    _|  _|    _|  _|        _|_|    _|  _|        _|    _|  _|
-  _|    _|  _|_|_|    _|_|_|    _|  _|  _|    _|_|    _|_|_|    _|_|_|
-  _|    _|  _|        _|        _|    _|_|        _|  _|    _|  _|
-    _|_|    _|        _|_|_|_|  _|      _|  _|_|_|    _|    _|  _|_|_|_|"""
-
-_FALLBACK_ART = """\
-  ___                    ____  ____  _____
- / _ \\ _ __   ___ _ __  / ___||  _ \\| ____|
-| | | | '_ \\ / _ \\ '_ \\ \\___ \\| |_) |  _|
-| |_| | |_) |  __/ | | | ___) |  _ <| |___
- \\___/| .__/ \\___|_| |_||____/|_| \\_\\_____|
-      |_|"""
-
-
-def _render_art(console_width: int = 80) -> str:
-    """Return the splash art string for the given terminal width.
-
-    Priority: SPLASH_ART (grid, 34 cols) → SPLASH_ART_NARROW (simpleBlock, 72 cols)
-    → _FALLBACK_ART (minimal, 44 cols).  OPENSRE_FIGLET_FONT overrides the default
-    when pyfiglet is installed.
-    """
-    custom_font = os.getenv("OPENSRE_FIGLET_FONT")
-    if custom_font:
-        rendered = render_figlet("OpenSRE", font=custom_font, max_line_width=console_width - 2)
-        if rendered:
-            return rendered
-
-    art_width = max(len(ln) for ln in SPLASH_ART.splitlines())
-    narrow_width = max(len(ln) for ln in SPLASH_ART_NARROW.splitlines())
-    fallback_width = max(len(ln) for ln in _FALLBACK_ART.splitlines())
-
-    if console_width >= art_width + 4:
-        return SPLASH_ART
-    if console_width >= narrow_width + 4:
-        return SPLASH_ART_NARROW
-    if console_width >= fallback_width + 4:
-        return _FALLBACK_ART
-    return _FALLBACK_ART
-
-
-# ── Provider detection ────────────────────────────────────────────────────────
-
-
-def detect_provider_model() -> tuple[str, str]:
-    """Return (provider, model) for the active LLM config."""
-    try:
-        settings = LLMSettings.from_env()
-    except Exception:
-        return ("unknown", "unknown")
-
-    provider = settings.provider or os.getenv("LLM_PROVIDER", "anthropic")
-    reasoning_model, _toolcall_model = resolve_provider_models(settings, provider)
-    return (provider, reasoning_model)
 
 
 def _is_first_run() -> bool:
@@ -139,7 +74,6 @@ def render_splash(console: Console | None = None, *, first_run: bool | None = No
     Rendered output (with colour roles):
     ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄ [DIM divider]
     ╋╋╋╋╋╋╋╋╋╋╋╋╋╋╋╋╋╋╋╋╋╋╋╋╋╋╋╋╋╋╋╋╋╋           [HIGHLIGHT art]
-    ╋┏━━┓╋┏━━┓╋┏━━┓╋┏━┓╋╋┏━━┓╋┏━┓╋┏━━┓
     ...
       opensre  [SECONDARY]  ·  v<version> [BRAND]
       open-source SRE agent for automated incident
@@ -163,53 +97,50 @@ def render_splash(console: Console | None = None, *, first_run: bool | None = No
     art = _render_art(console.width)
 
     console.print()
-    console.print(Rule(style=ui_theme.DIM))
+    console.print(Rule(style=DIM))
     console.print()
 
     for line in art.splitlines():
         t = Text()
         t.append("  ")
         for ch in line:
-            t.append(
-                ch,
-                style=f"bold {ui_theme.HIGHLIGHT}" if ch == "█" else f"bold {ui_theme.BRAND}",
-            )
+            t.append(ch, style=f"bold {HIGHLIGHT}" if ch == "█" else f"bold {BRAND}")
         console.print(t)
 
     console.print()
 
     subtitle = Text()
     subtitle.append("  ")
-    subtitle.append("opensre", style=ui_theme.SECONDARY)
-    subtitle.append("  ·  ", style=ui_theme.DIM)
-    subtitle.append(f"v{version}", style=ui_theme.BRAND)
+    subtitle.append("opensre", style=SECONDARY)
+    subtitle.append("  ·  ", style=DIM)
+    subtitle.append(f"v{version}", style=BRAND)
     console.print(subtitle)
 
     desc = Text()
     desc.append(
         "  open-source SRE agent for automated incident investigation and root cause analysis",
-        style=ui_theme.DIM,
+        style=DIM,
     )
     console.print(desc)
     console.print()
-    console.print(Rule(style=ui_theme.DIM))
+    console.print(Rule(style=DIM))
 
     if first_run:
         console.print()
         notice = Text()
         notice.append("  ")
-        notice.append("⚠  ", style=f"bold {ui_theme.WARNING}")
+        notice.append("⚠  ", style=f"bold {WARNING}")
         notice.append(
             "This tool executes AI-powered commands against your infrastructure.\n"
             "     Review the documentation before connecting production systems.\n"
             "     Source: https://github.com/opensre-dev/opensre",
-            style=ui_theme.SECONDARY,
+            style=SECONDARY,
         )
         console.print(notice)
         console.print()
         if sys.stdin.isatty():
             try:
-                console.print(f"  [{ui_theme.SECONDARY}]Press Enter to continue…[/]", end="")
+                console.print(f"  [{SECONDARY}]Press Enter to continue…[/]", end="")
                 sys.stdin.readline()
             except (EOFError, KeyboardInterrupt, OSError):
                 # Non-interactive stdin or user abort — skip blocking and continue startup.
@@ -226,136 +157,6 @@ _TIPS: tuple[str, ...] = (
     "Run /doctor for environment diagnostics",
     "Use /investigate for runnable demos/templates",
 )
-
-# Display-name overrides for known integration service slugs.
-_SERVICE_DISPLAY_NAMES: dict[str, str] = {
-    "grafana": "Grafana",
-    "datadog": "Datadog",
-    "honeycomb": "Honeycomb",
-    "coralogix": "Coralogix",
-    "aws": "AWS",
-    "github": "GitHub",
-    "sentry": "Sentry",
-    "prometheus": "Prometheus",
-    "loki": "Loki",
-    "elasticsearch": "Elasticsearch",
-    "bigquery": "BigQuery",
-    "pagerduty": "PagerDuty",
-    "slack": "Slack",
-    "telegram": "Telegram",
-    "signoz": "SigNoz",
-    "jira": "Jira",
-    "gitlab": "GitLab",
-    "vercel": "Vercel",
-    "mongodb": "MongoDB",
-    "postgresql": "PostgreSQL",
-    "mysql": "MySQL",
-    "redis": "Redis",
-    "kafka": "Kafka",
-    "rabbitmq": "RabbitMQ",
-    "clickhouse": "ClickHouse",
-    "mariadb": "MariaDB",
-    "kubernetes": "Kubernetes",
-    "betterstack": "Better Stack",
-    "snowflake": "Snowflake",
-    "newrelic": "New Relic",
-    "opsgenie": "OpsGenie",
-    "linear": "Linear",
-    "supabase": "Supabase",
-}
-
-
-def _load_integration_health() -> list[tuple[str, str]]:
-    """Return ``(display_name, status)`` for each configured integration.
-
-    ``status`` is ``"ok"`` or ``"incomplete"`` (e.g. a hosted MCP record saved
-    without an API token). Offline and best-effort: never raises and never makes
-    network calls, so the banner reflects health without slowing startup.
-    """
-    try:
-        from app.integrations.catalog import (  # lazy — avoids circular deps
-            configured_integration_health,
-        )
-
-        return [
-            (_SERVICE_DISPLAY_NAMES.get(service, service.title()), status)
-            for service, status in configured_integration_health()
-        ]
-    except Exception:
-        return []
-
-
-def _is_alert_listener_active() -> bool:
-    """Return True if the alert listener is enabled in config. Never raises."""
-    try:
-        from app.cli.interactive_shell.config import ReplConfig
-
-        # ``ReplConfig.load()`` re-applies the configured palette as a side effect.
-        # This is a passive read while rendering the welcome panel, so preserve the
-        # caller's active theme (e.g. one set via ``/theme``) instead of snapping
-        # it back to the config default.
-        current_theme = ui_theme.get_active_theme_name()
-        try:
-            return ReplConfig.load().alert_listener_enabled
-        finally:
-            ui_theme.set_active_theme(current_theme)
-    except Exception:
-        return False
-
-
-def _build_ambient_right_column(session: object = None) -> Text:
-    """Right column for returning users: live integration status and alert listener state."""
-    parts: list[Text] = []
-
-    # Integrations — annotate by offline health so the banner never implies a
-    # half-configured integration (e.g. a hosted MCP record with no API token)
-    # is connected. A "⚠" + dim name marks an integration missing credentials.
-    parts.append(Text("Integrations", style=f"bold {ui_theme.BRAND}"))
-    entries = _load_integration_health()
-    if entries:
-        _MAX_SHOWN = 6
-        shown = entries[:_MAX_SHOWN]
-        overflow = len(entries) - len(shown)
-        name_line = Text(overflow="fold")
-        for idx, (name, status) in enumerate(shown):
-            if idx:
-                name_line.append("  ·  ", style=ui_theme.DIM)
-            if status == "incomplete":
-                name_line.append(f"{name} ⚠", style=ui_theme.DIM)
-            else:
-                name_line.append(name, style=ui_theme.SECONDARY)
-        if overflow:
-            name_line.append(f"  +{overflow}", style=ui_theme.DIM)
-        parts.append(name_line)
-        if any(status == "incomplete" for _name, status in entries):
-            parts.append(Text("⚠ incomplete — run /integrations verify", style=ui_theme.WARNING))
-    else:
-        parts.append(Text("run /onboard to connect tools", style=ui_theme.DIM))
-
-    parts.append(Text("───", style=ui_theme.DIM))
-
-    # Alert listener
-    parts.append(Text("Alert listener", style=f"bold {ui_theme.BRAND}"))
-    if _is_alert_listener_active():
-        listener_line = Text()
-        listener_line.append("● ", style=f"bold {ui_theme.HIGHLIGHT}")
-        listener_line.append("active", style=ui_theme.SECONDARY)
-        parts.append(listener_line)
-    else:
-        parts.append(Text("○  not configured", style=ui_theme.DIM))
-
-    # Session summary — only shown when /clear is used mid-session with history
-    if session is not None:
-        history: list[object] = getattr(session, "history", [])
-        if history:
-            parts.append(Text("───", style=ui_theme.DIM))
-            parts.append(Text("This session", style=f"bold {ui_theme.BRAND}"))
-            count = len(history)
-            noun = "interaction" if count == 1 else "interactions"
-            parts.append(Text(f"{count} {noun}", style=ui_theme.SECONDARY))
-
-    return Text("\n").join(parts)
-
 
 # Panel geometry. The body switches to a stacked layout on narrow terminals,
 # and otherwise expands to fill the full console width while keeping the left
@@ -411,7 +212,7 @@ def _build_logo_mark() -> Text:
     for index, (body, _echo) in enumerate(_LOGO_MARK_ROWS):
         if index:
             logo.append("\n")
-        logo.append(body, style=f"bold {ui_theme.HIGHLIGHT}")
+        logo.append(body, style=f"bold {HIGHLIGHT}")
     return logo
 
 
@@ -428,30 +229,30 @@ def _build_identity_block(provider: str, model: str, *, trust_mode: bool) -> Tex
     logo = _build_logo_mark()
 
     greeting = Text()
-    greeting.append(f"Welcome back {_get_username()}!", style=f"bold {ui_theme.TEXT}")
+    greeting.append(f"Welcome back {_get_username()}!", style=f"bold {TEXT}")
 
     # Single flowing line: model · tier · workspace
     cwd = _format_cwd(os.getcwd())
     tier = "trust mode" if trust_mode else provider
     identity = Text(overflow="fold")
-    identity.append(model, style=f"bold {ui_theme.BRAND}")
-    identity.append("  ·  ", style=ui_theme.DIM)
+    identity.append(model, style=f"bold {BRAND}")
+    identity.append("  ·  ", style=DIM)
     if trust_mode:
-        identity.append(tier, style=f"bold {ui_theme.WARNING}")
-        identity.append("  ·  ", style=ui_theme.DIM)
+        identity.append(tier, style=f"bold {WARNING}")
+        identity.append("  ·  ", style=DIM)
     else:
-        identity.append(tier, style=ui_theme.SECONDARY)
-        identity.append("  ·  ", style=ui_theme.DIM)
-    identity.append(cwd, style=ui_theme.SECONDARY)
+        identity.append(tier, style=SECONDARY)
+        identity.append("  ·  ", style=DIM)
+    identity.append(cwd, style=SECONDARY)
 
     return Text("\n").join([logo, Text(), Text(), greeting, Text(), Text(), identity])
 
 
 def _build_notes_block(header_text: str, items: tuple[str, ...]) -> Text:
     """Right column section: bold header followed by dim list items."""
-    parts: list[Text] = [Text(header_text, style=f"bold {ui_theme.BRAND}")]
+    parts: list[Text] = [Text(header_text, style=f"bold {BRAND}")]
     for item in items:
-        parts.append(Text(item, style=ui_theme.SECONDARY, overflow="fold"))
+        parts.append(Text(item, style=SECONDARY, overflow="fold"))
     return Text("\n").join(parts)
 
 
@@ -466,7 +267,7 @@ def _visual_line_count(block: Text, width: int) -> int:
 
 def _vertical_divider(height: int) -> Text:
     """Build a padded vertical rule with ``height`` lines."""
-    return Text("\n".join(" │ " for _ in range(max(height, 1))), style=ui_theme.DIM, no_wrap=True)
+    return Text("\n".join(" │ " for _ in range(max(height, 1))), style=DIM, no_wrap=True)
 
 
 def _two_column_widths(console_width: int) -> tuple[int, int]:
@@ -498,16 +299,16 @@ def build_ready_panel(
     trust_mode: bool = bool(getattr(session, "trust_mode", False))
 
     panel_title = Text()
-    panel_title.append(" OpenSRE", style=f"bold {ui_theme.HIGHLIGHT}")
-    panel_title.append(" · ", style=ui_theme.DIM)
-    panel_title.append(f"v{version} ", style=ui_theme.BRAND)
+    panel_title.append(" OpenSRE", style=f"bold {HIGHLIGHT}")
+    panel_title.append(" · ", style=DIM)
+    panel_title.append(f"v{version} ", style=BRAND)
 
     left = _build_identity_block(provider, model, trust_mode=trust_mode)
     if _is_first_run():
         right = Text("\n").join(
             [
                 _build_notes_block("Tips for getting started", _TIPS),
-                Text("───", style=ui_theme.DIM),
+                Text("───", style=DIM),
                 _build_notes_block("What's new", WHATS_NEW),
             ]
         )
@@ -532,7 +333,7 @@ def build_ready_panel(
     else:
         body = Group(
             left,
-            Rule(style=ui_theme.DIM),
+            Rule(style=DIM),
             right,
         )
 
@@ -540,7 +341,7 @@ def build_ready_panel(
         body,
         title=panel_title,
         title_align="left",
-        border_style=ui_theme.DIM,
+        border_style=DIM,
         padding=(1, _PANEL_PADDING_X),
         expand=True,
         box=box.ROUNDED,
@@ -552,20 +353,7 @@ def render_ready_box(
     *,
     session: object = None,
 ) -> None:
-    """Print the two-column welcome panel with an embedded title bar.
-
-    Layout:
-    ── OpenSRE · v<version> ────────────────────────────────────────────────╮
-    │                                                                         │
-    │      Welcome back paul!          │  Tips for getting started            │
-    │           █▀█                   │  Paste alert JSON or describe…        │
-    │           █▄█                   │  ───                                  │
-    │                                  │  What's new                          │
-    │  claude-opus-4-7  ·  anthropic  │  Two-column welcome with tips…        │
-    │  · ~/code/opensre                │  /release-notes for more             │
-    │                                                                         │
-    ╰─────────────────────────────────────────────────────────────────────────╯
-    """
+    """Print the two-column welcome panel with an embedded title bar."""
     console = console or Console(
         highlight=False,
         force_terminal=True,

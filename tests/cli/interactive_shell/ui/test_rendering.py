@@ -9,13 +9,11 @@ import pytest
 from rich.console import Console
 
 from app.cli.interactive_shell.runtime import loop
-from app.cli.interactive_shell.ui.rendering import (
+from app.cli.interactive_shell.ui.rendering import repl_print, repl_render_launch_poster, repl_table
+from app.cli.interactive_shell.ui.tables import (
     print_planned_actions,
     render_integrations_table,
     render_mcp_table,
-    repl_print,
-    repl_render_launch_poster,
-    repl_table,
 )
 
 

@@ -10,9 +10,9 @@ from typing import TYPE_CHECKING, Any
 import click
 
 from app.cli.commands.remote_health import _save_remote_base_url, run_remote_health_check
+from app.cli.interactive_shell.data_store.context import is_interactive_env, is_json_output, is_yes
+from app.cli.interactive_shell.error_handling.errors import OpenSREError
 from app.cli.interactive_shell.ui.theme import BRAND, DIM, ERROR, HIGHLIGHT, WARNING
-from app.cli.support.context import is_interactive_env, is_json_output, is_yes
-from app.cli.support.errors import OpenSREError
 
 if TYPE_CHECKING:
     from app.remote.client import PreflightResult, RemoteAgentClient
@@ -534,7 +534,7 @@ def _run_streamed_investigation(ctx: click.Context, raw_alert: dict[str, Any]) -
     """
     import httpx
 
-    from app.remote.renderer import StreamRenderer
+    from app.cli.ui.renderer import StreamRenderer
 
     client = _load_remote_client(
         ctx,
@@ -613,7 +613,7 @@ def _run_threads_api_investigation(ctx: click.Context, raw_alert: dict[str, Any]
     """
     import httpx
 
-    from app.remote.renderer import StreamRenderer
+    from app.cli.ui.renderer import StreamRenderer
 
     client = _load_remote_client(
         ctx,
@@ -829,7 +829,7 @@ def remote_trigger(ctx: click.Context, alert_json: str | None, detach: bool) -> 
     """Trigger an investigation on a remote deployed agent and stream results."""
     import httpx
 
-    from app.remote.renderer import StreamRenderer
+    from app.cli.ui.renderer import StreamRenderer
 
     client = _load_remote_client(
         ctx,
