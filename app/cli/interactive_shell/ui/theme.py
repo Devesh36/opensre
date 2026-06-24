@@ -309,6 +309,47 @@ DEVICE_CODE = BOLD_HIGHLIGHT
 # Distinct accent for incoming alerts (visually distinct from BOLD_BRAND used for assistant)
 INCOMING_ALERT_ACCENT = BOLD_WARNING
 
+__all__ = [
+    "ANSI_BOLD",
+    "ANSI_DIM",
+    "ANSI_RESET",
+    "BG",
+    "BOLD_BRAND",
+    "BOLD_BRAND_ANSI",
+    "BOLD_ERROR",
+    "BOLD_HIGHLIGHT",
+    "BOLD_TEXT",
+    "BOLD_WARNING",
+    "BRAND",
+    "BRAND_ANSI",
+    "DEVICE_CODE",
+    "DEVICE_CODE_ANSI",
+    "DIM",
+    "DIM_ANSI",
+    "DIM_COUNTER_ANSI",
+    "ERROR",
+    "GLYPH_ACTIVE",
+    "GLYPH_BULLET",
+    "GLYPH_ERROR",
+    "GLYPH_PROMPT",
+    "GLYPH_SUCCESS",
+    "GLYPH_WARNING",
+    "HIGHLIGHT",
+    "HIGHLIGHT_ANSI",
+    "INCOMING_ALERT_ACCENT",
+    "INPUT_SURFACE",
+    "INPUT_SURFACE_BG_ANSI",
+    "MARKDOWN_THEME",
+    "MENU_SELECTION_ROW_ANSI",
+    "PROMPT_ACCENT_ANSI",
+    "PROMPT_FRAME_ANSI",
+    "SECONDARY",
+    "SURFACE_BG_ANSI",
+    "TEXT",
+    "TEXT_ANSI",
+    "WARNING",
+]
+
 # ── Semantic glyphs ────────────────────────────────────────────────────────
 
 GLYPH_SUCCESS = "✓"

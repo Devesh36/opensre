@@ -6,17 +6,7 @@ import sys
 
 from app.cli.interactive_shell.runtime.repl_progress import repl_safe_progress_requested
 from app.cli.interactive_shell.ui.theme import SECONDARY
-
-
-def get_output_format() -> str:
-    """Return 'rich' for interactive TTY, 'text' otherwise."""
-    if fmt := os.getenv("TRACER_OUTPUT_FORMAT"):
-        return fmt
-    if os.getenv("NO_COLOR") is not None:
-        return "text"
-    if os.getenv("SLACK_WEBHOOK_URL"):
-        return "text"
-    return "rich" if sys.stdout.isatty() else "text"
+from app.observability.output_format import get_output_format
 
 
 def _is_silent_output() -> bool:
@@ -66,3 +56,11 @@ def debug_print(message: str) -> None:
         _get_console().print(f"[{SECONDARY}]{message}[/]")
     else:
         print(f"DEBUG: {message}")
+
+
+# ``install_cli_observability_adapters`` lives in
+# :mod:`app.cli.interactive_shell.ui.output.boundary`, not here. Putting
+# it in this module would re-introduce a static import cycle:
+# ``renderers`` and ``tracker`` already import from this module for
+# utility plumbing, and the install function imports them back. Moving
+# the wiring into a leaf module keeps the static graph acyclic.
