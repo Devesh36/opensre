@@ -366,12 +366,24 @@ def test_lazy_rich_style_split_tracks_active_theme() -> None:
     from app.cli.interactive_shell.ui import theme as ui_theme
 
     set_active_theme("green")
+    assert bool(ui_theme.DIM) is True
     assert ui_theme.DIM.split() == [ui_theme.get_active_theme().DIM]
     assert ui_theme.BOLD_BRAND.split() == ["bold", ui_theme.get_active_theme().BRAND]
 
     set_active_theme("blue")
+    assert bool(ui_theme.DIM) is True
     assert ui_theme.DIM.split() == [ui_theme.get_active_theme().DIM]
     assert ui_theme.BOLD_BRAND.split() == ["bold", ui_theme.get_active_theme().BRAND]
+
+
+def test_lazy_rich_style_parses_as_real_rich_style() -> None:
+    from rich.style import Style
+
+    from app.cli.interactive_shell.ui import theme as ui_theme
+
+    set_active_theme("amber")
+    assert Style.parse(ui_theme.DIM) != Style.null()
+    assert Style.parse(ui_theme.BOLD_BRAND) != Style.null()
 
 
 def test_shell_completer_path_completion_honors_mixed_case_prefix(tmp_path: Path) -> None:

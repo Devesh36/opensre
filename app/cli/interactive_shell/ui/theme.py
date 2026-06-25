@@ -26,6 +26,7 @@ Usage
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import SupportsIndex
 
 from rich.theme import Theme
 
@@ -196,6 +197,9 @@ class _LazyRichStyle(str):
     def __format__(self, format_spec: str) -> str:
         return format(self._resolve(), format_spec)
 
+    def __bool__(self) -> bool:
+        return bool(self._resolve())
+
     def lstrip(self, chars: str | None = None) -> str:
         resolved = self._resolve()
         return resolved.lstrip() if chars is None else resolved.lstrip(chars)
@@ -208,11 +212,11 @@ class _LazyRichStyle(str):
         resolved = self._resolve()
         return resolved.strip() if chars is None else resolved.strip(chars)
 
-    def split(self, sep: str | None = None, maxsplit: int = -1) -> list[str]:
+    def split(self, sep: str | None = None, maxsplit: SupportsIndex = -1) -> list[str]:
         resolved = self._resolve()
         return resolved.split(sep, maxsplit)
 
-    def rsplit(self, sep: str | None = None, maxsplit: int = -1) -> list[str]:
+    def rsplit(self, sep: str | None = None, maxsplit: SupportsIndex = -1) -> list[str]:
         resolved = self._resolve()
         return resolved.rsplit(sep, maxsplit)
 
