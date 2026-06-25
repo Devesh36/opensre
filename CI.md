@@ -149,6 +149,10 @@ Regenerate the offline baseline after intentional rubric or gold-label changes:
 uv run python -m tests.eval.scorecard run --tier offline --write-baseline
 ```
 
+### Release gate (maintainers)
+
+After [#1367](https://github.com/Tracer-Cloud/opensre/issues/1367) merges to `main`, mark the **`scorecard-offline`** GitHub Actions check as a **required** status check on the default branch (Settings → Branches → branch protection). The live weekly job is informational only and does not block merges.
+
 ## 8) CI-only tests
 
 Some paths require live infrastructure and are excluded from `make test-cov`:
