@@ -154,9 +154,9 @@ def repl_print(console: Console, *objects: Any, **kwargs: Any) -> None:
 
 def _repl_write_buffer(rendered: str) -> None:
     """Flush pre-rendered Rich output with CRLF line endings (patch_stdout safe)."""
-    from app.cli.interactive_shell.runtime.cpr import strip_cpr_sequences
+    from app.cli.interactive_shell.runtime.cpr import strip_cpr_escape_sequences
 
-    normalized = strip_cpr_sequences(rendered.replace("\r\n", "\n").replace("\n", "\r\n"))
+    normalized = strip_cpr_escape_sequences(rendered.replace("\r\n", "\n").replace("\n", "\r\n"))
     token = _REPL_OUTPUT_PREPARED.set(True)
     try:
         sys.stdout.write(normalized)

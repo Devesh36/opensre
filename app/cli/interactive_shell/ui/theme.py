@@ -208,6 +208,14 @@ class _LazyRichStyle(str):
         resolved = self._resolve()
         return resolved.strip() if chars is None else resolved.strip(chars)
 
+    def split(self, sep: str | None = None, maxsplit: int = -1) -> list[str]:
+        resolved = self._resolve()
+        return resolved.split(sep, maxsplit)
+
+    def rsplit(self, sep: str | None = None, maxsplit: int = -1) -> list[str]:
+        resolved = self._resolve()
+        return resolved.rsplit(sep, maxsplit)
+
 
 def _resolve_theme_name(name: str | None) -> str:
     normalized = (name or DEFAULT_THEME_NAME).strip().lower()

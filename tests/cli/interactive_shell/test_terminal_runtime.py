@@ -78,6 +78,21 @@ def test_strip_cpr_sequences_removes_terminal_cursor_replies(
     assert cpr_module.strip_cpr_sequences(text) == expected
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("before \x1b[12;80R after", "before  after"),
+        ("what is 12;80R?", "what is 12;80R?"),
+        ("[12;80R", "[12;80R"),
+    ],
+)
+def test_strip_cpr_escape_sequences_only_removes_escaped_variants(
+    text: str,
+    expected: str,
+) -> None:
+    assert cpr_module.strip_cpr_escape_sequences(text) == expected
+
+
 def test_repl_input_lexer_highlights_first_slash_token() -> None:
     lexer = ReplInputLexer()
     get_line = lexer.lex_document(Document("/model show", len("/model")))
@@ -345,6 +360,18 @@ def test_completion_menu_current_item_uses_highlight_style() -> None:
     assert attrs_menu.bgcolor == BG.lstrip("#")
     assert attrs_menu.reverse is False
     assert attrs_menu.bold is True
+
+
+def test_lazy_rich_style_split_tracks_active_theme() -> None:
+    from app.cli.interactive_shell.ui import theme as ui_theme
+
+    set_active_theme("green")
+    assert ui_theme.DIM.split() == [ui_theme.get_active_theme().DIM]
+    assert ui_theme.BOLD_BRAND.split() == ["bold", ui_theme.get_active_theme().BRAND]
+
+    set_active_theme("blue")
+    assert ui_theme.DIM.split() == [ui_theme.get_active_theme().DIM]
+    assert ui_theme.BOLD_BRAND.split() == ["bold", ui_theme.get_active_theme().BRAND]
 
 
 def test_shell_completer_path_completion_honors_mixed_case_prefix(tmp_path: Path) -> None:

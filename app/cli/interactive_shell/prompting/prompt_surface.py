@@ -455,7 +455,6 @@ def refresh_prompt_theme(session: ReplSession) -> None:
     if app is None:
         return
     app.style = _build_prompt_style()
-    app.placeholder = resolve_prompt_placeholder(session)
     # Between prompt_async turns the Application is not running; invalidate() then
     # triggers ESC[6n CPR queries whose responses leak as literal text on the
     # next idle-hint line (e.g. ``^[[1;1R/ for commands``).

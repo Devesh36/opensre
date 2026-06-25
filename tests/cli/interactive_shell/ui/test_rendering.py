@@ -149,7 +149,9 @@ def test_repl_render_launch_poster_uses_crlf_on_tty(monkeypatch: pytest.MonkeyPa
     assert "\r" not in written.replace("\r\n", "")
 
 
-def test_repl_write_buffer_strips_leaked_cpr_sequences(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_repl_write_buffer_strips_only_escaped_cpr_sequences(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     class _FakeStdout:
         def __init__(self) -> None:
             self.writes: list[str] = []
@@ -164,12 +166,12 @@ def test_repl_write_buffer_strips_leaked_cpr_sequences(monkeypatch: pytest.Monke
     fake_stdout = _FakeStdout()
     monkeypatch.setattr("sys.stdout", fake_stdout)
 
-    _repl_write_buffer("\x1b[1;1Rtheme set: pink\r\n")
+    _repl_write_buffer("\x1b[1;1Rtheme set: pink 12;5R\r\n")
 
     written = "".join(fake_stdout.writes)
     assert "theme set: pink" in written
+    assert "12;5R" in written
     assert "\x1b[1;1R" not in written
-    assert "[1;1R" not in written
 
 
 def test_refresh_welcome_poster_drains_cpr_after_clear(monkeypatch: pytest.MonkeyPatch) -> None:
