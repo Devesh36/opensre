@@ -63,27 +63,6 @@ def register_external_tool_package(package: ModuleType) -> None:
         clear_tool_registry_cache()
 
 
-# Preserve the current chat surface while the repo migrates toward explicit
-# per-tool surface metadata.
-_LEGACY_CHAT_TOOL_NAMES = {
-    "fetch_failed_run",
-    "get_tracer_run",
-    "get_tracer_tasks",
-    "get_failed_jobs",
-    "get_failed_tools",
-    "get_error_logs",
-    "get_batch_statistics",
-    "get_host_metrics",
-    "search_github_code",
-    "get_github_file_contents",
-    "get_github_repository_tree",
-    "list_github_commits",
-    "search_sentry_issues",
-    "get_sentry_issue_details",
-    "list_sentry_issue_events",
-}
-
-
 def _iter_tool_module_names(package: ModuleType) -> list[str]:
     module_names: list[str] = []
     for module_info in pkgutil.iter_modules(package.__path__):
@@ -105,9 +84,7 @@ def _candidate_belongs_to_module(candidate: object, module_name: str) -> bool:
     return getattr(candidate, "__module__", None) == module_name
 
 
-def _default_surfaces_for_tool(tool_name: str) -> tuple[ToolSurface, ...]:
-    if tool_name in _LEGACY_CHAT_TOOL_NAMES:
-        return ("investigation", "chat")
+def _default_surfaces_for_tool(_tool_name: str) -> tuple[ToolSurface, ...]:
     return ("investigation",)
 
 

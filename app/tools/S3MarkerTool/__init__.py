@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from app.services.s3_client import (
+    check_s3_marker_presence,
     compare_versions,
-    get_s3_client,
     head_object,
     list_object_versions,
 )
@@ -52,8 +52,7 @@ def _extract_check_s3_marker_params(sources: dict[str, dict]) -> dict:
 )
 def check_s3_marker(bucket: str, prefix: str) -> dict:
     """Check if a _SUCCESS marker exists in S3 storage."""
-    client = get_s3_client()
-    result = client.check_marker(bucket, prefix)
+    result = check_s3_marker_presence(bucket, prefix)
     return {
         "marker_exists": result.marker_exists,
         "file_count": result.file_count,

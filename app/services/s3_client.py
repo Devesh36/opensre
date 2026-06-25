@@ -433,28 +433,19 @@ def list_objects(
         return {"success": False, "error": str(e)}
 
 
-# Legacy class interface for backwards compatibility
-class S3Client:
-    """S3 client wrapper class."""
+def check_s3_marker_presence(bucket: str, prefix: str) -> S3CheckResult:
+    """Check for S3 marker file under a bucket prefix."""
+    result = list_objects(bucket, prefix, max_keys=100)
+    if not result.get("success"):
+        return S3CheckResult(marker_exists=False, file_count=0, files=[])
 
-    def check_marker(self, bucket: str, prefix: str) -> S3CheckResult:
-        """Check for S3 marker file."""
-        result = list_objects(bucket, prefix, max_keys=100)
-        if not result.get("success"):
-            return S3CheckResult(marker_exists=False, file_count=0, files=[])
+    data = result.get("data", {})
+    objects = data.get("objects", [])
+    files = [obj["key"] for obj in objects]
+    marker_exists = any("_SUCCESS" in f or "marker" in f.lower() for f in files)
 
-        data = result.get("data", {})
-        objects = data.get("objects", [])
-        files = [obj["key"] for obj in objects]
-        marker_exists = any("_SUCCESS" in f or "marker" in f.lower() for f in files)
-
-        return S3CheckResult(
-            marker_exists=marker_exists,
-            file_count=len(files),
-            files=files,
-        )
-
-
-def get_s3_client() -> S3Client:
-    """Get S3 client instance."""
-    return S3Client()
+    return S3CheckResult(
+        marker_exists=marker_exists,
+        file_count=len(files),
+        files=files,
+    )

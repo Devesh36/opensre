@@ -33,9 +33,10 @@ def test_run_marker_exists() -> None:
     mock_result.marker_exists = True
     mock_result.file_count = 5
     mock_result.files = ["_SUCCESS"]
-    mock_s3_client = MagicMock()
-    mock_s3_client.check_marker.return_value = mock_result
-    with patch("app.tools.S3MarkerTool.get_s3_client", return_value=mock_s3_client):
+    with patch(
+        "app.tools.S3MarkerTool.check_s3_marker_presence",
+        return_value=mock_result,
+    ):
         result = check_s3_marker(bucket="b", prefix="data/")
     assert result["marker_exists"] is True
     assert result["file_count"] == 5
@@ -46,8 +47,9 @@ def test_run_marker_missing() -> None:
     mock_result.marker_exists = False
     mock_result.file_count = 0
     mock_result.files = []
-    mock_s3_client = MagicMock()
-    mock_s3_client.check_marker.return_value = mock_result
-    with patch("app.tools.S3MarkerTool.get_s3_client", return_value=mock_s3_client):
+    with patch(
+        "app.tools.S3MarkerTool.check_s3_marker_presence",
+        return_value=mock_result,
+    ):
         result = check_s3_marker(bucket="b", prefix="data/")
     assert result["marker_exists"] is False

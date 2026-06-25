@@ -18,7 +18,7 @@ from app.services.llm_client import (
     parse_root_cause,
     reset_llm_singletons,
 )
-from app.services.s3_client import S3CheckResult, get_s3_client
+from app.services.s3_client import S3CheckResult, check_s3_marker_presence
 from app.services.tracer_client import (
     AWSBatchJobResult,
     LogResult,
@@ -51,7 +51,7 @@ __all__ = [
     "reset_llm_singletons",
     # S3 client
     "S3CheckResult",
-    "get_s3_client",
+    "check_s3_marker_presence",
     # Tracer client
     "AWSBatchJobResult",
     "LogResult",

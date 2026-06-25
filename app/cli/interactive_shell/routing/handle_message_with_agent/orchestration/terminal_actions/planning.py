@@ -22,22 +22,15 @@ from .models import ActionPlanningDecision
 
 
 def coerce_action_plan_decision(
-    raw: ActionPlanningDecision
-    | tuple[list[PlannedAction], bool]
-    | tuple[list[PlannedAction], bool, bool],
+    raw: ActionPlanningDecision | tuple[list[PlannedAction], bool],
 ) -> ActionPlanningDecision:
-    """Back-compat adapter for tests that monkeypatch planning to tuple output.
-
-    The legacy 3-tuple form ``(actions, has_unhandled, denied)`` is still accepted,
-    but the trailing ``denied`` flag is ignored: v0.1 has no planning-stage denial.
-    """
+    """Back-compat adapter for tests that monkeypatch planning to tuple output."""
     if isinstance(raw, ActionPlanningDecision):
         return raw
-    actions = raw[0]
-    has_unhandled_clause = bool(raw[1]) if len(raw) > 1 else False
+    actions, has_unhandled_clause = raw
     return ActionPlanningDecision(
         actions=tuple(actions),
-        has_unhandled_clause=has_unhandled_clause,
+        has_unhandled_clause=bool(has_unhandled_clause),
         policy_trace=(),
     )
 

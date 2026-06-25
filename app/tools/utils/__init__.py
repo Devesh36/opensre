@@ -22,9 +22,6 @@ from app.tools.utils.log_compaction import (
     build_error_taxonomy,
     deduplicate_logs,
 )
-from app.tools.utils.log_compaction import (
-    compact_logs as compact_logs_dedup,
-)
 
 __all__ = [
     # Database warnings
@@ -45,7 +42,6 @@ __all__ = [
     # Log deduplication and taxonomy
     "deduplicate_logs",
     "build_error_taxonomy",
-    "compact_logs_dedup",
     # Constants
     "DEFAULT_LOG_LIMIT",
     "DEFAULT_ERROR_LOG_LIMIT",

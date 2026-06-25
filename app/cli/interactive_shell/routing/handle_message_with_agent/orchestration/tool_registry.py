@@ -96,8 +96,3 @@ def register_action_tools() -> tuple[str, ...]:
 
 
 register_action_tools()
-
-
-def ensure_action_tools_loaded() -> None:
-    """Backward-compatible no-op alias for callers/tests expecting this hook."""
-    register_action_tools()
