@@ -1,1 +1,1 @@
-"""Investigation quality scorecard — offline runner (phase 1, #1367)."""
+"""Investigation quality scorecard — offline runner + live trends (phase 1–2, #1367)."""

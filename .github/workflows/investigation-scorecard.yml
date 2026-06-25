@@ -1,4 +1,4 @@
-name: Investigation Scorecard (offline)
+name: Investigation Scorecard
 
 on:
   pull_request:
@@ -27,6 +27,8 @@ on:
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/investigation-scorecard.yml"
+  schedule:
+    - cron: "0 6 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -40,6 +42,7 @@ concurrency:
 jobs:
   scorecard-offline:
     name: scorecard-offline
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -96,3 +99,52 @@ jobs:
               issue_number: context.issue.number,
               body,
             });
+
+  scorecard-live:
+    name: scorecard-live
+    if: >
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      && github.repository == 'Tracer-Cloud/opensre'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: make install
+
+      - name: Run live scorecard smoke
+        run: |
+          uv run python -m tests.eval.scorecard run \
+            --tier live \
+            --check-thresholds \
+            --write-trends
+
+      - name: Upload scorecard report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scorecard-report-live
+          path: scorecard-report.json
+          if-no-files-found: ignore
+
+      - name: Commit trend updates
+        if: success()
+        run: |
+          git config user.name "investigation-scorecard-action"
+          git config user.email "investigation-scorecard-action@noreply.github.com"
+          git add docs/eval/scorecard-trends.jsonl docs/eval/scorecard-latest.md
+          git diff --staged --quiet || git commit -m "docs(eval): update investigation quality scorecard trends"
+          git push

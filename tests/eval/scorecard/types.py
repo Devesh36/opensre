@@ -36,6 +36,8 @@ class ThresholdSpec:
     actionability_rate_min: float = 0.70
     precision_at_1_regression_pp: float = 0.02
     top3_recall_regression_pp: float = 0.05
+    live_evidence_grounding_rate_min: float = 0.90
+    false_confidence_rate_max: float = 0.15
 
 
 @dataclass(frozen=True)

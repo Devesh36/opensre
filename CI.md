@@ -133,9 +133,15 @@ make test-scorecard-offline
 
 This executes the unified RCA rubric ([#1367](https://github.com/Tracer-Cloud/opensre/issues/1367)) against the offline smoke manifest and checks thresholds against [`tests/eval/scorecard/baselines/smoke_offline.json`](tests/eval/scorecard/baselines/smoke_offline.json).
 
-CI: [`.github/workflows/investigation-scorecard.yml`](.github/workflows/investigation-scorecard.yml) runs the offline gate on investigation-path PRs targeting `main` or `issue/1367`.
+CI: [`.github/workflows/investigation-scorecard.yml`](.github/workflows/investigation-scorecard.yml) runs the offline gate on investigation-path PRs and a weekly live LLM smoke cron on `Tracer-Cloud/opensre` (same-repo only).
 
 Docs: [`docs/eval/investigation-quality-scorecard.mdx`](docs/eval/investigation-quality-scorecard.mdx)
+
+Live smoke (requires API key):
+
+```bash
+uv run python -m tests.eval.scorecard run --tier live --write-trends
+```
 
 Regenerate the offline baseline after intentional rubric or gold-label changes:
 

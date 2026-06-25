@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from tests.eval.scorecard.runner import run_tier, write_baseline
+from tests.eval.scorecard.trends import append_trend_row, write_latest_markdown
 from tests.eval.scorecard.types import ScorecardTier
 
 
@@ -26,7 +27,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--tier",
         choices=("offline", "live"),
         default="offline",
-        help="Eval tier: offline (PR gate) or live (phase 2).",
+        help="Eval tier: offline (PR gate) or live (LLM smoke).",
     )
     parser.add_argument(
         "--manifest",
@@ -43,6 +44,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--write-baseline",
         action="store_true",
         help="Write aggregate metrics to baselines/smoke_offline.json.",
+    )
+    parser.add_argument(
+        "--write-trends",
+        action="store_true",
+        help="Append a trend row and regenerate docs/eval/scorecard-latest.md.",
     )
     parser.add_argument(
         "--report",
@@ -69,11 +75,20 @@ def main(argv: list[str] | None = None) -> int:
         path = write_baseline(scorecard)
         print(f"Wrote baseline: {path}")
 
+    if args.write_trends:
+        if tier != "live":
+            print("--write-trends is only supported for live tier", file=sys.stderr)
+            return 2
+        append_trend_row(scorecard, git_sha=git_sha)
+        latest = write_latest_markdown(scorecard)
+        print(f"Updated trends and {latest}")
+
     agg = scorecard.aggregate
     print(
         f"scorecard tier={tier} cases={agg.case_count} "
         f"precision_at_1={agg.precision_at_1:.3f} "
         f"grounding={agg.evidence_grounding_rate:.3f} "
+        f"false_confidence={agg.false_confidence_rate:.3f} "
         f"actionability={agg.actionability_rate:.3f} "
         f"thresholds={'PASS' if scorecard.thresholds.passed else 'FAIL'}"
     )

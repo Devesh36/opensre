@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 
-from tests.eval.scorecard.adapters import score_offline_case
+from tests.eval.scorecard.adapters import score_case
 from tests.eval.scorecard.types import (
     AggregateMetrics,
     CaseMetrics,
@@ -94,34 +94,44 @@ def check_thresholds(
     thresholds = spec or ThresholdSpec()
     failures: list[str] = []
 
-    if tier != "offline":
-        raise NotImplementedError("live tier scoring is planned for phase 2")
-
-    if aggregate.evidence_grounding_rate < thresholds.evidence_grounding_rate_min:
-        failures.append(
-            "evidence_grounding_rate "
-            f"{aggregate.evidence_grounding_rate:.3f} < {thresholds.evidence_grounding_rate_min:.3f}"
-        )
-    if aggregate.actionability_rate < thresholds.actionability_rate_min:
-        failures.append(
-            "actionability_rate "
-            f"{aggregate.actionability_rate:.3f} < {thresholds.actionability_rate_min:.3f}"
-        )
-
-    if baseline:
-        precision_floor = baseline["precision_at_1"] - thresholds.precision_at_1_regression_pp
-        if aggregate.precision_at_1 + 1e-9 < precision_floor:
+    if tier == "offline":
+        if aggregate.evidence_grounding_rate < thresholds.evidence_grounding_rate_min:
             failures.append(
-                "precision_at_1 regression: "
-                f"{aggregate.precision_at_1:.3f} < baseline {baseline['precision_at_1']:.3f} "
-                f"- {thresholds.precision_at_1_regression_pp:.2f}"
+                "evidence_grounding_rate "
+                f"{aggregate.evidence_grounding_rate:.3f} < {thresholds.evidence_grounding_rate_min:.3f}"
             )
-        top3_floor = baseline["top3_recall"] - thresholds.top3_recall_regression_pp
-        if aggregate.top3_recall + 1e-9 < top3_floor:
+        if aggregate.actionability_rate < thresholds.actionability_rate_min:
             failures.append(
-                "top3_recall regression: "
-                f"{aggregate.top3_recall:.3f} < baseline {baseline['top3_recall']:.3f} "
-                f"- {thresholds.top3_recall_regression_pp:.2f}"
+                "actionability_rate "
+                f"{aggregate.actionability_rate:.3f} < {thresholds.actionability_rate_min:.3f}"
+            )
+
+        if baseline:
+            precision_floor = baseline["precision_at_1"] - thresholds.precision_at_1_regression_pp
+            if aggregate.precision_at_1 + 1e-9 < precision_floor:
+                failures.append(
+                    "precision_at_1 regression: "
+                    f"{aggregate.precision_at_1:.3f} < baseline {baseline['precision_at_1']:.3f} "
+                    f"- {thresholds.precision_at_1_regression_pp:.2f}"
+                )
+            top3_floor = baseline["top3_recall"] - thresholds.top3_recall_regression_pp
+            if aggregate.top3_recall + 1e-9 < top3_floor:
+                failures.append(
+                    "top3_recall regression: "
+                    f"{aggregate.top3_recall:.3f} < baseline {baseline['top3_recall']:.3f} "
+                    f"- {thresholds.top3_recall_regression_pp:.2f}"
+                )
+    else:
+        if aggregate.evidence_grounding_rate < thresholds.live_evidence_grounding_rate_min:
+            failures.append(
+                "evidence_grounding_rate "
+                f"{aggregate.evidence_grounding_rate:.3f} < "
+                f"{thresholds.live_evidence_grounding_rate_min:.3f} (live target)"
+            )
+        if aggregate.false_confidence_rate > thresholds.false_confidence_rate_max:
+            failures.append(
+                "false_confidence_rate "
+                f"{aggregate.false_confidence_rate:.3f} > {thresholds.false_confidence_rate_max:.3f}"
             )
 
     return ThresholdResult(passed=not failures, failures=tuple(failures))
@@ -133,13 +143,10 @@ def run_tier(
     manifest_path: Path | None = None,
     git_sha: str = "local",
 ) -> RunScorecard:
-    if tier != "offline":
-        raise NotImplementedError("live tier scoring is planned for phase 2")
-
     manifest = load_manifest(manifest_path)
-    cases = tuple(score_offline_case(case_id) for case_id in case_ids_for_tier(manifest, tier))
+    cases = tuple(score_case(case_id, tier=tier) for case_id in case_ids_for_tier(manifest, tier))
     aggregate = aggregate_cases(cases)
-    baseline = load_baseline()
+    baseline = load_baseline() if tier == "offline" else None
     thresholds = check_thresholds(aggregate, tier=tier, baseline=baseline)
     return RunScorecard(
         tier=tier,
