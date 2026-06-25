@@ -74,14 +74,16 @@ def render_submitted_prompt(console: Console, session: ReplSession, text: str) -
     continuation_prefix = " " * len(_prompt_prefix_text(session))
     rendered = Text()
     counter = _prompt_counter_text(session)
+    # Rich's Style.parse() reads the bare str value of a _LazyRichStyle (""),
+    # so resolve to a concrete string at the call site to keep palette colors.
     if counter:
-        rendered.append(counter, style=ui_theme.DIM)
+        rendered.append(counter, style=str(ui_theme.DIM))
     rendered.append("❯ ", style=f"bold {ui_theme.HIGHLIGHT}")
-    rendered.append(lines[0], style=ui_theme.TEXT)
+    rendered.append(lines[0], style=str(ui_theme.TEXT))
     for line in lines[1:]:
         rendered.append("\n")
-        rendered.append(continuation_prefix, style=ui_theme.DIM)
-        rendered.append(line, style=ui_theme.TEXT)
+        rendered.append(continuation_prefix, style=str(ui_theme.DIM))
+        rendered.append(line, style=str(ui_theme.TEXT))
     console.print(rendered)
 
 

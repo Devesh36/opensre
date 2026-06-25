@@ -54,9 +54,13 @@ class HelpDisplayRow:
 
 def render_help_index(console: Console, sections: Sequence[HelpSection]) -> None:
     """Render the compact non-interactive help index."""
-    table = repl_table(title="Slash commands", title_style=ui_theme.BOLD_BRAND, show_header=False)
+    table = repl_table(
+        title="Slash commands",
+        title_style=str(ui_theme.BOLD_BRAND),
+        show_header=False,
+    )
     table.add_column("command", no_wrap=True, min_width=18)
-    table.add_column("description", style=ui_theme.DIM)
+    table.add_column("description", style=str(ui_theme.DIM))
 
     for section_name, commands in sections:
         if not commands:
@@ -83,10 +87,12 @@ def render_section_detail(
 ) -> None:
     """Render one category using the same compact description-only style."""
     table = repl_table(
-        title=f"{section_name} commands", title_style=ui_theme.BOLD_BRAND, show_header=False
+        title=f"{section_name} commands",
+        title_style=str(ui_theme.BOLD_BRAND),
+        show_header=False,
     )
     table.add_column("command", no_wrap=True, min_width=18)
-    table.add_column("description", style=ui_theme.DIM)
+    table.add_column("description", style=str(ui_theme.DIM))
     for command in commands:
         table.add_row(
             f"[{ui_theme.HIGHLIGHT}]{escape(command.name)}[/]",
@@ -101,7 +107,12 @@ def render_section_detail(
 
 def render_command_detail(console: Console, command: SlashCommand) -> None:
     """Render detailed help for one slash command."""
-    table = Table(title=command.name, title_style=ui_theme.BOLD_BRAND, show_header=False, box=None)
+    table = Table(
+        title=command.name,
+        title_style=str(ui_theme.BOLD_BRAND),
+        show_header=False,
+        box=None,
+    )
     table.add_column("label", style="bold", no_wrap=True)
     table.add_column("value")
     table.add_row("description", escape(command.description))

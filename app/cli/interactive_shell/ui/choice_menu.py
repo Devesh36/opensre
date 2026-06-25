@@ -51,7 +51,7 @@ def repl_section_break(console: Console) -> None:
     """Blank line + dim rule between an inline menu step and Rich output."""
     prepare_repl_output_line()
     console.print()
-    console.rule(characters="─", style=ui_theme.DIM)
+    console.rule(characters="─", style=str(ui_theme.DIM))
     console.print()
 
 

@@ -381,9 +381,16 @@ def test_lazy_rich_style_parses_as_real_rich_style() -> None:
 
     from app.cli.interactive_shell.ui import theme as ui_theme
 
+    # Rich resolves a _LazyRichStyle via its underlying ``str`` value, so the
+    # contract at call sites is to pass ``str(...)``. Verify that contract
+    # produces a non-null Style across themes.
     set_active_theme("amber")
-    assert Style.parse(ui_theme.DIM) != Style.null()
-    assert Style.parse(ui_theme.BOLD_BRAND) != Style.null()
+    assert Style.parse(str(ui_theme.DIM)) != Style.null()
+    assert Style.parse(str(ui_theme.BOLD_BRAND)) != Style.null()
+
+    set_active_theme("blue")
+    assert Style.parse(str(ui_theme.DIM)) != Style.null()
+    assert Style.parse(str(ui_theme.BOLD_BRAND)) != Style.null()
 
 
 def test_shell_completer_path_completion_honors_mixed_case_prefix(tmp_path: Path) -> None:
