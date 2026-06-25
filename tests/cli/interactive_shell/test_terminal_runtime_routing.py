@@ -258,7 +258,6 @@ def test_dispatch_one_turn_nitro_prompt_executes_remote_then_investigation(
                 PlannedAction(kind="investigation", content="hello world", position=1),
             ],
             False,
-            False,
         ),
     )
     monkeypatch.setattr(_slash_tool, "dispatch_slash", _fake_dispatch)
