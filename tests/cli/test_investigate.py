@@ -136,6 +136,7 @@ def test_run_investigation_cli_evaluate_reports_skip_when_no_rubric(monkeypatch)
     )
     assert result["opensre_llm_eval"]["skipped"] is True
     assert "No scoring_points" in result["opensre_llm_eval"]["reason"]
+    assert "skipped" in result["evaluate_summary"].lower()
 
 
 def test_parse_args_evaluate_flag() -> None:

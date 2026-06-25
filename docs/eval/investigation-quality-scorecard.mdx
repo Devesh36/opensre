@@ -7,7 +7,7 @@ description: Unified RCA accuracy rubric and gold evaluation manifest for OpenSR
 
 OpenSRE tracks investigation quality with five headline metrics. Together they answer: **Was the root cause right, grounded in evidence, and actionable — without false confidence?**
 
-This page tracks [#1367](https://github.com/Tracer-Cloud/opensre/issues/1367): the rubric, gold manifest, offline PR gate (phase 1), and live weekly trends (phase 2).
+This page tracks [#1367](https://github.com/Tracer-Cloud/opensre/issues/1367): the rubric, gold manifest, offline PR gate, live weekly trends, and per-alert `--evaluate` summary.
 
 ## Quick reference
 
@@ -18,6 +18,7 @@ This page tracks [#1367](https://github.com/Tracer-Cloud/opensre/issues/1367): t
 | `uv run python -m tests.eval.scorecard run --tier live` | Live LLM smoke eval (requires API key) |
 | `uv run python -m tests.eval.scorecard run --tier offline --write-baseline` | Regenerate committed offline baseline |
 | `uv run python -m tests.eval.scorecard run --tier live --write-trends` | Append trend row + refresh latest snapshot |
+| `opensre investigate --input alert.json --evaluate` | Run investigation + OpenRCA judge; JSON includes `evaluate_summary` |
 
 ## Headline metrics
 
@@ -110,14 +111,30 @@ Smoke scenarios may include scorecard-specific gold labels:
 
 These fields are optional on non-smoke scenarios.
 
+## Per-alert evaluate UX (phase 3)
+
+When you pass **`--evaluate`**, the investigation JSON includes:
+
+- **`opensre_llm_eval`** — raw OpenRCA judge payload (`overall_pass`, `score_0_100`, `rubric_items`, `summary`)
+- **`evaluate_summary`** — human-readable multi-line summary for terminals and scripts
+
+Example:
+
+```bash
+opensre investigate --input tests/benchmarks/openrca_scenarios/sample.json --evaluate \
+  | jq -r .evaluate_summary
+```
+
+Alerts without `scoring_points` return a skipped eval with a short reason in both fields.
+
 ## Planned rollout
 
 | Phase | Deliverable |
 | --- | --- |
 | **0** | Rubric doc, manifest, optional `answer.yml` fields |
 | **1** | Offline scorecard runner + PR gate |
-| **2 (now)** | Live weekly cron + trend log |
-| **3** | Required branch protection + `--evaluate` UX polish |
+| **2** | Live weekly cron + trend log |
+| **3 (now)** | `--evaluate` summary UX + release gate docs |
 
 ## 90-day success targets
 

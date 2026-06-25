@@ -144,9 +144,12 @@ def run_investigation_cli(
     if state.get("evidence_entries"):
         out["tool_calls"] = state["evidence_entries"]
     if opensre_evaluate:
+        from app.cli.support.eval_formatter import format_opensre_llm_eval
+
         ev = state.get("opensre_llm_eval")
         if isinstance(ev, dict) and ev:
             out["opensre_llm_eval"] = ev
+            out["evaluate_summary"] = format_opensre_llm_eval(ev)
         elif not (state.get("opensre_eval_rubric") or "").strip():
             out["opensre_llm_eval"] = {
                 "skipped": True,
@@ -155,11 +158,13 @@ def run_investigation_cli(
                     "(not an OpenRCA rubric payload, or field missing)."
                 ),
             }
+            out["evaluate_summary"] = format_opensre_llm_eval(out["opensre_llm_eval"])
         else:
             out["opensre_llm_eval"] = {
                 "skipped": True,
                 "reason": "Evaluate was enabled but no judge output was recorded.",
             }
+            out["evaluate_summary"] = format_opensre_llm_eval(out["opensre_llm_eval"])
     return out
 
 
