@@ -19,7 +19,7 @@ def _is_frozen() -> bool:
     return getattr(sys, "frozen", False)
 
 
-_LOADING = object()
+_REENTRANCY_GUARD = "_opensre_platform_loading"
 
 
 def _load_stdlib_platform():
@@ -32,25 +32,27 @@ def _load_stdlib_platform():
     # In frozen builds, try importing the stdlib platform directly by
     # temporarily removing our package from sys.modules.
     if _is_frozen():
-        # Guard against re-entrant calls (e.g. if importlib resolves
-        # back to our own __init__.py during the pop).
-        if sys.modules.get("platform") is _LOADING:
+        # Guard against re-entrant calls using a separate key so we
+        # don't shadow the real "platform" entry that importlib needs.
+        if sys.modules.get(_REENTRANCY_GUARD):
             raise ImportError(
                 "Recursive platform load detected — stdlib platform "
                 "module is not available in this frozen bundle"
             )
 
         prev = sys.modules.pop("platform", None)
-        sys.modules["platform"] = _LOADING
+        sys.modules[_REENTRANCY_GUARD] = True
         try:
             import platform as stdlib_platform
 
-            # If importlib resolved back to our sentinel (or our own
-            # package), the stdlib module is genuinely missing.
-            if stdlib_platform is _LOADING or hasattr(stdlib_platform, "analytics"):
+            # If importlib resolved back to our own package (detected
+            # by the analytics subpackage attribute), the stdlib
+            # module is genuinely missing.
+            if hasattr(stdlib_platform, "analytics"):
                 raise ImportError("stdlib platform module not available in frozen bundle")
             return stdlib_platform
         finally:
+            sys.modules.pop(_REENTRANCY_GUARD, None)
             # Always restore the original state.
             sys.modules.pop("platform", None)
             if prev is not None:
