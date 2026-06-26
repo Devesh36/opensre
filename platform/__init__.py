@@ -15,14 +15,11 @@ from pathlib import Path
 
 
 def _load_stdlib_platform():
-    """Load the stdlib ``platform`` module, handling PyInstaller frozen builds.
+    """Load the stdlib ``platform`` module.
 
-    PyInstaller bundles the stdlib inside the frozen archive and patches
-    ``sysconfig``, so ``sysconfig.get_path("stdlib")`` normally resolves
-    correctly.  As a safety net for environments where that path may not
-    exist (e.g. a user machine without a standalone Python), fall back to
-    temporarily removing our package from ``sys.modules`` so the frozen
-    import machinery can resolve the real stdlib ``platform`` module.
+    PyInstaller patches ``sysconfig`` in frozen builds so
+    ``sysconfig.get_path("stdlib")`` resolves correctly inside the bundled
+    Python stdlib without any special handling here.
     """
     stdlib_dir = sysconfig.get_path("stdlib")
     if stdlib_dir is not None and (Path(stdlib_dir) / "platform.py").is_file():
@@ -32,15 +29,6 @@ def _load_stdlib_platform():
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             return module
-
-    if getattr(sys, "frozen", False):
-        _ours = sys.modules.pop("platform", None)
-        try:
-            _stdlib = __import__("platform")
-        finally:
-            if _ours is not None:
-                sys.modules["platform"] = _ours
-        return _stdlib
 
     raise ImportError(
         "Unable to load stdlib platform module — sysconfig path "
