@@ -33,13 +33,19 @@ def _load_stdlib_platform():
             spec.loader.exec_module(module)
             return module
 
-    _ours = sys.modules.pop("platform", None)
-    try:
-        import platform as _stdlib  # type: ignore[assignment]
-    finally:
-        if _ours is not None:
-            sys.modules["platform"] = _ours
-    return _stdlib
+    if getattr(sys, "frozen", False):
+        _ours = sys.modules.pop("platform", None)
+        try:
+            import platform as _stdlib  # type: ignore[assignment]
+        finally:
+            if _ours is not None:
+                sys.modules["platform"] = _ours
+        return _stdlib
+
+    raise ImportError(
+        "Unable to load stdlib platform module — sysconfig path "
+        f"{stdlib_dir!r} does not contain platform.py"
+    )
 
 
 _stdlib_platform = _load_stdlib_platform()
