@@ -248,6 +248,7 @@ jobs:
           --noconfirm
           --collect-data cli
           --collect-data config
+          --hidden-import platform
           --add-data "platform:platform"
 
       - name: Smoke test binary (Unix)
