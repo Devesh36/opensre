@@ -182,6 +182,20 @@ class ConnectedInvestigationAgent:
                 _record_tool_end(tc, output)
                 debug_print(f"[seed:{tc.name}] → {summarise(output)}")
 
+        # Expose planned tools and live evidence to _should_accept_conclusion overrides.
+        # Both are set before the loop so they're always initialised; evidence is a
+        # reference to the same mutable dict the loop populates, so overrides always
+        # see the current state without an extra assignment inside the loop body.
+        # Only track names that exist in the tool schema the LLM actually receives —
+        # hallucinated or expired names would otherwise cause futile nudge cycles.
+        _available_tool_names = {t.name for t in tools}
+        self._planned_actions: list[str] = [
+            str(name)
+            for name in (state_dict.get("planned_actions") or [])
+            if str(name).strip() and str(name) in _available_tool_names
+        ]
+        self._current_evidence: dict[str, Any] = evidence
+
         context_ceiling = context_budget_ceiling_for_model(getattr(llm, "_model", None))
         stagnant_iterations = 0
         force_conclusion = False
@@ -358,7 +372,7 @@ class CLIBackedInvestigationAgent(ConnectedInvestigationAgent):
     def _should_accept_conclusion(
         self,
         *,
-        evidence_count: int,
+        evidence_count: int,  # noqa: ARG002 — base class signature
         iteration: int,
     ) -> tuple[bool, str | None]:
         planned = getattr(self, "_planned_actions", [])
@@ -367,6 +381,7 @@ class CLIBackedInvestigationAgent(ConnectedInvestigationAgent):
         if not planned or evidence is None:
             return True, None
 
+        # Leave room for a final text-only iteration after the nudge fires.
         if iteration >= MAX_INVESTIGATION_LOOPS - 2:
             return True, None
 

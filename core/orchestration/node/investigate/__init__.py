@@ -19,11 +19,7 @@ if TYPE_CHECKING:
         get_investigation_agent_class,
     )
 
-__all__ = [
-    "ConnectedInvestigationAgent",
-    "InvestigationAgent",
-    "get_investigation_agent_class",
-]
+__all__ = ["ConnectedInvestigationAgent", "InvestigationAgent", "get_investigation_agent_class"]
 
 
 def __getattr__(name: str) -> object:
