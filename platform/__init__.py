@@ -9,18 +9,39 @@ such as ``platform.analytics``.
 from __future__ import annotations
 
 import importlib.util
+import sys
 import sysconfig
 from pathlib import Path
 
-_STDLIB_PLATFORM_PATH = Path(sysconfig.get_path("stdlib")) / "platform.py"
-_STDLIB_PLATFORM_SPEC = importlib.util.spec_from_file_location(
-    "_opensre_stdlib_platform", _STDLIB_PLATFORM_PATH
-)
-if _STDLIB_PLATFORM_SPEC is None or _STDLIB_PLATFORM_SPEC.loader is None:
-    raise ImportError(f"Unable to load stdlib platform module from {_STDLIB_PLATFORM_PATH}")
 
-_stdlib_platform = importlib.util.module_from_spec(_STDLIB_PLATFORM_SPEC)
-_STDLIB_PLATFORM_SPEC.loader.exec_module(_stdlib_platform)
+def _load_stdlib_platform():
+    """Load the stdlib ``platform`` module, handling PyInstaller frozen builds.
+
+    PyInstaller bundles the stdlib inside the frozen archive and patches
+    ``sysconfig``, so ``sysconfig.get_path("stdlib")`` normally resolves
+    correctly.  As a safety net for environments where that path may not
+    exist (e.g. a user machine without a standalone Python), fall back to
+    temporarily removing our package from ``sys.modules`` so the frozen
+    import machinery can resolve the real stdlib ``platform`` module.
+    """
+    stdlib_path = Path(sysconfig.get_path("stdlib")) / "platform.py"
+    if stdlib_path.is_file():
+        spec = importlib.util.spec_from_file_location("_opensre_stdlib_platform", stdlib_path)
+        if spec is not None and spec.loader is not None:
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+
+    _ours = sys.modules.pop("platform", None)
+    try:
+        import platform as _stdlib  # type: ignore[assignment]
+    finally:
+        if _ours is not None:
+            sys.modules["platform"] = _ours
+    return _stdlib
+
+
+_stdlib_platform = _load_stdlib_platform()
 
 for _name in dir(_stdlib_platform):
     if _name.startswith("__") and _name not in {"__all__", "__version__"}:
