@@ -24,8 +24,9 @@ def _load_stdlib_platform():
     temporarily removing our package from ``sys.modules`` so the frozen
     import machinery can resolve the real stdlib ``platform`` module.
     """
-    stdlib_path = Path(sysconfig.get_path("stdlib")) / "platform.py"
-    if stdlib_path.is_file():
+    stdlib_dir = sysconfig.get_path("stdlib")
+    if stdlib_dir is not None and (Path(stdlib_dir) / "platform.py").is_file():
+        stdlib_path = Path(stdlib_dir) / "platform.py"
         spec = importlib.util.spec_from_file_location("_opensre_stdlib_platform", stdlib_path)
         if spec is not None and spec.loader is not None:
             module = importlib.util.module_from_spec(spec)
