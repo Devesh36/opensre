@@ -9,7 +9,6 @@ such as ``platform.analytics``.
 from __future__ import annotations
 
 import importlib.util
-import sys
 import sysconfig
 from pathlib import Path
 
