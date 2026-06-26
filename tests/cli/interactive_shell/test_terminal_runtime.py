@@ -20,9 +20,9 @@ from prompt_toolkit.input.defaults import create_pipe_input
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.output import DummyOutput
 
-from app.cli.interactive_shell.commands import SLASH_COMMANDS, dispatch_slash
-from app.cli.interactive_shell.prompting import prompt_surface
-from app.cli.interactive_shell.prompting.prompt_surface import (
+from cli.interactive_shell.command_registry import SLASH_COMMANDS, dispatch_slash
+from cli.interactive_shell.prompting import prompt_surface
+from cli.interactive_shell.prompting.prompt_surface import (
     _SHIFT_ENTER_SEQUENCE,
     ReplInputLexer,
     ShellCompleter,
@@ -30,14 +30,17 @@ from app.cli.interactive_shell.prompting.prompt_surface import (
     _build_prompt_style,
     _tab_expand_or_menu,
 )
-from app.cli.interactive_shell.runtime import cpr as cpr_module
-from app.cli.interactive_shell.runtime import dispatch as loop_dispatch
-from app.cli.interactive_shell.runtime import execution as loop_execution
-from app.cli.interactive_shell.runtime import loop as loop_module
-from app.cli.interactive_shell.runtime import state as loop_state
-from app.cli.interactive_shell.runtime.session import ReplSession
-from app.cli.interactive_shell.ui.streaming import _CHARS_PER_TOKEN
-from app.cli.interactive_shell.ui.theme import (
+from cli.interactive_shell.runtime import dispatch as loop_dispatch
+from cli.interactive_shell.runtime import execution as loop_execution
+from cli.interactive_shell.runtime import state as loop_state
+from cli.interactive_shell.runtime.cpr_stdin import (
+    strip_cpr_escape_sequences,
+    strip_cpr_sequences,
+)
+from cli.interactive_shell.runtime.session import ReplSession
+from cli.interactive_shell.runtime.streaming_console import StreamingConsole
+from cli.interactive_shell.ui.streaming import _CHARS_PER_TOKEN
+from cli.interactive_shell.ui.theme import (
     ANSI_RESET,
     PROMPT_ACCENT_ANSI,
     get_active_theme_name,
@@ -48,7 +51,7 @@ from app.cli.interactive_shell.ui.theme import (
 def test_streaming_console_status_does_not_recurse(monkeypatch) -> None:
     """Regression: overriding Console.print broke Rich's status spinner."""
     spinner = loop_state.SpinnerState()
-    console = loop_module.StreamingConsole(
+    console = StreamingConsole(
         spinner,
         threading.Event(),
         file=io.StringIO(),
@@ -75,7 +78,7 @@ def test_strip_cpr_sequences_removes_terminal_cursor_replies(
     text: str,
     expected: str,
 ) -> None:
-    assert cpr_module.strip_cpr_sequences(text) == expected
+    assert strip_cpr_sequences(text) == expected
 
 
 @pytest.mark.parametrize(
@@ -90,7 +93,7 @@ def test_strip_cpr_escape_sequences_only_removes_escaped_variants(
     text: str,
     expected: str,
 ) -> None:
-    assert cpr_module.strip_cpr_escape_sequences(text) == expected
+    assert strip_cpr_escape_sequences(text) == expected
 
 
 def test_repl_input_lexer_highlights_first_slash_token() -> None:
@@ -114,7 +117,7 @@ def test_build_prompt_session_uses_persistent_history(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import app.constants as const_module
+    import config.constants as const_module
 
     monkeypatch.setattr(const_module, "OPENSRE_HOME_DIR", tmp_path)
 
@@ -134,7 +137,7 @@ def test_build_prompt_session_falls_back_to_memory_history(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import app.constants as const_module
+    import config.constants as const_module
 
     blocked_home = tmp_path / "not-a-directory"
     blocked_home.write_text("", encoding="utf-8")
@@ -150,7 +153,7 @@ def test_repl_session_prompt_history_backend_matches_prompt_toolkit_history(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import app.constants as const_module
+    import config.constants as const_module
 
     monkeypatch.setattr(const_module, "OPENSRE_HOME_DIR", tmp_path)
     with create_app_session(input=DummyInput(), output=DummyOutput()):
@@ -172,7 +175,7 @@ def test_shift_enter_inserts_newline_before_submit(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import app.constants as const_module
+    import config.constants as const_module
 
     monkeypatch.setattr(const_module, "OPENSRE_HOME_DIR", tmp_path)
 
@@ -332,7 +335,6 @@ def test_completion_includes_tab_navigation() -> None:
 
 
 def test_build_prompt_style_tracks_active_theme() -> None:
-    from app.cli.interactive_shell.ui.theme import set_active_theme
 
     set_active_theme("amber")
     amber_attrs = _build_prompt_style().get_attrs_for_style_str("class:prompt-frame-line")
@@ -344,7 +346,7 @@ def test_build_prompt_style_tracks_active_theme() -> None:
 
 
 def test_completion_menu_current_item_uses_highlight_style() -> None:
-    from app.cli.interactive_shell.ui.theme import BG, HIGHLIGHT, set_active_theme
+    from cli.interactive_shell.ui.theme import BG, HIGHLIGHT
 
     set_active_theme("green")
     style = _build_prompt_style()
@@ -363,7 +365,7 @@ def test_completion_menu_current_item_uses_highlight_style() -> None:
 
 
 def test_lazy_rich_style_split_tracks_active_theme() -> None:
-    from app.cli.interactive_shell.ui import theme as ui_theme
+    from cli.interactive_shell.ui import theme as ui_theme
 
     set_active_theme("green")
     assert bool(ui_theme.DIM) is True
@@ -379,7 +381,7 @@ def test_lazy_rich_style_split_tracks_active_theme() -> None:
 def test_lazy_rich_style_parses_as_real_rich_style() -> None:
     from rich.style import Style
 
-    from app.cli.interactive_shell.ui import theme as ui_theme
+    from cli.interactive_shell.ui import theme as ui_theme
 
     # Rich resolves a _LazyRichStyle via its underlying ``str`` value, so the
     # contract at call sites is to pass ``str(...)``. Verify that contract
@@ -431,7 +433,7 @@ def test_run_text_investigation_uses_background_launcher_when_mode_enabled(
 ) -> None:
     from rich.console import Console
 
-    from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.action_executor.investigation_runner import (
+    from cli.interactive_shell.routing.handle_message_with_agent.orchestration.action_executor.investigation_runner import (
         run_text_investigation,
     )
 
@@ -449,7 +451,7 @@ def test_run_text_investigation_uses_background_launcher_when_mode_enabled(
         return "bg123"
 
     monkeypatch.setattr(
-        "app.cli.interactive_shell.runtime.background_runner.start_background_text_investigation",
+        "cli.interactive_shell.runtime.background_runner.start_background_text_investigation",
         _fake_start_background_text_investigation,
     )
 
@@ -475,11 +477,11 @@ def test_dispatch_one_turn_reports_slash_dispatch_error(
         raise RuntimeError("handler crashed")
 
     monkeypatch.setattr(
-        "app.cli.interactive_shell.runtime.execution.dispatch_slash",
+        "cli.interactive_shell.runtime.execution.dispatch_slash",
         _boom,
     )
     monkeypatch.setattr(
-        "app.cli.interactive_shell.error_handling.exception_reporting.capture_exception",
+        "cli.interactive_shell.error_handling.exception_reporting.capture_exception",
         lambda exc, **_kwargs: captured_errors.append(exc),
     )
     session = ReplSession()
@@ -507,7 +509,7 @@ def test_dispatch_one_turn_calls_on_exit_when_slash_returns_false(
     from rich.console import Console
 
     monkeypatch.setattr(
-        "app.cli.interactive_shell.runtime.execution.dispatch_slash",
+        "cli.interactive_shell.runtime.execution.dispatch_slash",
         lambda *_args, **_kwargs: False,
     )
 
@@ -772,7 +774,7 @@ class TestSpinnerState:
         assert spinner.inline_spinner_ansi() == ""
 
     def test_inline_spinner_uses_active_theme_highlight(self) -> None:
-        from app.cli.interactive_shell.ui.theme import set_active_theme
+        from cli.interactive_shell.ui.theme import set_active_theme
 
         set_active_theme("blue")
         spinner = loop_state.SpinnerState()
@@ -961,7 +963,7 @@ class TestStreamingConsole:
         spinner = loop_state.SpinnerState()
         spinner.start()
         cancel = _threading.Event()
-        console = loop_module.StreamingConsole(
+        console = StreamingConsole(
             spinner,
             cancel,
             highlight=False,
@@ -976,7 +978,7 @@ class TestStreamingConsole:
 
         spinner = loop_state.SpinnerState()
         cancel = _threading.Event()
-        console = loop_module.StreamingConsole(
+        console = StreamingConsole(
             spinner,
             cancel,
             highlight=False,
@@ -996,7 +998,7 @@ class TestStreamingConsole:
         import threading as _threading
 
         spinner = loop_state.SpinnerState()
-        console = loop_module.StreamingConsole(
+        console = StreamingConsole(
             spinner,
             _threading.Event(),
             file=io.StringIO(),
@@ -1006,11 +1008,11 @@ class TestStreamingConsole:
 
         calls: list[str] = []
         monkeypatch.setattr(
-            "app.cli.interactive_shell.ui.choice_menu.ensure_tty_column_zero",
+            "cli.interactive_shell.ui.choice_menu.ensure_tty_column_zero",
             lambda: calls.append("ensure"),
         )
         monkeypatch.setattr(
-            "app.cli.interactive_shell.ui.choice_menu.prepare_repl_output_line",
+            "cli.interactive_shell.ui.choice_menu.prepare_repl_output_line",
             lambda: calls.append("prepare"),
         )
 
@@ -1515,7 +1517,7 @@ class TestExecutionAllowedRespectsDispatchCancelled:
     ) -> None:
         from rich.console import Console
 
-        from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.execution_policy import (
+        from cli.interactive_shell.routing.handle_message_with_agent.orchestration.execution_policy import (
             ExecutionPolicyResult,
             execution_allowed,
         )
@@ -1557,7 +1559,7 @@ class TestExecutionAllowedRespectsDispatchCancelled:
         """
         from rich.console import Console
 
-        from app.cli.interactive_shell.routing.handle_message_with_agent.orchestration.execution_policy import (
+        from cli.interactive_shell.routing.handle_message_with_agent.orchestration.execution_policy import (
             ExecutionPolicyResult,
             execution_allowed,
         )
@@ -1600,15 +1602,15 @@ class TestThemeCommand:
         assert "/theme" in SLASH_COMMANDS
 
     def test_theme_command_updates_active_theme_and_persists(self, monkeypatch) -> None:
-        from app.cli.interactive_shell.command_registry import theme as theme_cmd
+        from cli.interactive_shell.command_registry import theme as theme_cmd
 
         saved_payloads: list[dict[str, object]] = []
         monkeypatch.setattr(theme_cmd, "repl_tty_interactive", lambda: True)
         monkeypatch.setattr(theme_cmd, "repl_choose_one", lambda **_kwargs: "blue")
         monkeypatch.setattr(theme_cmd, "_refresh_prompt_style", lambda _session: None)
-        monkeypatch.setattr("app.cli.commands.config._load_config", lambda: {})
+        monkeypatch.setattr("cli.commands.config._load_config", lambda: {})
         monkeypatch.setattr(
-            "app.cli.commands.config._save_config",
+            "cli.commands.config._save_config",
             lambda data: saved_payloads.append(dict(data)),
         )
 
@@ -1624,7 +1626,7 @@ class TestThemeCommand:
         assert interactive.get("theme") == "blue"
 
     def test_theme_picker_uses_session_theme_as_current(self, monkeypatch) -> None:
-        from app.cli.interactive_shell.command_registry import theme as theme_cmd
+        from cli.interactive_shell.command_registry import theme as theme_cmd
 
         monkeypatch.setattr(theme_cmd, "repl_tty_interactive", lambda: True)
         captured: dict[str, object] = {}
@@ -1648,12 +1650,12 @@ class TestThemeCommand:
         assert any("pink (current)" in label for _value, label in choices)
 
     def test_theme_command_direct_arg_sets_theme(self, monkeypatch) -> None:
-        from app.cli.interactive_shell.command_registry import theme as theme_cmd
+        from cli.interactive_shell.command_registry import theme as theme_cmd
 
         monkeypatch.setattr(theme_cmd, "repl_tty_interactive", lambda: True)
         monkeypatch.setattr(theme_cmd, "_refresh_prompt_style", lambda _session: None)
-        monkeypatch.setattr("app.cli.commands.config._load_config", lambda: {})
-        monkeypatch.setattr("app.cli.commands.config._save_config", lambda _data: None)
+        monkeypatch.setattr("cli.commands.config._load_config", lambda: {})
+        monkeypatch.setattr("cli.commands.config._save_config", lambda _data: None)
 
         set_active_theme("green")
         session = ReplSession()
@@ -1663,13 +1665,13 @@ class TestThemeCommand:
         assert get_active_theme_name() == "amber"
 
     def test_theme_change_refreshes_welcome_poster(self, monkeypatch) -> None:
-        from app.cli.interactive_shell.command_registry import theme as theme_cmd
+        from cli.interactive_shell.command_registry import theme as theme_cmd
 
         monkeypatch.setattr(theme_cmd, "repl_tty_interactive", lambda: True)
         monkeypatch.setattr(theme_cmd, "repl_choose_one", lambda **_kwargs: "blue")
         monkeypatch.setattr(theme_cmd, "_refresh_prompt_style", lambda _session: None)
-        monkeypatch.setattr("app.cli.commands.config._load_config", lambda: {})
-        monkeypatch.setattr("app.cli.commands.config._save_config", lambda _data: None)
+        monkeypatch.setattr("cli.commands.config._load_config", lambda: {})
+        monkeypatch.setattr("cli.commands.config._save_config", lambda _data: None)
 
         refreshed: list[dict[str, object | None]] = []
 
@@ -1682,7 +1684,7 @@ class TestThemeCommand:
             refreshed.append({"console": console, "session": session, "theme_notice": theme_notice})
 
         monkeypatch.setattr(
-            "app.cli.interactive_shell.ui.rendering.refresh_welcome_poster",
+            "cli.interactive_shell.ui.rendering.refresh_welcome_poster",
             _refresh,
         )
 
@@ -1695,8 +1697,8 @@ class TestThemeCommand:
         assert refreshed[0]["theme_notice"] == "blue"
 
     def test_theme_picker_lists_all_registered_themes(self, monkeypatch) -> None:
-        from app.cli.interactive_shell.command_registry import theme as theme_cmd
-        from app.cli.interactive_shell.ui.theme import list_theme_names
+        from cli.interactive_shell.command_registry import theme as theme_cmd
+        from cli.interactive_shell.ui.theme import list_theme_names
 
         monkeypatch.setattr(theme_cmd, "repl_tty_interactive", lambda: True)
         captured: dict[str, object] = {}
@@ -1718,7 +1720,7 @@ class TestThemeCommand:
     def test_theme_persist_drains_cpr_around_poster_and_defers_prompt_refresh(
         self, monkeypatch
     ) -> None:
-        from app.cli.interactive_shell.command_registry import theme as theme_cmd
+        from cli.interactive_shell.command_registry import theme as theme_cmd
 
         drains: list[str] = []
         monkeypatch.setattr(
@@ -1727,11 +1729,11 @@ class TestThemeCommand:
             lambda: drains.append("drain"),
         )
         monkeypatch.setattr(
-            "app.cli.interactive_shell.ui.rendering.refresh_welcome_poster",
+            "cli.interactive_shell.ui.rendering.refresh_welcome_poster",
             lambda *_args, **_kwargs: drains.append("poster"),
         )
-        monkeypatch.setattr("app.cli.commands.config._load_config", lambda: {})
-        monkeypatch.setattr("app.cli.commands.config._save_config", lambda _data: None)
+        monkeypatch.setattr("cli.commands.config._load_config", lambda: {})
+        monkeypatch.setattr("cli.commands.config._save_config", lambda _data: None)
 
         session = ReplSession()
         console, _buf = self._capture()
@@ -1742,7 +1744,7 @@ class TestThemeCommand:
 
 
 def test_refresh_prompt_theme_skips_invalidate_when_app_not_running() -> None:
-    from app.cli.interactive_shell.prompting.prompt_surface import refresh_prompt_theme
+    from cli.interactive_shell.prompting.prompt_surface import refresh_prompt_theme
 
     invalidated: list[bool] = []
 

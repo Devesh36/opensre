@@ -6,9 +6,9 @@ import io
 
 from rich.console import Console
 
-from app.cli.interactive_shell.ui import banner as banner_module
-from app.cli.interactive_shell.ui import banner_state as banner_state_module
-from app.cli.interactive_shell.ui import rendering as rendering_module
+from cli.interactive_shell.ui import banner as banner_module
+from cli.interactive_shell.ui import banner_state as banner_state_module
+from cli.interactive_shell.ui import rendering as rendering_module
 
 
 def test_banner_shows_ollama_model(monkeypatch: object) -> None:
@@ -26,7 +26,7 @@ def test_banner_shows_ollama_model(monkeypatch: object) -> None:
 
 
 def test_ready_box_uses_active_theme_palette() -> None:
-    from app.cli.interactive_shell.ui.theme import set_active_theme
+    from cli.interactive_shell.ui.theme import set_active_theme
 
     set_active_theme("pink")
     pink_rgb = "255;179;217"
@@ -45,7 +45,7 @@ def test_refresh_welcome_poster_uses_repl_safe_render(monkeypatch: object) -> No
     render_calls: list[dict[str, object | None]] = []
 
     monkeypatch.setattr(
-        "app.cli.interactive_shell.ui.rendering.repl_clear_screen",
+        "cli.interactive_shell.ui.rendering.repl_clear_screen",
         lambda: None,
     )
 
@@ -58,7 +58,7 @@ def test_refresh_welcome_poster_uses_repl_safe_render(monkeypatch: object) -> No
         render_calls.append({"session": session, "theme_notice": theme_notice})
 
     monkeypatch.setattr(
-        "app.cli.interactive_shell.ui.rendering.repl_render_launch_poster",
+        "cli.interactive_shell.ui.rendering.repl_render_launch_poster",
         _fake_render,
     )
 
@@ -83,7 +83,7 @@ def test_get_username_falls_back_to_system_user(monkeypatch: object) -> None:
 
 def test_github_username_reads_saved_credential(monkeypatch: object) -> None:
     monkeypatch.setattr(
-        "app.integrations.store.get_integration",
+        "integrations.store.get_integration",
         lambda service: {"credentials": {"username": "octocat"}} if service == "github" else None,
     )
 
@@ -91,7 +91,7 @@ def test_github_username_reads_saved_credential(monkeypatch: object) -> None:
 
 
 def test_github_username_empty_when_not_configured(monkeypatch: object) -> None:
-    monkeypatch.setattr("app.integrations.store.get_integration", lambda _service: None)
+    monkeypatch.setattr("integrations.store.get_integration", lambda _service: None)
 
     assert banner_module._github_username() == ""
 
