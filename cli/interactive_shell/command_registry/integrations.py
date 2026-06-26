@@ -178,7 +178,7 @@ def _print_verify_summary(
 def _run_verify(session: ReplSession, console: Console, service: str | None = None) -> bool:
     normalized = ""
     if service is not None:
-        from app.integrations.registry import SUPPORTED_VERIFY_SERVICES, resolve_management_service
+        from integrations.registry import SUPPORTED_VERIFY_SERVICES, resolve_management_service
 
         normalized = resolve_management_service(service)
         if normalized not in SUPPORTED_VERIFY_SERVICES:

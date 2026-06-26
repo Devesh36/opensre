@@ -535,7 +535,7 @@ class TestIntegrationsCommand:
             }
 
         monkeypatch.setattr(
-            "app.integrations.registry.SUPPORTED_VERIFY_SERVICES",
+            "integrations.registry.SUPPORTED_VERIFY_SERVICES",
             ("datadog",),
         )
         monkeypatch.setattr(repl_data_module, "verify_integration", _verify_one)
@@ -546,7 +546,7 @@ class TestIntegrationsCommand:
 
     def test_verify_unsupported_service(self, monkeypatch: object) -> None:
         monkeypatch.setattr(
-            "app.integrations.registry.SUPPORTED_VERIFY_SERVICES",
+            "integrations.registry.SUPPORTED_VERIFY_SERVICES",
             ("datadog",),
         )
         session = ReplSession()
