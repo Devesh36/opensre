@@ -9,9 +9,9 @@ from pathlib import Path
 import pytest
 from rich.console import Console
 
-from app.cli.interactive_shell.command_registry import dispatch_slash
-from app.cli.interactive_shell.runtime.session import ReplSession
-from app.cli.interactive_shell.sessions.store import SessionStore
+from cli.interactive_shell.command_registry import dispatch_slash
+from cli.interactive_shell.runtime.session import ReplSession
+from cli.interactive_shell.sessions.store import SessionStore
 
 
 def _capture() -> tuple[Console, io.StringIO]:
@@ -23,7 +23,7 @@ def test_rca_history_lists_persisted_reports(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("app.constants.OPENSRE_HOME_DIR", tmp_path)
+    monkeypatch.setattr("config.constants.OPENSRE_HOME_DIR", tmp_path)
     session = ReplSession()
     SessionStore.open_session(session)
     SessionStore.append_investigation_result(
@@ -44,7 +44,7 @@ def test_rca_show_renders_full_report(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("app.constants.OPENSRE_HOME_DIR", tmp_path)
+    monkeypatch.setattr("config.constants.OPENSRE_HOME_DIR", tmp_path)
     session = ReplSession()
     SessionStore.open_session(session)
     inv_id = SessionStore.append_investigation_result(
@@ -64,7 +64,7 @@ def test_bare_rca_defaults_to_history(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("app.constants.OPENSRE_HOME_DIR", tmp_path)
+    monkeypatch.setattr("config.constants.OPENSRE_HOME_DIR", tmp_path)
     console, buf = _capture()
     assert dispatch_slash("/rca", ReplSession(), console) is True
     assert "no persisted RCA reports yet" in buf.getvalue()
@@ -74,9 +74,9 @@ def test_tty_rca_menu_latest_shows_report(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.cli.interactive_shell.command_registry import rca_cmds
+    from cli.interactive_shell.command_registry import rca_cmds
 
-    monkeypatch.setattr("app.constants.OPENSRE_HOME_DIR", tmp_path)
+    monkeypatch.setattr("config.constants.OPENSRE_HOME_DIR", tmp_path)
     session = ReplSession()
     SessionStore.open_session(session)
     inv_id = SessionStore.append_investigation_result(
@@ -100,9 +100,9 @@ def test_tty_rca_history_menu_picks_report_directly(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.cli.interactive_shell.command_registry import rca_cmds
+    from cli.interactive_shell.command_registry import rca_cmds
 
-    monkeypatch.setattr("app.constants.OPENSRE_HOME_DIR", tmp_path)
+    monkeypatch.setattr("config.constants.OPENSRE_HOME_DIR", tmp_path)
     session = ReplSession()
     SessionStore.open_session(session)
     older_id = SessionStore.append_investigation_result(
@@ -131,9 +131,9 @@ def test_tty_rca_root_menu_history_picks_report(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.cli.interactive_shell.command_registry import rca_cmds
+    from cli.interactive_shell.command_registry import rca_cmds
 
-    monkeypatch.setattr("app.constants.OPENSRE_HOME_DIR", tmp_path)
+    monkeypatch.setattr("config.constants.OPENSRE_HOME_DIR", tmp_path)
     session = ReplSession()
     SessionStore.open_session(session)
     older_id = SessionStore.append_investigation_result(
@@ -163,7 +163,7 @@ def test_rca_save_writes_markdown(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("app.constants.OPENSRE_HOME_DIR", tmp_path)
+    monkeypatch.setattr("config.constants.OPENSRE_HOME_DIR", tmp_path)
     session = ReplSession()
     SessionStore.open_session(session)
     SessionStore.append_investigation_result(
@@ -186,7 +186,7 @@ def test_rca_save_by_id_writes_json(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("app.constants.OPENSRE_HOME_DIR", tmp_path)
+    monkeypatch.setattr("config.constants.OPENSRE_HOME_DIR", tmp_path)
     session = ReplSession()
     SessionStore.open_session(session)
     inv_id = SessionStore.append_investigation_result(
@@ -209,7 +209,7 @@ def test_rca_save_strips_quoted_path(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("app.constants.OPENSRE_HOME_DIR", tmp_path)
+    monkeypatch.setattr("config.constants.OPENSRE_HOME_DIR", tmp_path)
     session = ReplSession()
     SessionStore.open_session(session)
     inv_id = SessionStore.append_investigation_result(
@@ -229,7 +229,7 @@ def test_rca_save_to_new_folder_adds_default_filename(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("app.constants.OPENSRE_HOME_DIR", tmp_path)
+    monkeypatch.setattr("config.constants.OPENSRE_HOME_DIR", tmp_path)
     session = ReplSession()
     SessionStore.open_session(session)
     inv_id = SessionStore.append_investigation_result(
@@ -252,7 +252,7 @@ def test_rca_save_to_new_folder_trailing_slash_creates_subdirectory(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("app.constants.OPENSRE_HOME_DIR", tmp_path)
+    monkeypatch.setattr("config.constants.OPENSRE_HOME_DIR", tmp_path)
     session = ReplSession()
     SessionStore.open_session(session)
     inv_id = SessionStore.append_investigation_result(
@@ -274,7 +274,7 @@ def test_rca_save_unknown_id_reports_not_found(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("app.constants.OPENSRE_HOME_DIR", tmp_path)
+    monkeypatch.setattr("config.constants.OPENSRE_HOME_DIR", tmp_path)
     session = ReplSession()
     SessionStore.open_session(session)
     SessionStore.append_investigation_result(
@@ -293,7 +293,7 @@ def test_rca_save_unknown_id_reports_not_found(
 
 
 def test_normalize_rca_save_path_strips_quotes() -> None:
-    from app.cli.interactive_shell.command_registry import rca_cmds
+    from cli.interactive_shell.command_registry import rca_cmds
 
     dest = rca_cmds._normalize_rca_save_path("'/tmp/report.md'", investigation_id="abcd1234")
     assert dest == Path("/tmp/report.md")
@@ -303,9 +303,9 @@ def test_tty_rca_save_menu_picks_latest_and_prompts_path(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.cli.interactive_shell.command_registry import rca_cmds
+    from cli.interactive_shell.command_registry import rca_cmds
 
-    monkeypatch.setattr("app.constants.OPENSRE_HOME_DIR", tmp_path)
+    monkeypatch.setattr("config.constants.OPENSRE_HOME_DIR", tmp_path)
     session = ReplSession()
     SessionStore.open_session(session)
     SessionStore.append_investigation_result(
