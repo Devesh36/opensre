@@ -19,6 +19,9 @@ def _is_frozen() -> bool:
     return getattr(sys, "frozen", False)
 
 
+_LOADING = object()
+
+
 def _load_stdlib_platform():
     """Load the stdlib ``platform`` module.
 
@@ -27,18 +30,31 @@ def _load_stdlib_platform():
     frozen and non-frozen environments.
     """
     # In frozen builds, try importing the stdlib platform directly by
-    # temporarily removing our package from sys.modules
+    # temporarily removing our package from sys.modules.
     if _is_frozen():
-        # Save and remove our platform package from sys.modules
-        our_platform = sys.modules.pop("platform", None)
+        # Guard against re-entrant calls (e.g. if importlib resolves
+        # back to our own __init__.py during the pop).
+        if sys.modules.get("platform") is _LOADING:
+            raise ImportError(
+                "Recursive platform load detected — stdlib platform "
+                "module is not available in this frozen bundle"
+            )
+
+        prev = sys.modules.pop("platform", None)
+        sys.modules["platform"] = _LOADING
         try:
             import platform as stdlib_platform
 
+            # If importlib resolved back to our sentinel (or our own
+            # package), the stdlib module is genuinely missing.
+            if stdlib_platform is _LOADING or hasattr(stdlib_platform, "analytics"):
+                raise ImportError("stdlib platform module not available in frozen bundle")
             return stdlib_platform
         finally:
-            # Restore our platform package
-            if our_platform is not None:
-                sys.modules["platform"] = our_platform
+            # Always restore the original state.
+            sys.modules.pop("platform", None)
+            if prev is not None:
+                sys.modules["platform"] = prev
 
     # Non-frozen: load from stdlib file path
     stdlib_dir = sysconfig.get_path("stdlib")
