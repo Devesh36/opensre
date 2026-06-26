@@ -250,7 +250,7 @@ jobs:
           --collect-data config
           --add-data "platform:platform"
 
-       - name: Smoke test binary (Unix)
+      - name: Smoke test binary (Unix)
         if: runner.os != 'Windows'
         shell: bash
         run: |
