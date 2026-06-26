@@ -36,7 +36,7 @@ def _load_stdlib_platform():
     if getattr(sys, "frozen", False):
         _ours = sys.modules.pop("platform", None)
         try:
-            import platform as _stdlib  # type: ignore[assignment]
+            _stdlib = __import__("platform")
         finally:
             if _ours is not None:
                 sys.modules["platform"] = _ours
