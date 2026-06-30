@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.victoria_logs.tools.victoria_logs_tools import VictoriaLogsTool
 from tests.tools.conftest import BaseToolContract
-from tools.victoria_logs_tools import VictoriaLogsTool
 
 
 class TestVictoriaLogsToolContract(BaseToolContract):

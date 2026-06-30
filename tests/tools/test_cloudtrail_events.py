@@ -12,13 +12,13 @@ import json
 from typing import Any
 from unittest.mock import patch
 
+from integrations.aws.tools.cloudtrail_events_tool import lookup_cloudtrail_events
 from integrations.cloudtrail import (
     DEFAULT_CLOUDTRAIL_REGION,
     cloudtrail_extract_params,
     cloudtrail_is_available,
 )
 from tests.tools.conftest import BaseToolContract
-from tools.cloudtrail_events_tool import lookup_cloudtrail_events
 
 _RT = lookup_cloudtrail_events.__opensre_registered_tool__
 

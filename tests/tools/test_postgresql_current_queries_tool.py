@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.postgresql.tools.postgresql_current_queries_tool import (
+    get_postgresql_current_queries,
+)
 from tests.tools.conftest import BaseToolContract
-from tools.postgresql_current_queries_tool import get_postgresql_current_queries
 
 
 class TestPostgreSQLCurrentQueriesToolContract(BaseToolContract):

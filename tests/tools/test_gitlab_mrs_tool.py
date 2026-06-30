@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from integrations.gitlab.tools.gitlab_mrs_tool import list_gitlab_mrs
 from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.gitlab_mrs_tool import list_gitlab_mrs
 
 
 class TestGitLabMRsToolContract(BaseToolContract):

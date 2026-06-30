@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import patch
 
+from integrations.mysql.tools.mysql_current_processes_tool import get_mysql_current_processes
 from tests.tools.conftest import BaseToolContract
-from tools.mysql_current_processes_tool import get_mysql_current_processes
 
 
 class TestMySQLCurrentProcessesToolContract(BaseToolContract):

@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from tools.helm_tools import (
+from integrations.helm.tools.helm_tools import (
     HelmGetReleaseManifestTool,
     HelmGetReleaseValuesTool,
     HelmListReleasesTool,

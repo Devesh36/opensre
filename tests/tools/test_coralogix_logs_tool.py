@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from integrations.coralogix.tools.coralogix_tools import CoralogixLogsTool
 from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.coralogix_tools import CoralogixLogsTool
 
 
 class TestCoralogixLogsToolContract(BaseToolContract):

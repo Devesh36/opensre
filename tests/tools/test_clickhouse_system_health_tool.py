@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.clickhouse.tools.clickhouse_system_health_tool import get_clickhouse_system_health
 from tests.tools.conftest import BaseToolContract
-from tools.clickhouse_system_health_tool import get_clickhouse_system_health
 
 
 class TestClickHouseSystemHealthToolContract(BaseToolContract):

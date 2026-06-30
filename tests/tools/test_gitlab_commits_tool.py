@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from integrations.gitlab.tools.gitlab_commits_tool import list_gitlab_commits
 from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.gitlab_commits_tool import list_gitlab_commits
 
 
 class TestGitLabCommitsToolContract(BaseToolContract):

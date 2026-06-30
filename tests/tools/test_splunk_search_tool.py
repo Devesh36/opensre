@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from integrations.splunk.tools.splunk_tools import SplunkSearchTool
 from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.splunk_tools import SplunkSearchTool
 
 
 class TestSplunkSearchToolContract(BaseToolContract):

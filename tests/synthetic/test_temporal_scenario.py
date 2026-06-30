@@ -34,7 +34,7 @@ from core.domain.alerts.alert_source import (
     ALERT_SOURCE_TO_TOOL_SOURCES as _PROMPT_MAP,
 )
 from integrations.temporal.client import TemporalClient, TemporalConfig
-from tools.temporal_tools import (
+from integrations.temporal.tools.temporal_tools import (
     TemporalNamespaceInfoTool,
     TemporalTaskQueueTool,
     TemporalWorkflowHistoryTool,

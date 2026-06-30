@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from tools.jira_tools import JiraAddCommentTool
+from integrations.jira.tools.jira_tools import JiraAddCommentTool
 
 
 def _tool() -> JiraAddCommentTool:

@@ -14,8 +14,8 @@ from typing import Any
 
 import pytest
 
+from integrations.openobserve.tools.openobserve_logs_tool import query_openobserve_logs
 from tests.tools.conftest import BaseToolContract, MockHttpxResponse
-from tools.openobserve_logs_tool import query_openobserve_logs
 
 # ---------------------------------------------------------------------------
 # Contract — metadata, is_available, extract_params surface

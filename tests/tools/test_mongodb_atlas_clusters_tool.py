@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.mongodb_atlas.tools.mongodb_atlas_clusters_tool import get_mongodb_atlas_clusters
 from tests.tools.conftest import BaseToolContract
-from tools.mongodb_atlas_clusters_tool import get_mongodb_atlas_clusters
 
 
 class TestMongoDBAtlasClustersToolContract(BaseToolContract):

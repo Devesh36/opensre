@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from tools.argocd_tools import ArgoCDApplicationDiffTool, ArgoCDApplicationStatusTool
+from integrations.argocd.tools.argocd_tools import (
+    ArgoCDApplicationDiffTool,
+    ArgoCDApplicationStatusTool,
+)
 
 
 class _FakeArgoCDClient:

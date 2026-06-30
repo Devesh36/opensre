@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from integrations.sentry import get_sentry_issue
-from tools.sentry_search_issues_tool import (
+from integrations.sentry.tools.sentry_search_issues_tool import (
     _resolve_config,
     _sentry_available,
     _sentry_creds,

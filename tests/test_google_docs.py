@@ -10,7 +10,7 @@ from integrations.google_docs.client import (
     GoogleDocsIntegrationConfig,
     build_google_docs_client_from_env,
 )
-from tools.google_docs_tools import create_google_docs_incident_report
+from integrations.google_docs.tools.google_docs_tools import create_google_docs_incident_report
 
 
 class TestGoogleDocsIntegrationConfig:
@@ -402,21 +402,21 @@ class TestGoogleDocsIncidentReportTool:
 
     def test_tool_is_available_when_configured(self) -> None:
         """Test that is_available returns True when google_docs is configured."""
-        from tools.google_docs_tools import _is_available
+        from integrations.google_docs.tools.google_docs_tools import _is_available
 
         sources = {"google_docs": {"configured": True}}
         assert _is_available(sources) is True
 
     def test_tool_is_available_when_not_configured(self) -> None:
         """Test that is_available returns False when google_docs is not configured."""
-        from tools.google_docs_tools import _is_available
+        from integrations.google_docs.tools.google_docs_tools import _is_available
 
         sources = {}
         assert _is_available(sources) is False
 
     def test_tool_extract_params(self) -> None:
         """Test that extract_params returns correct parameters."""
-        from tools.google_docs_tools import _extract_params
+        from integrations.google_docs.tools.google_docs_tools import _extract_params
 
         sources = {
             "google_docs": {

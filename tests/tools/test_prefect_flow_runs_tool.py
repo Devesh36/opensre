@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from integrations.prefect.tools.prefect_tools import PrefectFlowRunsTool
 from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.prefect_tools import PrefectFlowRunsTool
 
 
 class TestPrefectFlowRunsToolContract(BaseToolContract):

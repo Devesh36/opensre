@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from tools.twilio_notify_tool import TwilioNotifyTool, twilio_notify
+from integrations.twilio.tools.twilio_notify_tool import TwilioNotifyTool, twilio_notify
 
 
 @pytest.fixture

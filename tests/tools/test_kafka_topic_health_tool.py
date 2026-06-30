@@ -15,8 +15,8 @@ from unittest.mock import patch
 
 import pytest
 
+from integrations.kafka.tools.kafka_topic_health_tool import get_kafka_topic_health
 from tests.tools.conftest import BaseToolContract
-from tools.kafka_topic_health_tool import get_kafka_topic_health
 
 # ---------------------------------------------------------------------------
 # Shared fixture data

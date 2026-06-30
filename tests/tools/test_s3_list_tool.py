@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.aws.tools.s3_list_tool import list_s3_objects
 from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.s3_list_tool import list_s3_objects
 
 
 class TestS3ListToolContract(BaseToolContract):

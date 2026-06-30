@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 
 from botocore.exceptions import ClientError
 
+from integrations.aws.tools.eks_tools import list_eks_clusters
 from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.eks_tools import list_eks_clusters
 
 
 class TestEKSListClustersToolContract(BaseToolContract):

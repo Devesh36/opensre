@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from integrations.honeycomb.tools.honeycomb_tools import HoneycombTracesTool
 from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.honeycomb_tools import HoneycombTracesTool
 
 
 class TestHoneycombTracesToolContract(BaseToolContract):

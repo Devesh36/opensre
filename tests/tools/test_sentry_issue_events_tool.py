@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.sentry.tools.sentry_issue_events_tool import list_sentry_issue_events
 from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.sentry_issue_events_tool import list_sentry_issue_events
 
 
 class TestSentryIssueEventsToolContract(BaseToolContract):

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.redis.tools.redis_key_scan_tool import scan_redis_keys
 from tests.tools.conftest import BaseToolContract
-from tools.redis_key_scan_tool import scan_redis_keys
 
 
 class TestRedisKeyScanToolContract(BaseToolContract):

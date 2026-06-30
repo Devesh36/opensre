@@ -6,8 +6,12 @@ from unittest.mock import patch
 
 import pytest
 
+from integrations.posthog.tools.posthog_mcp_tool import (
+    _resolve_config,
+    call_posthog_tool,
+    list_posthog_tools,
+)
 from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.posthog_mcp_tool import _resolve_config, call_posthog_tool, list_posthog_tools
 
 
 class TestPostHogListToolContract(BaseToolContract):

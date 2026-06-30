@@ -6,8 +6,8 @@ import base64
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
+from integrations.gitlab.tools.gitlab_file_tool import get_gitlab_file_contents
 from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.gitlab_file_tool import get_gitlab_file_contents
 
 
 def _registered_tool() -> Any:

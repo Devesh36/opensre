@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.redis.tools.redis_client_list_tool import get_redis_client_list
 from tests.tools.conftest import BaseToolContract
-from tools.redis_client_list_tool import get_redis_client_list
 
 
 class TestRedisClientListToolContract(BaseToolContract):

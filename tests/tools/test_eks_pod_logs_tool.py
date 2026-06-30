@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from integrations.aws.tools.eks_tools import get_eks_pod_logs
 from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.eks_tools import get_eks_pod_logs
 
 
 class TestEKSPodLogsToolContract(BaseToolContract):

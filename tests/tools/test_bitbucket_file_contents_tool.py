@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
+from integrations.bitbucket.tools.bitbucket_file_contents_tool import get_bitbucket_file_contents
 from tests.tools.conftest import BaseToolContract
-from tools.bitbucket_file_contents_tool import get_bitbucket_file_contents
 
 
 def _registered_tool() -> Any:

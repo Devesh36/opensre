@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.redis.tools.redis_slowlog_tool import get_redis_slowlog
 from tests.tools.conftest import BaseToolContract
-from tools.redis_slowlog_tool import get_redis_slowlog
 
 
 class TestRedisSlowlogToolContract(BaseToolContract):

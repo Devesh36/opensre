@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.aws.tools.lambda_inspect_tool import inspect_lambda_function
 from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.lambda_inspect_tool import inspect_lambda_function
 
 
 class TestLambdaInspectToolContract(BaseToolContract):

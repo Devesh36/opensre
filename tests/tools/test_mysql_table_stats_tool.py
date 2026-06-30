@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.mysql.tools.mysql_table_stats_tool import get_mysql_table_stats
 from tests.tools.conftest import BaseToolContract
-from tools.mysql_table_stats_tool import get_mysql_table_stats
 
 
 class TestMySQLTableStatsToolContract(BaseToolContract):

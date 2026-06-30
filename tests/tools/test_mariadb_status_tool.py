@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.mariadb.tools.mariadb_status_tool import get_mariadb_global_status
 from tests.tools.conftest import BaseToolContract
-from tools.mariadb_status_tool import get_mariadb_global_status
 
 
 class TestMariaDBStatusToolContract(BaseToolContract):

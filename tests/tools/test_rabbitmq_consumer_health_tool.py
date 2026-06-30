@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.rabbitmq.tools.rabbitmq_consumer_health_tool import get_rabbitmq_consumer_health
 from tests.tools.conftest import BaseToolContract
-from tools.rabbitmq_consumer_health_tool import get_rabbitmq_consumer_health
 
 
 class TestRabbitMQConsumerHealthToolContract(BaseToolContract):

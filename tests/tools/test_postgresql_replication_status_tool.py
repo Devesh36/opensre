@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.postgresql.tools.postgresql_replication_status_tool import (
+    get_postgresql_replication_status,
+)
 from tests.tools.conftest import BaseToolContract
-from tools.postgresql_replication_status_tool import get_postgresql_replication_status
 
 
 class TestPostgreSQLReplicationStatusToolContract(BaseToolContract):

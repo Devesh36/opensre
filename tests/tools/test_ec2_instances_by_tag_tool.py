@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from tools.ec2_instances_by_tag_tool import _is_available, ec2_instances_by_tag
+from integrations.aws.tools.ec2_instances_by_tag_tool import _is_available, ec2_instances_by_tag
 from tools.utils.aws_topology_helper import extract_ec2_instances_params
 
 

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.azure_sql.tools.azure_sql_wait_stats_tool import get_azure_sql_wait_stats
 from tests.tools.conftest import BaseToolContract
-from tools.azure_sql_wait_stats_tool import get_azure_sql_wait_stats
 
 
 class TestAzureSQLWaitStatsToolContract(BaseToolContract):

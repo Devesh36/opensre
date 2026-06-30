@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.postgresql.tools.postgresql_locks_tool import get_postgresql_lock_status
 from tests.tools.conftest import BaseToolContract
-from tools.postgresql_locks_tool import get_postgresql_lock_status
 
 
 class TestPostgreSQLLocksToolContract(BaseToolContract):

@@ -196,7 +196,7 @@ def _azure_case() -> ToolFailureCase:
         mp.setattr(mod, "httpx", SimpleNamespace(post=MagicMock(side_effect=RuntimeError("net"))))
 
     def invoke() -> dict[str, Any]:
-        from tools.azure_monitor_logs_tool import query_azure_monitor_logs
+        from integrations.azure.tools.azure_monitor_logs_tool import query_azure_monitor_logs
 
         return query_azure_monitor_logs(workspace_id="w", access_token="t")
 
@@ -210,7 +210,7 @@ def _openobserve_case() -> ToolFailureCase:
         mp.setattr(mod, "httpx", SimpleNamespace(post=MagicMock(side_effect=RuntimeError("net"))))
 
     def invoke() -> dict[str, Any]:
-        from tools.openobserve_logs_tool import query_openobserve_logs
+        from integrations.openobserve.tools.openobserve_logs_tool import query_openobserve_logs
 
         return query_openobserve_logs(
             base_url="https://oo.example",
@@ -232,7 +232,9 @@ def _snowflake_case() -> ToolFailureCase:
         mp.setattr(mod, "httpx", SimpleNamespace(post=MagicMock(side_effect=RuntimeError("net"))))
 
     def invoke() -> dict[str, Any]:
-        from tools.snowflake_query_history_tool import query_snowflake_history
+        from integrations.snowflake.tools.snowflake_query_history_tool import (
+            query_snowflake_history,
+        )
 
         return query_snowflake_history(
             account_identifier="acc",
@@ -256,7 +258,7 @@ def _cloudwatch_logs_case() -> ToolFailureCase:
         )
 
     def invoke() -> dict[str, Any]:
-        from tools.cloudwatch_logs_tool import get_cloudwatch_logs
+        from integrations.aws.tools.cloudwatch_logs_tool import get_cloudwatch_logs
 
         return get_cloudwatch_logs(log_group="/aws/lambda/test")
 
@@ -274,7 +276,9 @@ def _cloudwatch_batch_case() -> ToolFailureCase:
         )
 
     def invoke() -> dict[str, Any]:
-        from tools.cloudwatch_batch_metrics_tool import get_cloudwatch_batch_metrics
+        from integrations.aws.tools.cloudwatch_batch_metrics_tool import (
+            get_cloudwatch_batch_metrics,
+        )
 
         return get_cloudwatch_batch_metrics(job_queue="q", metric_type="cpu")
 
@@ -289,7 +293,7 @@ def _cloudwatch_batch_case() -> ToolFailureCase:
 
 def _google_docs_case() -> ToolFailureCase:
     def patch(mp: pytest.MonkeyPatch) -> None:
-        import tools.google_docs_tools as mod
+        import integrations.google_docs.tools.google_docs_tools as mod
 
         mp.setattr(
             mod,
@@ -298,7 +302,7 @@ def _google_docs_case() -> ToolFailureCase:
         )
 
     def invoke() -> dict[str, Any]:
-        import tools.google_docs_tools as mod
+        import integrations.google_docs.tools.google_docs_tools as mod
 
         return mod.create_google_docs_incident_report(
             title="t",
@@ -345,12 +349,12 @@ def _github_repository_case() -> ToolFailureCase:
 
 def _eks_list_clusters_case() -> ToolFailureCase:
     def patch(mp: pytest.MonkeyPatch) -> None:
-        import tools.eks_tools as mod
+        import integrations.aws.tools.eks_tools as mod
 
         mp.setattr(mod, "EKSClient", MagicMock(side_effect=RuntimeError("eks")))
 
     def invoke() -> dict[str, Any]:
-        import tools.eks_tools as mod
+        import integrations.aws.tools.eks_tools as mod
 
         return mod.list_eks_clusters(role_arn="arn:aws:iam::123:role/x")
 
@@ -359,12 +363,12 @@ def _eks_list_clusters_case() -> ToolFailureCase:
 
 def _eks_describe_cluster_case() -> ToolFailureCase:
     def patch(mp: pytest.MonkeyPatch) -> None:
-        import tools.eks_tools as mod
+        import integrations.aws.tools.eks_tools as mod
 
         mp.setattr(mod, "EKSClient", MagicMock(side_effect=RuntimeError("eks")))
 
     def invoke() -> dict[str, Any]:
-        import tools.eks_tools as mod
+        import integrations.aws.tools.eks_tools as mod
 
         return mod.describe_eks_cluster(cluster_name="c", role_arn="arn:aws:iam::123:role/x")
 
@@ -373,12 +377,12 @@ def _eks_describe_cluster_case() -> ToolFailureCase:
 
 def _eks_nodegroup_case() -> ToolFailureCase:
     def patch(mp: pytest.MonkeyPatch) -> None:
-        import tools.eks_tools as mod
+        import integrations.aws.tools.eks_tools as mod
 
         mp.setattr(mod, "EKSClient", MagicMock(side_effect=RuntimeError("eks")))
 
     def invoke() -> dict[str, Any]:
-        import tools.eks_tools as mod
+        import integrations.aws.tools.eks_tools as mod
 
         return mod.get_eks_nodegroup_health(
             cluster_name="c",
@@ -390,12 +394,12 @@ def _eks_nodegroup_case() -> ToolFailureCase:
 
 def _eks_addon_case() -> ToolFailureCase:
     def patch(mp: pytest.MonkeyPatch) -> None:
-        import tools.eks_tools as mod
+        import integrations.aws.tools.eks_tools as mod
 
         mp.setattr(mod, "EKSClient", MagicMock(side_effect=RuntimeError("eks")))
 
     def invoke() -> dict[str, Any]:
-        import tools.eks_tools as mod
+        import integrations.aws.tools.eks_tools as mod
 
         return mod.describe_eks_addon(
             cluster_name="c",
@@ -408,12 +412,12 @@ def _eks_addon_case() -> ToolFailureCase:
 
 def _eks_events_case() -> ToolFailureCase:
     def patch(mp: pytest.MonkeyPatch) -> None:
-        import tools.eks_tools as mod
+        import integrations.aws.tools.eks_tools as mod
 
         mp.setattr(mod, "build_k8s_clients", MagicMock(side_effect=RuntimeError("k8s")))
 
     def invoke() -> dict[str, Any]:
-        import tools.eks_tools as mod
+        import integrations.aws.tools.eks_tools as mod
 
         return mod.get_eks_events(
             cluster_name="c",
@@ -426,12 +430,12 @@ def _eks_events_case() -> ToolFailureCase:
 
 def _eks_node_health_case() -> ToolFailureCase:
     def patch(mp: pytest.MonkeyPatch) -> None:
-        import tools.eks_tools as mod
+        import integrations.aws.tools.eks_tools as mod
 
         mp.setattr(mod, "build_k8s_clients", MagicMock(side_effect=RuntimeError("k8s")))
 
     def invoke() -> dict[str, Any]:
-        import tools.eks_tools as mod
+        import integrations.aws.tools.eks_tools as mod
 
         return mod.get_eks_node_health(
             cluster_name="c",
@@ -443,12 +447,12 @@ def _eks_node_health_case() -> ToolFailureCase:
 
 def _eks_list_namespaces_case() -> ToolFailureCase:
     def patch(mp: pytest.MonkeyPatch) -> None:
-        import tools.eks_tools as mod
+        import integrations.aws.tools.eks_tools as mod
 
         mp.setattr(mod, "build_k8s_clients", MagicMock(side_effect=RuntimeError("k8s")))
 
     def invoke() -> dict[str, Any]:
-        import tools.eks_tools as mod
+        import integrations.aws.tools.eks_tools as mod
 
         return mod.list_eks_namespaces(
             cluster_name="c",
@@ -460,12 +464,12 @@ def _eks_list_namespaces_case() -> ToolFailureCase:
 
 def _eks_list_deployments_case() -> ToolFailureCase:
     def patch(mp: pytest.MonkeyPatch) -> None:
-        import tools.eks_tools as mod
+        import integrations.aws.tools.eks_tools as mod
 
         mp.setattr(mod, "build_k8s_clients", MagicMock(side_effect=RuntimeError("k8s")))
 
     def invoke() -> dict[str, Any]:
-        import tools.eks_tools as mod
+        import integrations.aws.tools.eks_tools as mod
 
         return mod.list_eks_deployments(
             cluster_name="c",
@@ -478,12 +482,12 @@ def _eks_list_deployments_case() -> ToolFailureCase:
 
 def _eks_list_pods_case() -> ToolFailureCase:
     def patch(mp: pytest.MonkeyPatch) -> None:
-        import tools.eks_tools as mod
+        import integrations.aws.tools.eks_tools as mod
 
         mp.setattr(mod, "build_k8s_clients", MagicMock(side_effect=RuntimeError("k8s")))
 
     def invoke() -> dict[str, Any]:
-        import tools.eks_tools as mod
+        import integrations.aws.tools.eks_tools as mod
 
         return mod.list_eks_pods(
             cluster_name="c",
@@ -496,12 +500,12 @@ def _eks_list_pods_case() -> ToolFailureCase:
 
 def _eks_pod_logs_case() -> ToolFailureCase:
     def patch(mp: pytest.MonkeyPatch) -> None:
-        import tools.eks_tools as mod
+        import integrations.aws.tools.eks_tools as mod
 
         mp.setattr(mod, "build_k8s_clients", MagicMock(side_effect=RuntimeError("k8s")))
 
     def invoke() -> dict[str, Any]:
-        import tools.eks_tools as mod
+        import integrations.aws.tools.eks_tools as mod
 
         return mod.get_eks_pod_logs(
             cluster_name="c",
@@ -537,7 +541,7 @@ def _openclaw_list_case() -> ToolFailureCase:
         mp.setattr(mod, "list_openclaw_mcp_tools", MagicMock(side_effect=RuntimeError("mcp")))
 
     def invoke() -> dict[str, Any]:
-        from tools.openclaw_mcp_tool import list_openclaw_bridge_tools
+        from integrations.openclaw.tools.openclaw_mcp_tool import list_openclaw_bridge_tools
 
         return list_openclaw_bridge_tools()
 
@@ -552,7 +556,7 @@ def _openclaw_search_case() -> ToolFailureCase:
         mp.setattr(mod, "invoke_openclaw_mcp_tool", MagicMock(side_effect=RuntimeError("mcp")))
 
     def invoke() -> dict[str, Any]:
-        from tools.openclaw_mcp_tool import search_openclaw_conversations
+        from integrations.openclaw.tools.openclaw_mcp_tool import search_openclaw_conversations
 
         return search_openclaw_conversations(search="db error")
 
@@ -580,7 +584,7 @@ def _openclaw_get_conversation_case() -> ToolFailureCase:
         mp.setattr(mod, "invoke_openclaw_mcp_tool", MagicMock(side_effect=RuntimeError("mcp")))
 
     def invoke() -> dict[str, Any]:
-        from tools.openclaw_mcp_tool import get_openclaw_conversation
+        from integrations.openclaw.tools.openclaw_mcp_tool import get_openclaw_conversation
 
         return get_openclaw_conversation(conversation_id="conv-1")
 
@@ -601,7 +605,7 @@ def _openclaw_call_tool_case() -> ToolFailureCase:
         mp.setattr(mod, "invoke_openclaw_mcp_tool", MagicMock(side_effect=RuntimeError("mcp")))
 
     def invoke() -> dict[str, Any]:
-        from tools.openclaw_mcp_tool import call_openclaw_bridge_tool
+        from integrations.openclaw.tools.openclaw_mcp_tool import call_openclaw_bridge_tool
 
         return call_openclaw_bridge_tool(tool_name="permissions_grant", arguments={})
 
@@ -648,7 +652,7 @@ def _posthog_mcp_list_case() -> ToolFailureCase:
         mp.setattr(mod, "list_posthog_mcp_server_tools", MagicMock(side_effect=RuntimeError("mcp")))
 
     def invoke() -> dict[str, Any]:
-        from tools.posthog_mcp_tool import list_posthog_tools
+        from integrations.posthog.tools.posthog_mcp_tool import list_posthog_tools
 
         return list_posthog_tools()
 
@@ -669,7 +673,7 @@ def _posthog_mcp_call_tool_case() -> ToolFailureCase:
         mp.setattr(mod, "invoke_posthog_mcp_tool", MagicMock(side_effect=RuntimeError("mcp")))
 
     def invoke() -> dict[str, Any]:
-        from tools.posthog_mcp_tool import call_posthog_tool
+        from integrations.posthog.tools.posthog_mcp_tool import call_posthog_tool
 
         return call_posthog_tool(tool_name="query-run", arguments={})
 
@@ -716,7 +720,7 @@ def _sentry_mcp_list_case() -> ToolFailureCase:
         mp.setattr(mod, "list_sentry_mcp_server_tools", MagicMock(side_effect=RuntimeError("mcp")))
 
     def invoke() -> dict[str, Any]:
-        from tools.sentry_mcp_tool import list_sentry_tools
+        from integrations.sentry.tools.sentry_mcp_tool import list_sentry_tools
 
         return list_sentry_tools()
 
@@ -737,7 +741,7 @@ def _sentry_mcp_call_tool_case() -> ToolFailureCase:
         mp.setattr(mod, "invoke_sentry_mcp_tool", MagicMock(side_effect=RuntimeError("mcp")))
 
     def invoke() -> dict[str, Any]:
-        from tools.sentry_mcp_tool import call_sentry_tool
+        from integrations.sentry.tools.sentry_mcp_tool import call_sentry_tool
 
         return call_sentry_tool(tool_name="get_issue_details", arguments={})
 
@@ -837,7 +841,7 @@ def test_eks_client_error_path_uses_warning_severity(
     """
     from botocore.exceptions import ClientError
 
-    import tools.eks_tools as mod
+    import integrations.aws.tools.eks_tools as mod
 
     client_error = ClientError(
         error_response={
@@ -887,7 +891,7 @@ def test_eks_nodegroup_health_tags_failing_nodegroup_during_iteration(
     failure on the second nodegroup should reach Sentry tagged with
     ``ng-broken``, not ``None`` or the first nodegroup.
     """
-    import tools.eks_tools as mod
+    import integrations.aws.tools.eks_tools as mod
 
     def _describe(_cluster: str, ng: str) -> dict[str, Any]:
         if ng == "ng-broken":

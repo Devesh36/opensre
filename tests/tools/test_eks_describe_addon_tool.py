@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 
 from botocore.exceptions import ClientError
 
+from integrations.aws.tools.eks_tools import describe_eks_addon
 from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.eks_tools import describe_eks_addon
 
 
 class TestEKSDescribeAddonToolContract(BaseToolContract):

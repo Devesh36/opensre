@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.rabbitmq.tools.rabbitmq_connection_stats_tool import get_rabbitmq_connection_stats
 from tests.tools.conftest import BaseToolContract
-from tools.rabbitmq_connection_stats_tool import get_rabbitmq_connection_stats
 
 
 class TestRabbitMQConnectionStatsToolContract(BaseToolContract):

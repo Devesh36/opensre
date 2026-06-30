@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.redis.tools.redis_latency_doctor_tool import get_redis_latency_doctor
 from tests.tools.conftest import BaseToolContract
-from tools.redis_latency_doctor_tool import get_redis_latency_doctor
 
 
 class TestRedisLatencyDoctorToolContract(BaseToolContract):

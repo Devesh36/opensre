@@ -7,12 +7,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from tests.tools.conftest import BaseToolContract
-from tools.azure_monitor_logs_tool import (
+from integrations.azure.tools.azure_monitor_logs_tool import (
     _bounded_limit,
     _ensure_take_clause,
     query_azure_monitor_logs,
 )
+from tests.tools.conftest import BaseToolContract
 
 
 def _registered_tool() -> Any:

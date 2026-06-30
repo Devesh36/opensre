@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.mongodb_atlas.tools.mongodb_atlas_performance_advisor_tool import (
+    get_mongodb_atlas_performance_advisor,
+)
 from tests.tools.conftest import BaseToolContract
-from tools.mongodb_atlas_performance_advisor_tool import get_mongodb_atlas_performance_advisor
 
 
 class TestMongoDBAtlasPerformanceAdvisorToolContract(BaseToolContract):

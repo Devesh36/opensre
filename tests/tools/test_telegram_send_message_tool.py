@@ -8,7 +8,10 @@ from typing import Any
 
 import pytest
 
-from tools.telegram_send_message_tool import TelegramSendMessageTool, telegram_send_message
+from integrations.telegram.tools.telegram_send_message_tool import (
+    TelegramSendMessageTool,
+    telegram_send_message,
+)
 
 
 @pytest.fixture
@@ -58,7 +61,7 @@ def test_extract_params_returns_no_credentials(telegram_source: dict[str, Any]) 
 def test_init_is_only_registry_entrypoint() -> None:
     package = importlib.import_module("tools.telegram_send_message_tool")
     source = inspect.getsource(package)
-    assert "from tools.telegram_send_message_tool.tool import" in source
+    assert "from integrations.telegram.tools.telegram_send_message_tool.tool import" in source
     assert "class TelegramSendMessageTool" not in source
 
 

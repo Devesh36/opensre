@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from tools.jira_tools import JiraCreateIssueTool
+from integrations.jira.tools.jira_tools import JiraCreateIssueTool
 
 
 def _tool() -> JiraCreateIssueTool:

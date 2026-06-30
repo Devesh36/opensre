@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from tools.incident_io_tools import IncidentIoIncidentsTool
+from integrations.incident_io.tools.incident_io_tools import IncidentIoIncidentsTool
 
 
 def test_incident_io_tool_extracts_credentials_from_sources() -> None:

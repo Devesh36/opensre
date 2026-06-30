@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.mongodb.tools.mongodb_profiler_tool import get_mongodb_profiler_data
 from tests.tools.conftest import BaseToolContract
-from tools.mongodb_profiler_tool import get_mongodb_profiler_data
 
 
 class TestMongoDBProfilerToolContract(BaseToolContract):

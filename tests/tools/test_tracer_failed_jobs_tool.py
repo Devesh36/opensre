@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from integrations.tracer_cloud.tools.tracer_failed_jobs_tool import get_failed_jobs
 from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.tracer_failed_jobs_tool import get_failed_jobs
 
 
 class TestTracerFailedJobsToolContract(BaseToolContract):

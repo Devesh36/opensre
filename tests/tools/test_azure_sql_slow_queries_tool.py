@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.azure_sql.tools.azure_sql_slow_queries_tool import get_azure_sql_slow_queries
 from tests.tools.conftest import BaseToolContract
-from tools.azure_sql_slow_queries_tool import get_azure_sql_slow_queries
 
 
 class TestAzureSQLSlowQueriesToolContract(BaseToolContract):

@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
+from integrations.bitbucket.tools.bitbucket_commits_tool import list_bitbucket_commits
 from tests.tools.conftest import BaseToolContract
-from tools.bitbucket_commits_tool import list_bitbucket_commits
 
 
 def _registered_tool() -> Any:

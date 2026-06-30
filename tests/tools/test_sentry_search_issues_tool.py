@@ -17,8 +17,8 @@ from integrations.sentry import (
     describe_sentry_api_error,
     list_sentry_issues,
 )
+from integrations.sentry.tools.sentry_search_issues_tool import search_sentry_issues
 from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.sentry_search_issues_tool import search_sentry_issues
 
 
 class TestSentrySearchIssuesToolContract(BaseToolContract):
@@ -47,7 +47,7 @@ def test_extract_params_maps_resolved_config_dump_shape() -> None:
     ``sentry_url``. Hard-indexing ``sentry['sentry_token']`` raised a KeyError
     that aborted every Sentry query in the gather/investigation loop."""
     from integrations.sentry import SentryConfig
-    from tools.sentry_search_issues_tool import _search_issues_extract_params
+    from integrations.sentry.tools.sentry_search_issues_tool import _search_issues_extract_params
 
     sources = {
         "sentry": SentryConfig(
@@ -358,7 +358,7 @@ def test_validate_sentry_config_saturated_count_uses_plus() -> None:
 
 def test_search_tool_default_limit_is_full_page() -> None:
     from integrations.sentry import DEFAULT_SENTRY_ISSUE_LIMIT
-    from tools.sentry_search_issues_tool import _search_issues_extract_params
+    from integrations.sentry.tools.sentry_search_issues_tool import _search_issues_extract_params
 
     sources = {
         "sentry": {

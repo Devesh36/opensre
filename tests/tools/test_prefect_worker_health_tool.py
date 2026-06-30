@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from integrations.prefect.tools.prefect_tools import PrefectWorkerHealthTool
 from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.prefect_tools import PrefectWorkerHealthTool
 
 
 class TestPrefectWorkerHealthToolContract(BaseToolContract):

@@ -5,8 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
-from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.git_deploy_timeline_tool import (
+from integrations.git.tools.git_deploy_timeline_tool import (
     DEFAULT_WINDOW_MINUTES,
     MAX_PER_PAGE,
     MAX_WINDOW_MINUTES,
@@ -14,6 +13,7 @@ from tools.git_deploy_timeline_tool import (
     _summarize_commit,
     get_git_deploy_timeline,
 )
+from tests.tools.conftest import BaseToolContract, mock_agent_state
 
 
 class TestGitDeployTimelineToolContract(BaseToolContract):

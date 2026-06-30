@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from tools.opsgenie_tools import OpsGenieAlertDetailTool
+from integrations.opsgenie.tools.opsgenie_tools import OpsGenieAlertDetailTool
 
 
 def _tool() -> OpsGenieAlertDetailTool:

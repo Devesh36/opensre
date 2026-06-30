@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import patch
 
+from integrations.mysql.tools.mysql_slow_queries_tool import get_mysql_slow_queries
 from tests.tools.conftest import BaseToolContract
-from tools.mysql_slow_queries_tool import get_mysql_slow_queries
 
 
 class TestMySQLSlowQueriesToolContract(BaseToolContract):

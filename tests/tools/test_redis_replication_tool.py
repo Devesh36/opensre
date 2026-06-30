@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.redis.tools.redis_replication_tool import get_redis_replication
 from tests.tools.conftest import BaseToolContract
-from tools.redis_replication_tool import get_redis_replication
 
 
 class TestRedisReplicationToolContract(BaseToolContract):

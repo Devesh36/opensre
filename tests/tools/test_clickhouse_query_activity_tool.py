@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.clickhouse.tools.clickhouse_query_activity_tool import (
+    get_clickhouse_query_activity,
+)
 from tests.tools.conftest import BaseToolContract
-from tools.clickhouse_query_activity_tool import get_clickhouse_query_activity
 
 
 class TestClickHouseQueryActivityToolContract(BaseToolContract):

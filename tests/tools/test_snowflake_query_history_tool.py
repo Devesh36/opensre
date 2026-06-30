@@ -11,8 +11,8 @@ from typing import Any
 
 import pytest
 
+from integrations.snowflake.tools.snowflake_query_history_tool import query_snowflake_history
 from tests.tools.conftest import BaseToolContract, MockHttpxResponse
-from tools.snowflake_query_history_tool import query_snowflake_history
 
 # ---------------------------------------------------------------------------
 # Contract — metadata, is_available, extract_params surface

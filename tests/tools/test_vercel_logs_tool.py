@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tools.vercel_tools import VercelLogsTool
+from integrations.vercel.tools.vercel_tools import VercelLogsTool
 
 
 @pytest.fixture()

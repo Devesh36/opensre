@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.openclaw_mcp_tool import (
+from integrations.openclaw.tools.openclaw_mcp_tool import (
     call_openclaw_bridge_tool,
     get_openclaw_conversation,
     list_openclaw_bridge_tools,
     search_openclaw_conversations,
     send_openclaw_message,
 )
+from tests.tools.conftest import BaseToolContract, mock_agent_state
 
 
 class TestOpenClawListToolContract(BaseToolContract):

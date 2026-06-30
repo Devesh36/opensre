@@ -13,8 +13,8 @@ from typing import Any
 import pytest
 
 from integrations.elasticsearch.client import ElasticsearchConfig
+from integrations.opensearch.tools.opensearch_analytics_tool import query_opensearch_analytics
 from tests.tools.conftest import BaseToolContract
-from tools.opensearch_analytics_tool import query_opensearch_analytics
 
 # ---------------------------------------------------------------------------
 # Test helpers — keep ElasticsearchClient stubbing consistent

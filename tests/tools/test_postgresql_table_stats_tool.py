@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.postgresql.tools.postgresql_table_stats_tool import get_postgresql_table_stats
 from tests.tools.conftest import BaseToolContract
-from tools.postgresql_table_stats_tool import get_postgresql_table_stats
 
 
 class TestPostgreSQLTableStatsToolContract(BaseToolContract):

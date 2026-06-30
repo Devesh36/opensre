@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
+from integrations.bitbucket.tools.bitbucket_search_code_tool import search_bitbucket_code
 from tests.tools.conftest import BaseToolContract
-from tools.bitbucket_search_code_tool import search_bitbucket_code
 
 
 def _registered_tool() -> Any:

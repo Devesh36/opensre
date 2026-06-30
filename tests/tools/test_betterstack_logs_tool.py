@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.betterstack.tools.betterstack_logs_tool import query_betterstack_logs
 from tests.tools.conftest import BaseToolContract
-from tools.betterstack_logs_tool import query_betterstack_logs
 
 
 class TestBetterStackLogsToolContract(BaseToolContract):

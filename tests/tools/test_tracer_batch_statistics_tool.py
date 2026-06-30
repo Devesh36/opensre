@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from integrations.tracer_cloud.tools.tracer_batch_statistics_tool import get_batch_statistics
 from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.tracer_batch_statistics_tool import get_batch_statistics
 
 
 class TestTracerBatchStatisticsToolContract(BaseToolContract):

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from integrations.temporal.tools.temporal_tools import TemporalNamespaceInfoTool
 from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.temporal_tools import TemporalNamespaceInfoTool
 
 
 class TestTemporalNamespaceInfoToolContract(BaseToolContract):

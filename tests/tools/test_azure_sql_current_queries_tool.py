@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.azure_sql.tools.azure_sql_current_queries_tool import (
+    get_azure_sql_current_queries,
+)
 from tests.tools.conftest import BaseToolContract
-from tools.azure_sql_current_queries_tool import get_azure_sql_current_queries
 
 
 class TestAzureSQLCurrentQueriesToolContract(BaseToolContract):

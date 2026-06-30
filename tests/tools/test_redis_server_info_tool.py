@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.redis.tools.redis_server_info_tool import get_redis_server_info
 from tests.tools.conftest import BaseToolContract
-from tools.redis_server_info_tool import get_redis_server_info
 
 
 class TestRedisServerInfoToolContract(BaseToolContract):

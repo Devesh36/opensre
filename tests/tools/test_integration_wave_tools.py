@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from tools.azure_monitor_logs_tool import query_azure_monitor_logs
-from tools.bitbucket_search_code_tool import _resolve_config
-from tools.openobserve_logs_tool import query_openobserve_logs
-from tools.opensearch_analytics_tool import query_opensearch_analytics
-from tools.snowflake_query_history_tool import query_snowflake_history
+from integrations.azure.tools.azure_monitor_logs_tool import query_azure_monitor_logs
+from integrations.bitbucket.tools.bitbucket_search_code_tool import _resolve_config
+from integrations.openobserve.tools.openobserve_logs_tool import query_openobserve_logs
+from integrations.opensearch.tools.opensearch_analytics_tool import query_opensearch_analytics
+from integrations.snowflake.tools.snowflake_query_history_tool import query_snowflake_history
 
 
 class _MockResponse:
@@ -235,7 +235,7 @@ def test_opensearch_tool_extract_params_reads_basic_auth() -> None:
     configures Basic Auth, and the registered tool's runtime kwargs must
     include them so they reach ElasticsearchConfig.
     """
-    from tools.opensearch_analytics_tool import _opensearch_extract_params
+    from integrations.opensearch.tools.opensearch_analytics_tool import _opensearch_extract_params
 
     sources = {
         "opensearch": {

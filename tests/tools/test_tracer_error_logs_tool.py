@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from integrations.tracer_cloud.tools.tracer_error_logs_tool import get_error_logs
 from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.tracer_error_logs_tool import get_error_logs
 
 
 class TestTracerErrorLogsToolContract(BaseToolContract):

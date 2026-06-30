@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.mongodb.tools.mongodb_current_ops_tool import get_mongodb_current_ops
 from tests.tools.conftest import BaseToolContract
-from tools.mongodb_current_ops_tool import get_mongodb_current_ops
 
 
 class TestMongoDBCurrentOpsToolContract(BaseToolContract):

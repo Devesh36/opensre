@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from integrations.elasticsearch.tools.elasticsearch_tools import ElasticsearchLogsTool
 from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.elasticsearch_tools import ElasticsearchLogsTool
 
 
 class TestElasticsearchLogsToolContract(BaseToolContract):

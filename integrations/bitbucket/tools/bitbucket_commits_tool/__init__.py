@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from integrations.bitbucket import list_commits
-from tools.bitbucket_search_code_tool import (
+from integrations.bitbucket.tools.bitbucket_search_code_tool import (
     _bb_available,
     _bb_creds,
     _resolve_config,

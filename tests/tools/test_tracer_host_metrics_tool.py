@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from integrations.tracer_cloud.tools.tracer_host_metrics_tool import get_host_metrics
 from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.tracer_host_metrics_tool import get_host_metrics
 
 
 class TestTracerHostMetricsToolContract(BaseToolContract):

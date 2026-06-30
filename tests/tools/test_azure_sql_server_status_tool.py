@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.azure_sql.tools.azure_sql_server_status_tool import get_azure_sql_server_status
 from tests.tools.conftest import BaseToolContract
-from tools.azure_sql_server_status_tool import get_azure_sql_server_status
 
 
 class TestAzureSQLServerStatusToolContract(BaseToolContract):

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from integrations.tracer_cloud.tools.tracer_tasks_tool import get_tracer_tasks
 from tests.tools.conftest import BaseToolContract
-from tools.tracer_tasks_tool import get_tracer_tasks
 
 
 class TestTracerTasksToolContract(BaseToolContract):

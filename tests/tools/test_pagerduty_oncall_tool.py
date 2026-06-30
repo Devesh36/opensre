@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from tools.pagerduty_tools import PagerDutyOnCallTool
+from integrations.pagerduty.tools.pagerduty_tools import PagerDutyOnCallTool
 
 
 def _tool() -> PagerDutyOnCallTool:

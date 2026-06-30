@@ -238,7 +238,7 @@ class TestRedisP1ToolPaths:
 
     @patch("integrations.redis._get_client")
     def test_client_list_tool_path(self, mock_get_client):
-        from tools.redis_client_list_tool import get_redis_client_list
+        from integrations.redis.tools.redis_client_list_tool import get_redis_client_list
 
         mock_client = MagicMock()
         mock_client.client_list.return_value = [
@@ -256,7 +256,7 @@ class TestRedisP1ToolPaths:
 
     @patch("integrations.redis._get_client")
     def test_list_depth_tool_path(self, mock_get_client):
-        from tools.redis_list_depth_tool import get_redis_list_depth
+        from integrations.redis.tools.redis_list_depth_tool import get_redis_list_depth
 
         mock_client = MagicMock()
         mock_client.type.return_value = "list"
@@ -277,7 +277,7 @@ class TestRedisP1ToolPaths:
 
     @patch("integrations.redis._get_client")
     def test_latency_doctor_tool_path(self, mock_get_client):
-        from tools.redis_latency_doctor_tool import get_redis_latency_doctor
+        from integrations.redis.tools.redis_latency_doctor_tool import get_redis_latency_doctor
 
         mock_client = MagicMock()
         mock_client.execute_command.return_value = "I detected spikes caused by fork."

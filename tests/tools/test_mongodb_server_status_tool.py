@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.mongodb.tools.mongodb_server_status_tool import get_mongodb_server_status
 from tests.tools.conftest import BaseToolContract
-from tools.mongodb_server_status_tool import get_mongodb_server_status
 
 
 class TestMongoDBServerStatusToolContract(BaseToolContract):

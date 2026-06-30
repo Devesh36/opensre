@@ -15,8 +15,8 @@ from unittest.mock import patch
 
 import pytest
 
+from integrations.kafka.tools.kafka_consumer_group_tool import get_kafka_consumer_group_lag
 from tests.tools.conftest import BaseToolContract
-from tools.kafka_consumer_group_tool import get_kafka_consumer_group_lag
 
 # ---------------------------------------------------------------------------
 # Shared fixture data

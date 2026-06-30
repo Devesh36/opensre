@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.sentry.tools.sentry_mcp_tool import call_sentry_tool, list_sentry_tools
 from tests.tools.conftest import BaseToolContract, mock_agent_state
-from tools.sentry_mcp_tool import call_sentry_tool, list_sentry_tools
 
 
 class TestSentryListToolContract(BaseToolContract):

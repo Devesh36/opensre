@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from integrations.mariadb.tools.mariadb_process_list_tool import get_mariadb_process_list
 from tests.tools.conftest import BaseToolContract
-from tools.mariadb_process_list_tool import get_mariadb_process_list
 
 
 class TestMariaDBProcessListToolContract(BaseToolContract):

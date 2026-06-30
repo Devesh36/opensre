@@ -6,8 +6,8 @@ import logging
 from typing import Any
 from unittest.mock import patch
 
-from tools.rds_describe_instance_tool import describe_rds_instance
-from tools.rds_events_tool import describe_rds_events
+from integrations.aws.tools.rds_describe_instance_tool import describe_rds_instance
+from integrations.aws.tools.rds_events_tool import describe_rds_events
 
 
 class _FakeAWSBackend:
