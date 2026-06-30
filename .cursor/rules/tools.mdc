@@ -12,7 +12,7 @@ globs:
 After the V0.2 Phase 1 refactor there are two locations:
 
 - `integrations/<vendor>/tools/` — vendor-specific tools (one folder per vendor)
-  Example: `integrations/grafana/tools/grafana_logs_tool/`
+  Example: `integrations/grafana/tools/`
 - `tools/` — non-vendor tools only (fleet monitoring, SRE guidance, investigation
   helpers, etc.)
 
@@ -44,8 +44,8 @@ def my_tool_name(param: str) -> dict:
 
 ### 2. `BaseTool` subclass (for complex tools with helpers)
 
-snake_case package directory: `integrations/<vendor>/tools/<tool_name>/__init__.py`.
-Instantiate at module level.
+Flat file: `integrations/<vendor>/tools/__init__.py` containing all tools for that vendor.
+Instantiate each tool at module level.
 
 ```python
 from tools.base import BaseTool
@@ -74,7 +74,7 @@ my_tool_name = MyToolName()
 
 - `source` is **required** — must be a valid `EvidenceSource` literal from
   `core/domain/types/evidence.py`
-- Tool directories use **snake_case** — no PascalCase, no `Tool` suffix in the dir name
+- Tool packages under `tools/` use **snake_case** directory names — no PascalCase, no `Tool` suffix in the dir name
 - The registry auto-discovers tools via `pkgutil.iter_modules`
 - Do NOT add your module to `_SKIP_MODULE_NAMES` in `registry.py`
 - Module names ending in `_test` are auto-skipped by the registry
