@@ -20,9 +20,10 @@ Do NOT create new vendor tool directories directly under `tools/`.
 
 ## Two Registration Patterns
 
-### 1. Function + `@tool` decorator (preferred for simple tools)
+### 1. Function + `@tool` decorator (preferred for simple tools, required for vendor tools)
 
-Single file, auto-discovered by the registry.
+- Vendor tools: add `@tool`-decorated functions in `integrations/<vendor>/tools/__init__.py`
+- Non-vendor tools: single file under `tools/`
 
 ```python
 from tools.tool_decorator import tool
@@ -42,10 +43,9 @@ def my_tool_name(param: str) -> dict:
     ...
 ```
 
-### 2. `BaseTool` subclass (for complex tools with helpers)
+### 2. `BaseTool` subclass (for complex non-vendor tools with helpers)
 
-Flat file: `integrations/<vendor>/tools/__init__.py` containing all tools for that vendor.
-Instantiate each tool at module level.
+Package directory: `tools/<tool_name>/__init__.py`. Instantiate at module level.
 
 ```python
 from tools.base import BaseTool
