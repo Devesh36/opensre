@@ -18,8 +18,6 @@ integrations/
 ├── datadog/
 │   ├── tools/
 │   └── correlation/         # Vendor-specific sub-packages where needed
-├── sentry/
-│   └── tools/
 ├── <vendor>/            # One directory per vendor (60+ vendors)
 │   └── tools/             # Vendor tools live here
 ├── opensre_mcp.py       # MCP server implementation
