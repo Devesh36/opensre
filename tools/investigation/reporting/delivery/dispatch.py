@@ -272,9 +272,8 @@ def _dispatch_openclaw(
         logger.warning("[publish] openclaw delivery: no provider registered")
         return
 
-    openclaw_ctx = state.get("openclaw_context") or {}
     creds = dict(openclaw_creds)
-    creds["_conversation_id"] = openclaw_ctx.get("conversation_id", "")
+    creds["_openclaw_context"] = state.get("openclaw_context") or {}
     creds["_alert_name"] = str(state.get("alert_name", "")).strip() or "OpenSRE Investigation"
     creds["_root_cause"] = str(state.get("root_cause") or "").strip()
     creds["_remediation_steps"] = state.get("remediation_steps", [])

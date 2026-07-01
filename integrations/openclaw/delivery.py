@@ -125,17 +125,15 @@ def _dispatch_openclaw_report(
     """Adapter registered with the DeliveryRegistry for investigation dispatch."""
     from core.context.state import InvestigationState
 
+    raw_score = credentials.get("_validity_score")
+    validity_score = float(raw_score) if isinstance(raw_score, (int, float)) else 0.0
     state = InvestigationState(
         {
-            "openclaw_context": {
-                "conversation_id": credentials.get("_conversation_id", ""),
-            },
+            "openclaw_context": credentials.get("_openclaw_context") or {},
             "alert_name": credentials.get("_alert_name", "OpenSRE Investigation"),
             "root_cause": credentials.get("_root_cause", ""),
             "remediation_steps": credentials.get("_remediation_steps", []),
-            "validity_score": (
-                float(credentials["_validity_score"]) if "_validity_score" in credentials else 0.0
-            ),
+            "validity_score": validity_score,
         }
     )
     ok, error = send_openclaw_report(state, message, credentials)
