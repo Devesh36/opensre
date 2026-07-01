@@ -206,14 +206,13 @@ def _dispatch_telegram_report(
 
 
 def _register_delivery_provider() -> None:
-    try:
-        from core.domain.delivery import get_delivery_registry
+    from core.domain.delivery import get_delivery_registry
+    from core.domain.registry_utils import register_best_effort
 
-        registry = get_delivery_registry()
-        registry.register_delivery("telegram", _dispatch_telegram_report)
-    except Exception:
-        # Registration is best-effort; caller handles missing providers.
-        pass
+    register_best_effort(
+        "delivery.telegram",
+        lambda: get_delivery_registry().register_delivery("telegram", _dispatch_telegram_report),
+    )
 
 
 _register_delivery_provider()

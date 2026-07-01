@@ -38,6 +38,9 @@ def post_gitlab_mr_writeback(state: InvestigationState, report: str) -> None:
 
     try:
         registry = get_gitlab_provider_registry()
+        if registry.get_writeback() is None:
+            logger.warning("[publish] GitLab MR write-back: no provider registered")
+            return
         registry.post_writeback(dict(state), _build_mr_note(report))
         logger.info("[publish] GitLab MR note posted: project=%s mr_iid=%s", project_id, mr_iid)
     except Exception as exc:

@@ -102,8 +102,25 @@ def test_failure_does_not_propagate(state_with_gitlab):
         mock_logger.warning.assert_called_once()
 
 
+def test_no_op_when_writeback_provider_missing(state_with_gitlab):
+    mock_registry = MagicMock()
+    mock_registry.get_writeback.return_value = None
+    with (
+        patch.dict(os.environ, {"GITLAB_MR_WRITEBACK": "true"}),
+        patch(
+            "tools.investigation.reporting.gitlab_writeback.get_gitlab_provider_registry",
+            return_value=mock_registry,
+        ),
+        patch("tools.investigation.reporting.gitlab_writeback.logger") as mock_logger,
+    ):
+        post_gitlab_mr_writeback(state_with_gitlab, "report")
+        mock_registry.post_writeback.assert_not_called()
+        mock_logger.warning.assert_called_once()
+
+
 def test_happy_path_calls_post_writeback(state_with_gitlab):
     mock_registry = MagicMock()
+    mock_registry.get_writeback.return_value = lambda *_args, **_kwargs: None
     with (
         patch.dict(os.environ, {"GITLAB_MR_WRITEBACK": "true"}),
         patch(

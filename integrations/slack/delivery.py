@@ -354,7 +354,7 @@ def _dispatch_slack_report(
     credentials: dict[str, Any],
 ) -> tuple[bool, str]:
     """Adapter registered with the DeliveryRegistry for investigation dispatch."""
-    blocks = credentials.pop("_blocks", None)
+    blocks = credentials.get("_blocks")
     return send_slack_report(
         message,
         channel=credentials.get("channel_id"),
@@ -377,15 +377,15 @@ class _SlackReactionProvider:
 
 
 def _register_delivery_provider() -> None:
-    try:
-        from core.domain.delivery import get_delivery_registry
+    from core.domain.delivery import get_delivery_registry
+    from core.domain.registry_utils import register_best_effort
 
+    def _register() -> None:
         registry = get_delivery_registry()
         registry.register_delivery("slack", _dispatch_slack_report)
         registry.register_reaction("slack", _SlackReactionProvider())
-    except Exception:
-        # Registration is best-effort; caller handles missing providers.
-        pass
+
+    register_best_effort("delivery.slack", _register)
 
 
 _register_delivery_provider()

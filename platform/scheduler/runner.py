@@ -107,7 +107,8 @@ def _create_investigation_runner() -> SchedulerInvestigationRunner | None:
                 return run_investigation(alert_payload)  # type: ignore[arg-type,return-value]
 
         return _Runner()
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to build scheduler investigation runner: %s", exc)
         return None
 
 

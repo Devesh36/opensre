@@ -149,14 +149,13 @@ _register_with_core()
 
 
 def _register_cli_probe() -> None:
-    try:
-        from config.llm_auth._cli_probe import get_cli_probe_registry
+    from config.llm_auth._cli_probe import get_cli_probe_registry
+    from core.domain.registry_utils import register_best_effort
 
-        probe_registry = get_cli_probe_registry()
-        probe_registry.register("llm_cli", get_cli_provider_registration)
-    except Exception:
-        # Registration is best-effort; caller handles missing providers.
-        pass
+    register_best_effort(
+        "llm_cli.probe",
+        lambda: get_cli_probe_registry().register("llm_cli", get_cli_provider_registration),
+    )
 
 
 _register_cli_probe()

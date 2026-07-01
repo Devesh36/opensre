@@ -20,14 +20,13 @@ __all__ = [
 
 
 def _register_upstream_provider() -> None:
-    try:
-        from core.domain.upstream import get_upstream_provider_registry
+    from core.domain.registry_utils import register_best_effort
+    from core.domain.upstream import get_upstream_provider_registry
 
-        registry = get_upstream_provider_registry()
-        registry.register("datadog", build_datadog_provider)
-    except Exception:
-        # Registration is best-effort; caller handles missing providers.
-        pass
+    register_best_effort(
+        "upstream.datadog",
+        lambda: get_upstream_provider_registry().register("datadog", build_datadog_provider),
+    )
 
 
 _register_upstream_provider()

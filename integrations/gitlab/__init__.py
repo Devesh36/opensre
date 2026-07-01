@@ -276,14 +276,13 @@ def _gitlab_mr_writeback(state: dict[str, Any], message: str) -> None:
 
 
 def _register_gitlab_writeback() -> None:
-    try:
-        from core.domain.gitlab import get_gitlab_provider_registry
+    from core.domain.gitlab import get_gitlab_provider_registry
+    from core.domain.registry_utils import register_best_effort
 
-        registry = get_gitlab_provider_registry()
-        registry.register_writeback(_gitlab_mr_writeback)
-    except Exception:
-        # Registration is best-effort; caller handles missing providers.
-        pass
+    register_best_effort(
+        "gitlab.writeback",
+        lambda: get_gitlab_provider_registry().register_writeback(_gitlab_mr_writeback),
+    )
 
 
 _register_gitlab_writeback()

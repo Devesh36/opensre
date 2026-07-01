@@ -60,7 +60,16 @@ def pi_coding_workspace(env: Mapping[str, str] | None = None) -> str:
     return source.get("PI_CODING_WORKSPACE", "").strip() or os.getcwd()
 
 
-get_pi_coding_registry().register(_PiCodingAdapter())
+def _register_pi_coding_adapter() -> None:
+    from core.domain.registry_utils import register_best_effort
+
+    register_best_effort(
+        "pi_coding",
+        lambda: get_pi_coding_registry().register(_PiCodingAdapter()),
+    )
+
+
+_register_pi_coding_adapter()
 
 __all__ = [
     "PiCodingResult",

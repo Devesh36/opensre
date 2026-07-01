@@ -99,3 +99,30 @@ def get_github_registry() -> GitHubRegistry:
 def reset_github_registry() -> None:
     global _REGISTRY
     _REGISTRY = None
+
+
+def get_github_provider() -> GitHubProvider | None:
+    """Return the registered GitHub provider, if any."""
+    return get_github_registry().get()
+
+
+def github_repo_available(sources: dict[str, dict]) -> bool:
+    """Whether GitHub repo context is present and the provider can run."""
+    provider = get_github_provider()
+    if not provider:
+        return False
+    gh = sources.get("github", {})
+    return bool(
+        (provider.is_source_available(sources) or provider.resolve_token(None))
+        and gh.get("owner")
+        and gh.get("repo")
+    )
+
+
+def github_repo_extract_params(sources: dict[str, dict]) -> dict[str, Any]:
+    """Extract owner/repo and GitHub creds from investigation sources."""
+    provider = get_github_provider()
+    gh = sources.get("github", {})
+    if not gh or not provider:
+        return {}
+    return {"owner": gh.get("owner"), "repo": gh.get("repo"), **provider.extract_creds(gh)}

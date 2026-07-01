@@ -4,31 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.domain.github_provider import (
+    get_github_provider,
+    github_repo_available,
+    github_repo_extract_params,
+)
 from core.tool_framework.tool_decorator import tool
-
-
-def _community_available(sources: dict[str, dict]) -> bool:
-    from core.domain.github_provider import get_github_registry
-
-    provider = get_github_registry().get()
-    if not provider:
-        return False
-    gh = sources.get("github", {})
-    return bool(
-        (provider.is_source_available(sources) or provider.resolve_token(None))
-        and gh.get("owner")
-        and gh.get("repo")
-    )
-
-
-def _community_extract_params(sources: dict[str, dict]) -> dict[str, Any]:
-    from core.domain.github_provider import get_github_registry
-
-    provider = get_github_registry().get()
-    gh = sources.get("github", {})
-    if not gh or not provider:
-        return {}
-    return {"owner": gh.get("owner"), "repo": gh.get("repo"), **provider.extract_creds(gh)}
 
 
 @tool(
@@ -55,8 +36,8 @@ def _community_extract_params(sources: dict[str, dict]) -> dict[str, Any]:
         },
         "required": [],
     },
-    is_available=_community_available,
-    extract_params=_community_extract_params,
+    is_available=github_repo_available,
+    extract_params=github_repo_extract_params,
 )
 def summarize_community_followups(
     owner: str = "",
@@ -67,10 +48,9 @@ def summarize_community_followups(
     github_token: str | None = None,
     **_kwargs: Any,
 ) -> dict[str, Any]:
-    from core.domain.github_provider import get_github_registry
     from integrations.github.tools.workflow import summarize_community_followups_from_comments
 
-    provider = get_github_registry().get()
+    provider = get_github_provider()
     if not provider:
         return {
             "source": "github",

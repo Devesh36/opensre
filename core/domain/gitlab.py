@@ -21,6 +21,9 @@ class GitLabProviderRegistry:
     def register_writeback(self, func: GitLabWritebackFunc) -> None:
         self._writeback = func
 
+    def get_writeback(self) -> GitLabWritebackFunc | None:
+        return self._writeback
+
     def post_writeback(self, state: dict[str, Any], message: str) -> None:
         if self._writeback is not None:
             self._writeback(state, message)

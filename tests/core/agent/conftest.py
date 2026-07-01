@@ -39,6 +39,10 @@ _TURN_TEST_DEFAULT_ENV = {
     "OPENSRE_NO_TELEMETRY": "1",
     "OPENSRE_INVESTIGATION_SOURCE": "test",
 }
+_LLM_CREDENTIAL_ENV_KEYS = ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "LLM_PROVIDER")
+_WORKER_LLM_ENV_SNAPSHOT = {
+    key: os.environ[key] for key in _LLM_CREDENTIAL_ENV_KEYS if os.environ.get(key, "").strip()
+}
 
 
 def _skip_or_fail_live_llm(message: str) -> None:
@@ -109,6 +113,10 @@ def _resolve_live_llm_configuration(
     if request.node.get_closest_marker("live_llm") is None:
         yield
         return
+
+    for key, value in _WORKER_LLM_ENV_SNAPSHOT.items():
+        if not os.environ.get(key, "").strip():
+            monkeypatch.setenv(key, value)
 
     try:
         settings = resolve_llm_settings()

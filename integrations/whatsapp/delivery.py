@@ -113,14 +113,13 @@ def _dispatch_whatsapp_report(
 
 
 def _register_delivery_provider() -> None:
-    try:
-        from core.domain.delivery import get_delivery_registry
+    from core.domain.delivery import get_delivery_registry
+    from core.domain.registry_utils import register_best_effort
 
-        registry = get_delivery_registry()
-        registry.register_delivery("whatsapp", _dispatch_whatsapp_report)
-    except Exception:
-        # Registration is best-effort; caller handles missing providers.
-        pass
+    register_best_effort(
+        "delivery.whatsapp",
+        lambda: get_delivery_registry().register_delivery("whatsapp", _dispatch_whatsapp_report),
+    )
 
 
 _register_delivery_provider()

@@ -470,13 +470,10 @@ def resolve_management_service(service_name: str) -> str:
 
 
 def _register_family_key() -> None:
-    try:
-        from core.domain.family import register_family_key
+    from core.domain.family import register_family_key
+    from core.domain.registry_utils import register_best_effort
 
-        register_family_key(family_key)
-    except Exception:
-        # Registration is best-effort; caller handles missing providers.
-        pass
+    register_best_effort("integrations.family_key", lambda: register_family_key(family_key))
 
 
 _register_family_key()

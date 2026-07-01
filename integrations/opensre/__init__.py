@@ -33,6 +33,7 @@ __all__ = (
 
 def _register_with_core() -> None:
     from core.domain.opensre_scoring import get_opensre_scoring_registry
+    from core.domain.registry_utils import register_best_effort
     from integrations.opensre.hf_remote import (
         extract_scoring_points as _extract,
     )
@@ -47,7 +48,10 @@ def _register_with_core() -> None:
         def strip_scoring_points_from_alert(self, alert_payload: dict) -> dict:
             return _strip(alert_payload)
 
-    get_opensre_scoring_registry().register(_Provider())
+    register_best_effort(
+        "opensre.scoring",
+        lambda: get_opensre_scoring_registry().register(_Provider()),
+    )
 
 
 _register_with_core()

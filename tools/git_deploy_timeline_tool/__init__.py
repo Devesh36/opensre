@@ -120,9 +120,9 @@ def _summarize_commit(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 def _extract_params(sources: dict[str, dict]) -> dict[str, Any]:
-    from core.domain.github_provider import get_github_registry
+    from core.domain.github_provider import get_github_provider
 
-    provider = get_github_registry().get()
+    provider = get_github_provider()
     gh = sources["github"]
     raw_meta = sources.get("_meta")
     meta = raw_meta if isinstance(raw_meta, dict) else {}
@@ -138,9 +138,9 @@ def _extract_params(sources: dict[str, dict]) -> dict[str, Any]:
 
 
 def _is_available(sources: dict[str, dict]) -> bool:
-    from core.domain.github_provider import get_github_registry
+    from core.domain.github_provider import get_github_provider
 
-    provider = get_github_registry().get()
+    provider = get_github_provider()
     gh = sources.get("github", {})
     return bool(
         provider and provider.is_source_available(sources) and gh.get("owner") and gh.get("repo")
@@ -225,9 +225,9 @@ def get_git_deploy_timeline(
            and ``until`` are empty AND no explicit window-minutes override).
         4. ``DEFAULT_WINDOW_MINUTES`` (120 minutes before now).
     """
-    from core.domain.github_provider import get_github_registry
+    from core.domain.github_provider import get_github_provider
 
-    provider = get_github_registry().get()
+    provider = get_github_provider()
     if not provider:
         return {
             "source": "github",

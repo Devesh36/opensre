@@ -180,14 +180,13 @@ def _run_judge_provider(*, state: dict[str, Any], rubric: str) -> dict[str, Any]
 
 
 def _register_evaluation_provider() -> None:
-    try:
-        from core.domain.evaluation import get_evaluation_registry
+    from core.domain.evaluation import get_evaluation_registry
+    from core.domain.registry_utils import register_best_effort
 
-        registry = get_evaluation_registry()
-        registry.register("opensre", _run_judge_provider)
-    except Exception:
-        # Registration is best-effort; caller handles missing providers.
-        pass
+    register_best_effort(
+        "evaluation.opensre",
+        lambda: get_evaluation_registry().register("opensre", _run_judge_provider),
+    )
 
 
 _register_evaluation_provider()

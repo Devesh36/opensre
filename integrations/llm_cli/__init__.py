@@ -40,5 +40,7 @@ def _register_with_core() -> None:
     registry.register_adapter_factory("claude_code", _ClaudeCodeAdapter)
     registry.register_env_builder("claude_code", _build_env)
 
+    import integrations.llm_cli.registry as _registry  # noqa: F401
+
 
 _register_with_core()
