@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from integrations.github.client import GitHubApiError, GitHubRestClient, resolve_github_token
+
+if TYPE_CHECKING:
+    from integrations.github_mcp import GitHubMCPConfig
 
 __all__ = ["GitHubApiError", "GitHubRestClient", "resolve_github_token"]
 
@@ -56,7 +59,7 @@ def _register_with_core() -> None:
                 github_url, github_mode, github_token, github_command, github_args
             )
 
-        def call_mcp_tool(self, config: object, tool_name: str, arguments: dict) -> dict:
+        def call_mcp_tool(self, config: GitHubMCPConfig, tool_name: str, arguments: dict) -> dict:
             return _call_github_mcp_tool(config, tool_name, arguments)
 
         def list_work_items(

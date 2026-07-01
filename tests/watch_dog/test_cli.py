@@ -40,6 +40,7 @@ def test_watchdog_cli_maps_flags_to_config(monkeypatch: pytest.MonkeyPatch) -> N
         return 0
 
     monkeypatch.setattr("surfaces.cli.commands.watchdog.run_watchdog", _fake_run)
+    monkeypatch.setattr("surfaces.cli.commands.watchdog.load_credentials_from_env", lambda **_: {})
 
     result = CliRunner().invoke(
         watchdog_command,

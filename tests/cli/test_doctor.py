@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from surfaces.cli.commands import doctor
 
@@ -106,36 +106,40 @@ def test_check_llm_provider_non_secret_env_stays_env_only(monkeypatch) -> None:
 
 def test_check_llm_provider_claude_code_ready(monkeypatch) -> None:
     monkeypatch.setenv("LLM_PROVIDER", "claude-code")
-    reg = MagicMock()
-    reg.adapter_factory.return_value.detect.return_value = MagicMock(
-        installed=True,
-        bin_path="/usr/bin/claude",
-        logged_in=True,
-        detail="Authenticated via Claude subscription.",
-    )
-    monkeypatch.setattr(
-        "integrations.llm_cli.registry.get_cli_provider_registration",
-        lambda provider: reg if provider == "claude-code" else None,
-    )
-    ok, detail = doctor._check_llm_provider()
+    from config.llm_auth.credentials import CredentialStatus
+
+    with patch(
+        "config.llm_auth.credentials.status",
+        return_value=CredentialStatus(
+            provider="claude-code",
+            configured=True,
+            source="cli",
+            verified=True,
+            stale=False,
+            detail="Authenticated via Claude subscription.",
+        ),
+    ):
+        ok, detail = doctor._check_llm_provider()
     assert ok is True
     assert "auth=cli" in detail
 
 
 def test_check_llm_provider_claude_code_auth_unclear(monkeypatch) -> None:
     monkeypatch.setenv("LLM_PROVIDER", "claude-code")
-    reg = MagicMock()
-    reg.adapter_factory.return_value.detect.return_value = MagicMock(
-        installed=True,
-        bin_path="/usr/bin/claude",
-        logged_in=None,
-        detail="claude auth status failed: unknown command",
-    )
-    monkeypatch.setattr(
-        "integrations.llm_cli.registry.get_cli_provider_registration",
-        lambda provider: reg if provider == "claude-code" else None,
-    )
-    ok, detail = doctor._check_llm_provider()
+    from config.llm_auth.credentials import CredentialStatus
+
+    with patch(
+        "config.llm_auth.credentials.status",
+        return_value=CredentialStatus(
+            provider="claude-code",
+            configured=False,
+            source="none",
+            verified=False,
+            stale=False,
+            detail="claude auth status failed: unknown command",
+        ),
+    ):
+        ok, detail = doctor._check_llm_provider()
     assert ok is False
     assert "auth missing" in detail
     assert "unknown command" in detail
@@ -143,36 +147,40 @@ def test_check_llm_provider_claude_code_auth_unclear(monkeypatch) -> None:
 
 def test_check_llm_provider_cli_branch_follows_catalog_registry(monkeypatch) -> None:
     monkeypatch.setenv("LLM_PROVIDER", "grok-cli")
-    reg = MagicMock()
-    reg.adapter_factory.return_value.detect.return_value = MagicMock(
-        installed=True,
-        bin_path="/usr/bin/grok",
-        logged_in=True,
-        detail="CLI OK.",
-    )
-    monkeypatch.setattr(
-        "integrations.llm_cli.registry.get_cli_provider_registration",
-        lambda provider: reg if provider == "grok-cli" else None,
-    )
-    ok, detail = doctor._check_llm_provider()
+    from config.llm_auth.credentials import CredentialStatus
+
+    with patch(
+        "config.llm_auth.credentials.status",
+        return_value=CredentialStatus(
+            provider="grok-cli",
+            configured=True,
+            source="cli",
+            verified=True,
+            stale=False,
+            detail="CLI OK.",
+        ),
+    ):
+        ok, detail = doctor._check_llm_provider()
     assert ok is True
     assert "auth=cli" in detail
 
 
 def test_check_llm_provider_gemini_cli_ready(monkeypatch) -> None:
     monkeypatch.setenv("LLM_PROVIDER", "gemini-cli")
-    reg = MagicMock()
-    reg.adapter_factory.return_value.detect.return_value = MagicMock(
-        installed=True,
-        bin_path="/usr/bin/gemini",
-        logged_in=True,
-        detail="Authenticated via Gemini CLI.",
-    )
-    monkeypatch.setattr(
-        "integrations.llm_cli.registry.get_cli_provider_registration",
-        lambda provider: reg if provider == "gemini-cli" else None,
-    )
-    ok, detail = doctor._check_llm_provider()
+    from config.llm_auth.credentials import CredentialStatus
+
+    with patch(
+        "config.llm_auth.credentials.status",
+        return_value=CredentialStatus(
+            provider="gemini-cli",
+            configured=True,
+            source="cli",
+            verified=True,
+            stale=False,
+            detail="Authenticated via Gemini CLI.",
+        ),
+    ):
+        ok, detail = doctor._check_llm_provider()
     assert ok is True
     assert "auth=cli" in detail
 

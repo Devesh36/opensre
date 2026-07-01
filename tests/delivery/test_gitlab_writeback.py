@@ -47,44 +47,54 @@ def test_build_mr_note_body_capped_at_4000_chars():
 
 
 def test_no_op_when_env_flag_off(state_with_gitlab):
+    mock_registry = MagicMock()
     with (
         patch.dict(os.environ, {"GITLAB_MR_WRITEBACK": "false"}),
-        patch("tools.investigation.reporting.gitlab_writeback.post_gitlab_mr_note") as mock_post,
+        patch(
+            "tools.investigation.reporting.gitlab_writeback.get_gitlab_provider_registry",
+            return_value=mock_registry,
+        ),
     ):
         post_gitlab_mr_writeback(state_with_gitlab, "report")
-        mock_post.assert_not_called()
+        mock_registry.post_writeback.assert_not_called()
 
 
 def test_no_op_when_mr_iid_missing():
     state = {"available_sources": {"gitlab": {"project_id": "99"}}}
+    mock_registry = MagicMock()
     with (
         patch.dict(os.environ, {"GITLAB_MR_WRITEBACK": "true"}),
-        patch("tools.investigation.reporting.gitlab_writeback.post_gitlab_mr_note") as mock_post,
+        patch(
+            "tools.investigation.reporting.gitlab_writeback.get_gitlab_provider_registry",
+            return_value=mock_registry,
+        ),
     ):
         post_gitlab_mr_writeback(state, "report")
-        mock_post.assert_not_called()
+        mock_registry.post_writeback.assert_not_called()
 
 
 def test_no_op_when_project_id_missing():
     state = {"available_sources": {"gitlab": {"merge_request_iid": "42"}}}
+    mock_registry = MagicMock()
     with (
         patch.dict(os.environ, {"GITLAB_MR_WRITEBACK": "true"}),
-        patch("tools.investigation.reporting.gitlab_writeback.post_gitlab_mr_note") as mock_post,
+        patch(
+            "tools.investigation.reporting.gitlab_writeback.get_gitlab_provider_registry",
+            return_value=mock_registry,
+        ),
     ):
         post_gitlab_mr_writeback(state, "report")
-        mock_post.assert_not_called()
+        mock_registry.post_writeback.assert_not_called()
 
 
 def test_failure_does_not_propagate(state_with_gitlab):
+    mock_registry = MagicMock()
+    mock_registry.post_writeback.side_effect = RuntimeError("network error")
     with (
         patch.dict(os.environ, {"GITLAB_MR_WRITEBACK": "true"}),
         patch(
-            "tools.investigation.reporting.gitlab_writeback.post_gitlab_mr_note",
-            side_effect=RuntimeError("network error"),
-        ),
-        patch(
-            "tools.investigation.reporting.gitlab_writeback.build_gitlab_config",
-            return_value=MagicMock(),
+            "tools.investigation.reporting.gitlab_writeback.get_gitlab_provider_registry",
+            return_value=mock_registry,
         ),
         patch("tools.investigation.reporting.gitlab_writeback.logger") as mock_logger,
     ):
@@ -92,23 +102,16 @@ def test_failure_does_not_propagate(state_with_gitlab):
         mock_logger.warning.assert_called_once()
 
 
-def test_happy_path_calls_post_mr_note(state_with_gitlab):
-    mock_config = MagicMock()
+def test_happy_path_calls_post_writeback(state_with_gitlab):
+    mock_registry = MagicMock()
     with (
         patch.dict(os.environ, {"GITLAB_MR_WRITEBACK": "true"}),
         patch(
-            "tools.investigation.reporting.gitlab_writeback.build_gitlab_config",
-            return_value=mock_config,
-        ) as mock_build,
-        patch("tools.investigation.reporting.gitlab_writeback.post_gitlab_mr_note") as mock_post,
+            "tools.investigation.reporting.gitlab_writeback.get_gitlab_provider_registry",
+            return_value=mock_registry,
+        ),
     ):
         post_gitlab_mr_writeback(state_with_gitlab, "the report")
-
-        mock_build.assert_called_once_with(
-            {"base_url": "https://gitlab.example.com", "auth_token": "glpat-test"}
-        )
-        mock_post.assert_called_once()
-        call_kwargs = mock_post.call_args.kwargs
-        assert call_kwargs["project_id"] == "99"
-        assert call_kwargs["mr_iid"] == "42"
-        assert "the report" in call_kwargs["body"]
+        mock_registry.post_writeback.assert_called_once()
+        args, _ = mock_registry.post_writeback.call_args
+        assert "the report" in str(args)

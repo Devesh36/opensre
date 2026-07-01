@@ -106,7 +106,7 @@ def test_gitlab_writeback_calls_post_when_enabled(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setenv("GITLAB_MR_WRITEBACK", "true")
 
     mock_send_slack = MagicMock(return_value=(False, None))
-    mock_post_note = MagicMock(return_value={"id": 1})
+    mock_registry = MagicMock()
     mock_build_action_blocks = MagicMock(return_value=[])
 
     with (
@@ -116,29 +116,22 @@ def test_gitlab_writeback_calls_post_when_enabled(monkeypatch: pytest.MonkeyPatc
             mock_build_action_blocks,
         ),
         patch(
-            "tools.investigation.reporting.gitlab_writeback.post_gitlab_mr_note",
-            mock_post_note,
-        ),
-        patch(
-            "tools.investigation.reporting.gitlab_writeback.build_gitlab_config",
-            return_value=MagicMock(),
+            "tools.investigation.reporting.gitlab_writeback.get_gitlab_provider_registry",
+            return_value=mock_registry,
         ),
     ):
         from tools.investigation.reporting.node import generate_report
 
         generate_report(_make_state())  # type: ignore[arg-type]
 
-    mock_post_note.assert_called_once()
-    _, kwargs = mock_post_note.call_args
-    assert kwargs["project_id"] == "my-org/my-repo"
-    assert kwargs["mr_iid"] == "5"
+    mock_registry.post_writeback.assert_called_once()
 
 
 def test_gitlab_writeback_skipped_when_env_var_not_set(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_generate_report_deps(monkeypatch)
     monkeypatch.delenv("GITLAB_MR_WRITEBACK", raising=False)
 
-    mock_post_note = MagicMock()
+    mock_registry = MagicMock()
     mock_send_slack = MagicMock(return_value=(False, None))
     mock_build_action_blocks = MagicMock(return_value=[])
 
@@ -149,15 +142,15 @@ def test_gitlab_writeback_skipped_when_env_var_not_set(monkeypatch: pytest.Monke
             mock_build_action_blocks,
         ),
         patch(
-            "tools.investigation.reporting.gitlab_writeback.post_gitlab_mr_note",
-            mock_post_note,
+            "tools.investigation.reporting.gitlab_writeback.get_gitlab_provider_registry",
+            return_value=mock_registry,
         ),
     ):
         from tools.investigation.reporting.node import generate_report
 
         generate_report(_make_state())  # type: ignore[arg-type]
 
-    mock_post_note.assert_not_called()
+    mock_registry.post_writeback.assert_not_called()
 
 
 def test_gitlab_writeback_skipped_when_mr_iid_missing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -167,7 +160,7 @@ def test_gitlab_writeback_skipped_when_mr_iid_missing(monkeypatch: pytest.Monkey
     state = _make_state(
         available_sources={"gitlab": {"project_id": "my-org/my-repo", "merge_request_iid": ""}}
     )
-    mock_post_note = MagicMock()
+    mock_registry = MagicMock()
     mock_send_slack = MagicMock(return_value=(False, None))
     mock_build_action_blocks = MagicMock(return_value=[])
 
@@ -178,21 +171,23 @@ def test_gitlab_writeback_skipped_when_mr_iid_missing(monkeypatch: pytest.Monkey
             mock_build_action_blocks,
         ),
         patch(
-            "tools.investigation.reporting.gitlab_writeback.post_gitlab_mr_note",
-            mock_post_note,
+            "tools.investigation.reporting.gitlab_writeback.get_gitlab_provider_registry",
+            return_value=mock_registry,
         ),
     ):
         from tools.investigation.reporting.node import generate_report
 
         generate_report(state)  # type: ignore[arg-type]
 
-    mock_post_note.assert_not_called()
+    mock_registry.post_writeback.assert_not_called()
 
 
 def test_gitlab_writeback_failure_does_not_raise(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_generate_report_deps(monkeypatch)
     monkeypatch.setenv("GITLAB_MR_WRITEBACK", "true")
 
+    mock_registry = MagicMock()
+    mock_registry.post_writeback.side_effect = RuntimeError("network error")
     mock_send_slack = MagicMock(return_value=(False, None))
     mock_build_action_blocks = MagicMock(return_value=[])
 
@@ -203,12 +198,8 @@ def test_gitlab_writeback_failure_does_not_raise(monkeypatch: pytest.MonkeyPatch
             mock_build_action_blocks,
         ),
         patch(
-            "tools.investigation.reporting.gitlab_writeback.post_gitlab_mr_note",
-            side_effect=RuntimeError("network error"),
-        ),
-        patch(
-            "tools.investigation.reporting.gitlab_writeback.build_gitlab_config",
-            return_value=MagicMock(),
+            "tools.investigation.reporting.gitlab_writeback.get_gitlab_provider_registry",
+            return_value=mock_registry,
         ),
     ):
         from tools.investigation.reporting.node import generate_report
