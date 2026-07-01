@@ -25,10 +25,11 @@ import re
 import subprocess
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import IO
 
+from core.domain.pi_coding import PiCodingResult
 from integrations.llm_cli.binary_resolver import (
     candidate_binary_names,
     default_cli_fallback_paths,
@@ -63,20 +64,6 @@ _LIMIT_MARKERS: tuple[str, ...] = (
     '"code":413',
     '"code": 413',
 )
-
-
-@dataclass(frozen=True)
-class PiCodingResult:
-    """Outcome of a Pi coding task run."""
-
-    success: bool
-    summary: str
-    changed_files: list[str] = field(default_factory=list)
-    diff: str = ""
-    returncode: int = 0
-    timed_out: bool = False
-    error: str | None = None
-    diff_truncated: bool = False
 
 
 @dataclass(frozen=True)

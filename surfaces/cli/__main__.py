@@ -470,6 +470,11 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     install_product_adapters()
+
+    # Populate the CLI provider registry so CLI-backed LLM providers
+    # (codex, cursor, copilot, grok, etc.) resolve during production startup.
+    import integrations.llm_cli  # noqa: F401
+    import integrations.llm_cli.registry  # noqa: F401
     from platform.terminal.prompt_support import (
         install_questionary_ctrl_c_double_exit,
         install_questionary_escape_cancel,

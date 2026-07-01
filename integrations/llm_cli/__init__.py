@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from integrations.llm_cli.base import CLIInvocation, CLIProbe
+from integrations.llm_cli.base import CLIInvocation, CLIProbe, LLMCLIAdapter
 from integrations.llm_cli.errors import CLIAuthenticationRequired
 from integrations.llm_cli.runner import CLIBackedLLMClient
 
@@ -15,11 +15,11 @@ def _register_with_core() -> None:
     registry = get_cli_provider_registry()
 
     def _client_factory(
-        adapter: object,
+        adapter: LLMCLIAdapter,
         *,
         model: str | None = None,
-        max_tokens: int | None = None,
-        model_type: object = None,
+        max_tokens: int = 1024,
+        model_type: str = "reasoning",
     ) -> CLIBackedLLMClient:
         return CLIBackedLLMClient(
             adapter, model=model, max_tokens=max_tokens, model_type=model_type
