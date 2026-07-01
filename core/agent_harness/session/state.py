@@ -374,8 +374,11 @@ class ReplSession:
         if not scenario_id:
             self.last_synthetic_observation_path = None
             return
+        # ``config`` is the shared layer both ``core`` and ``surfaces`` can
+        # depend on; the constant used to live in ``surfaces.cli.tests.discover``
+        # but that direct edge is a T-4 layering violation (issue #3352).
         try:
-            from surfaces.cli.tests.discover import SYNTHETIC_SCENARIOS_DIR
+            from config.synthetic_paths import SYNTHETIC_SCENARIOS_DIR
         except Exception:
             self.last_synthetic_observation_path = None
             return
