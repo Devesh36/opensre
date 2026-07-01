@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import patch
 
+from core.domain.github_provider import get_github_registry
 from core.execution import (
     BeforeToolCallResult,
     ToolExecutionHooks,
@@ -155,14 +156,16 @@ def test_summarize_github_pr_status_reports_unknown_mergeability() -> None:
 
 
 def test_generate_work_status_report_surfaces_fetch_errors() -> None:
+    provider = get_github_registry().get()
+    assert provider is not None
     with (
-        patch(
-            "integrations.github.tools.work_status.list_github_work_items",
+        patch.object(
+            provider,
+            "list_work_items",
             return_value={"available": False, "error": "boom", "items": []},
         ),
-        patch(
-            "integrations.github.tools.work_status.summarize_github_pr_status",
-            return_value={"available": True, "pull_requests": []},
+        patch.object(
+            provider, "summarize_pr_status", return_value={"available": True, "pull_requests": []}
         ),
     ):
         result = generate_work_status_report(owner="o", repo="r", github_token="tok")

@@ -5,13 +5,17 @@ from typing import Any, Protocol, runtime_checkable
 
 @runtime_checkable
 class GitHubProvider(Protocol):
-    def resolve_token(self, github_token: str | None = None) -> str: ...
+    def resolve_token(self, github_token: str | None = None) -> str:
+        pass
 
-    def extract_creds(self, gh_source: dict[str, Any]) -> dict[str, Any]: ...
+    def extract_creds(self, gh_source: dict[str, Any]) -> dict[str, Any]:
+        pass
 
-    def is_source_available(self, sources: dict[str, dict]) -> bool: ...
+    def is_source_available(self, sources: dict[str, dict]) -> bool:
+        pass
 
-    def normalize_tool_result(self, result: dict[str, Any]) -> dict[str, Any]: ...
+    def normalize_tool_result(self, result: dict[str, Any]) -> dict[str, Any]:
+        pass
 
     def resolve_mcp_config(
         self,
@@ -20,16 +24,55 @@ class GitHubProvider(Protocol):
         github_token: str | None = None,
         github_command: str | None = None,
         github_args: list[str] | None = None,
-    ) -> Any | None: ...
+    ) -> Any | None:
+        pass
 
     def call_mcp_tool(
         self, config: Any, tool_name: str, arguments: dict[str, Any]
-    ) -> dict[str, Any]: ...
+    ) -> dict[str, Any]:
+        pass
 
-    def create_rest_client(self, token: str | None = None) -> Any: ...
+    def create_rest_client(self, token: str | None = None) -> Any:
+        pass
+
+    def list_work_items(
+        self,
+        owner: str,
+        repo: str,
+        state: str = "open",
+        labels: str = "",
+        include_prs: bool = False,
+        per_page: int = 50,
+        github_token: str | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        pass
+
+    def summarize_pr_status(
+        self,
+        owner: str,
+        repo: str,
+        state: str = "open",
+        per_page: int = 30,
+        include_checks: bool = True,
+        github_token: str | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        pass
+
+    def build_work_status_report(
+        self,
+        *,
+        work_items: Any,
+        pull_requests: Any,
+        context: str = "today",
+        errors: list[str] | None = None,
+    ) -> Any:
+        pass
 
     @property
-    def api_error_type(self) -> type[Exception]: ...
+    def api_error_type(self) -> type[Exception]:
+        pass
 
 
 class GitHubRegistry:

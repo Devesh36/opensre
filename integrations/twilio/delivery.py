@@ -144,6 +144,7 @@ def _register_delivery_provider() -> None:
         registry = get_delivery_registry()
         registry.register_delivery("twilio", _dispatch_twilio_sms_report)
     except Exception:
+        # Registration is best-effort; caller handles missing providers.
         pass
 
 

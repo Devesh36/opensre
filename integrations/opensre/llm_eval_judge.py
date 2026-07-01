@@ -186,6 +186,7 @@ def _register_evaluation_provider() -> None:
         registry = get_evaluation_registry()
         registry.register("opensre", _run_judge_provider)
     except Exception:
+        # Registration is best-effort; caller handles missing providers.
         pass
 
 

@@ -5,9 +5,11 @@ from typing import Any, Protocol, runtime_checkable
 
 @runtime_checkable
 class OpenSreScoringProvider(Protocol):
-    def extract_scoring_points(self, alert_payload: dict[str, Any]) -> str: ...
+    def extract_scoring_points(self, alert_payload: dict[str, Any]) -> str:
+        pass
 
-    def strip_scoring_points_from_alert(self, alert_payload: dict[str, Any]) -> dict[str, Any]: ...
+    def strip_scoring_points_from_alert(self, alert_payload: dict[str, Any]) -> dict[str, Any]:
+        pass
 
 
 class OpenSreScoringRegistry:

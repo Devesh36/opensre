@@ -475,6 +475,7 @@ def _register_family_key() -> None:
 
         register_family_key(family_key)
     except Exception:
+        # Registration is best-effort; caller handles missing providers.
         pass
 
 

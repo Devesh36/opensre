@@ -110,9 +110,36 @@ def build_action_blocks(
     investigation_url: str, investigation_id: str | None = None
 ) -> list[dict[str, Any]]:
     """Build Slack Block Kit action blocks with interactive buttons."""
-    from tools.investigation.reporting.delivery.slack import build_action_blocks as _bab
-
-    return _bab(investigation_url, investigation_id)
+    feedback_options = [
+        {
+            "text": {"type": "plain_text", "text": "\U0001f44d Accurate"},
+            "value": f"accurate|{investigation_id or ''}",
+        },
+        {
+            "text": {"type": "plain_text", "text": "\U0001f914 Partially accurate"},
+            "value": f"partial|{investigation_id or ''}",
+        },
+        {
+            "text": {"type": "plain_text", "text": "\U0001f44e Inaccurate"},
+            "value": f"inaccurate|{investigation_id or ''}",
+        },
+    ]
+    elements: list[dict[str, Any]] = [
+        {
+            "type": "button",
+            "text": {"type": "plain_text", "text": "View Details in Tracer"},
+            "url": investigation_url,
+            "style": "primary",
+            "action_id": "view_investigation",
+        },
+        {
+            "type": "static_select",
+            "placeholder": {"type": "plain_text", "text": "\U0001f4dd Give Feedback"},
+            "action_id": "give_feedback",
+            "options": feedback_options,
+        },
+    ]
+    return [{"type": "actions", "elements": elements}]
 
 
 def _merge_payload(
@@ -393,6 +420,7 @@ def _register_delivery_provider() -> None:
         registry.register_delivery("slack", _dispatch_slack_report)
         registry.register_reaction("slack", _SlackReactionProvider())
     except Exception:
+        # Registration is best-effort; caller handles missing providers.
         pass
 
 

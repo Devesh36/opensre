@@ -11,7 +11,6 @@ from platform.scheduler.credentials import (
     resolve_slack_credentials,
     resolve_telegram_credentials,
 )
-from platform.scheduler.ports import SchedulerInvestigationRunner
 from platform.scheduler.tasks import build_message
 from platform.scheduler.types import Provider, ScheduledTask, TaskStatus
 
@@ -24,7 +23,6 @@ _HTML_TAG_RE = re.compile(r"<[^>]+>")
 def execute_task(
     task: ScheduledTask,
     fire_time: str,
-    investigation_runner: SchedulerInvestigationRunner | None = None,
 ) -> bool:
     """Execute a scheduled task with claim-based dedup.
 
@@ -51,7 +49,7 @@ def execute_task(
 
     # Build the message
     try:
-        message = build_message(task, investigation_runner=investigation_runner)
+        message = build_message(task)
     except RuntimeError as exc:
         # Pipeline failures — record without leaking details to chat
         _record_failure(task, fire_time, str(exc))

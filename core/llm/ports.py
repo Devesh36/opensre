@@ -8,7 +8,7 @@ without direct imports of ``integrations.llm_cli``.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol
 
 
 class CLIAdapter(Protocol):

@@ -133,7 +133,9 @@ def _dispatch_openclaw_report(
             "alert_name": credentials.get("_alert_name", "OpenSRE Investigation"),
             "root_cause": credentials.get("_root_cause", ""),
             "remediation_steps": credentials.get("_remediation_steps", []),
-            "validity_score": credentials.get("_validity_score", None),
+            "validity_score": (
+                float(credentials["_validity_score"]) if "_validity_score" in credentials else 0.0
+            ),
         }
     )
     ok, error = send_openclaw_report(state, message, credentials)
@@ -147,6 +149,7 @@ def _register_delivery_provider() -> None:
         registry = get_delivery_registry()
         registry.register_delivery("openclaw", _dispatch_openclaw_report)
     except Exception:
+        # Registration is best-effort; caller handles missing providers.
         pass
 
 

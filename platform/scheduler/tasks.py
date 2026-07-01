@@ -33,15 +33,16 @@ def set_investigation_runner(runner: SchedulerInvestigationRunner | None) -> Non
     _investigation_runner = runner
 
 
-def build_message(
-    task: ScheduledTask,
-    *,
-    investigation_runner: SchedulerInvestigationRunner | None = None,
-) -> str:
+def build_message(task: ScheduledTask) -> str:
     """Build the report message for a scheduled task based on its kind.
 
     Returns the formatted message string. Raises RuntimeError on unrecoverable
     pipeline failures for kinds that invoke the investigation graph.
+
+    The investigation runner is injected at startup via ``set_investigation_runner``
+    so private builders reference the module-level ``_investigation_runner``
+    rather than receiving it as a parameter (which would require forwarding
+    it through every dispatch function).
     """
     builders = {
         TaskKind.DAILY_SUMMARY: _build_daily_summary,
@@ -67,7 +68,7 @@ def _build_daily_summary(task: ScheduledTask) -> str:
     window_start = now - timedelta(hours=task.window_hours)
 
     try:
-        runner = investigation_runner or _investigation_runner
+        runner = _investigation_runner
         alert_payload = {
             "source": "scheduled_daily_summary",
             "task_id": task.id,
@@ -79,7 +80,6 @@ def _build_daily_summary(task: ScheduledTask) -> str:
         result = runner.run(alert_payload) if runner is not None else None
         if result and result.get("report"):
             return str(result["report"])
-        # Pipeline ran successfully but returned no report — genuinely quiet
     except Exception as exc:
         logger.error("Daily summary pipeline query failed for task %s: %s", task.id, exc)
         raise RuntimeError(
@@ -107,7 +107,7 @@ def _build_weekly_audit(task: ScheduledTask) -> str:
     window_start = now - timedelta(hours=task.window_hours)
 
     try:
-        runner = investigation_runner or _investigation_runner
+        runner = _investigation_runner
         alert_payload = {
             "source": "scheduled_weekly_audit",
             "task_id": task.id,
@@ -142,7 +142,7 @@ def _build_incident_window_replay(task: ScheduledTask) -> str:
     without leaking exception details to the chat.
     """
     try:
-        runner = investigation_runner or _investigation_runner
+        runner = _investigation_runner
         alert_payload = {
             "source": "scheduled_replay",
             "task_id": task.id,
@@ -175,7 +175,7 @@ def _build_synthetic_run(task: ScheduledTask) -> str:
     now = datetime.now(UTC)
 
     try:
-        runner = investigation_runner or _investigation_runner
+        runner = _investigation_runner
         alert_payload = {
             "source": "scheduled_synthetic",
             "task_id": task.id,
@@ -207,7 +207,7 @@ def _build_custom_investigation(task: ScheduledTask) -> str:
     without leaking exception details to the chat.
     """
     try:
-        runner = investigation_runner or _investigation_runner
+        runner = _investigation_runner
 
         # Strip credential keys before passing params to the pipeline
         safe_params = {k: v for k, v in task.params.items() if k not in _CREDENTIAL_KEYS}

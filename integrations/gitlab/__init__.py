@@ -282,6 +282,7 @@ def _register_gitlab_writeback() -> None:
         registry = get_gitlab_provider_registry()
         registry.register_writeback(_gitlab_mr_writeback)
     except Exception:
+        # Registration is best-effort; caller handles missing providers.
         pass
 
 

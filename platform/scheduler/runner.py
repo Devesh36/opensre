@@ -104,7 +104,7 @@ def _create_investigation_runner() -> SchedulerInvestigationRunner | None:
 
         class _Runner:
             def run(self, alert_payload: dict[str, object]) -> dict[str, object] | None:
-                return run_investigation(alert_payload)  # type: ignore[arg-type]
+                return run_investigation(alert_payload)  # type: ignore[arg-type,return-value]
 
         return _Runner()
     except Exception:
@@ -190,8 +190,10 @@ def run_task_now(task_id: str) -> bool:
         return False
 
     runner = _create_investigation_runner()
+    if runner is not None:
+        set_investigation_runner(runner)
     fire_time = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    return execute_task(task, fire_time, investigation_runner=runner)
+    return execute_task(task, fire_time)
 
 
 __all__ = ["run_task_now", "start_scheduler"]

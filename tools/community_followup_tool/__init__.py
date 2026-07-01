@@ -68,7 +68,6 @@ def summarize_community_followups(
     **_kwargs: Any,
 ) -> dict[str, Any]:
     from core.domain.github_provider import get_github_registry
-
     from integrations.github.tools.workflow import summarize_community_followups_from_comments
 
     provider = get_github_registry().get()

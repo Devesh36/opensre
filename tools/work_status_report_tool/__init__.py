@@ -69,30 +69,31 @@ def generate_work_status_report(
 ) -> dict[str, Any]:
     from core.domain.github_provider import get_github_registry
 
-    from integrations.github.tools.work_status import (
-        list_github_work_items,
-        summarize_github_pr_status,
-    )
-    from integrations.github.tools.workflow import build_work_status_report
-
     provider = get_github_registry().get()
     token = provider.resolve_token(github_token) if provider else github_token
 
     errors: list[str] = []
-    if work_items is None and owner and repo:
-        work_result = list_github_work_items(owner=owner, repo=repo, github_token=token)
+    if work_items is None and owner and repo and provider is not None:
+        work_result = provider.list_work_items(owner=owner, repo=repo, github_token=token)
         if not work_result.get("available", False):
             errors.append(f"work_items: {work_result.get('error', 'unavailable')}")
         work_items = list(work_result.get("items", []))
-    if pull_requests is None and owner and repo:
-        pr_result = summarize_github_pr_status(owner=owner, repo=repo, github_token=token)
+    if pull_requests is None and owner and repo and provider is not None:
+        pr_result = provider.summarize_pr_status(owner=owner, repo=repo, github_token=token)
         if not pr_result.get("available", False):
             errors.append(f"pull_requests: {pr_result.get('error', 'unavailable')}")
         pull_requests = list(pr_result.get("pull_requests", []))
-    report = build_work_status_report(
-        work_items=work_items or [],
-        pull_requests=pull_requests or [],
-        context=context,
-        errors=errors,
-    )
-    return {"source": "github", **report.to_dict()}
+    if provider is not None:
+        report = provider.build_work_status_report(
+            work_items=work_items or [],
+            pull_requests=pull_requests or [],
+            context=context,
+            errors=errors,
+        )
+        return {"source": "github", **report.to_dict()}
+
+    return {
+        "source": "github",
+        "available": False,
+        "error": "GitHub provider is not configured.",
+    }

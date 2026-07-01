@@ -33,9 +33,10 @@ __all__ = (
 
 def _register_with_core() -> None:
     from core.domain.opensre_scoring import get_opensre_scoring_registry
-
     from integrations.opensre.hf_remote import (
         extract_scoring_points as _extract,
+    )
+    from integrations.opensre.hf_remote import (
         strip_scoring_points_from_alert as _strip,
     )
 

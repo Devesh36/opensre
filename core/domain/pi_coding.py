@@ -18,9 +18,11 @@ class PiCodingResult:
 
 @runtime_checkable
 class PiCodingProvider(Protocol):
-    def is_enabled(self) -> bool: ...
+    def is_enabled(self) -> bool:
+        pass
 
-    def verify(self) -> tuple[bool, str]: ...
+    def verify(self) -> tuple[bool, str]:
+        pass
 
     def run_task(
         self,
@@ -29,7 +31,8 @@ class PiCodingProvider(Protocol):
         workspace: str,
         model: str | None,
         timeout_sec: float,
-    ) -> PiCodingResult: ...
+    ) -> PiCodingResult:
+        pass
 
 
 class PiCodingRegistry:

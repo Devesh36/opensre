@@ -7,10 +7,9 @@ from direct imports of vendor correlation modules.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Protocol, runtime_checkable
+from typing import Any
 
-if True:
-    UpstreamProviderFactory = Callable[..., Any]
+UpstreamProviderFactory = Callable[..., Any]
 
 
 class UpstreamProviderRegistry:

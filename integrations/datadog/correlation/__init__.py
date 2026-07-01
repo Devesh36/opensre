@@ -26,6 +26,7 @@ def _register_upstream_provider() -> None:
         registry = get_upstream_provider_registry()
         registry.register("datadog", build_datadog_provider)
     except Exception:
+        # Registration is best-effort; caller handles missing providers.
         pass
 
 
