@@ -45,7 +45,7 @@ class UpstreamProviderBuilder:
         candidate_services: tuple[str, ...],
     ) -> UpstreamEvidenceProvider | None:
         return self.builder(
-            datadog_config=integration_config,
+            integration_config=integration_config,
             target_resource=target_resource,
             candidate_services=candidate_services,
         )

@@ -24,7 +24,7 @@ from platform.observability import (
 from platform.observability import (
     get_progress_tracker as get_tracker,
 )
-from platform.reporting.slack_reactions import get_slack_reactions_port
+from platform.reporting.slack_reactions import SlackReactionsPort, get_slack_reactions_port
 from tools.investigation.reporting.delivery.bootstrap import (
     ensure_delivery_adapters_registered,
 )
@@ -203,7 +203,7 @@ def _handle_start_reaction(state: InvestigationState) -> None:
     port.add_reaction("eyes", channel, timestamp, token)
 
 
-def _resolve_slack_reactions_port() -> Any:
+def _resolve_slack_reactions_port() -> SlackReactionsPort | None:
     """Return the currently registered Slack reactions port, loading adapters on demand.
 
     The delivery bootstrap is idempotent and cheap; calling it here guarantees

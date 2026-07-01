@@ -34,7 +34,8 @@ class InvestigationRunner(Protocol):
     so the executor records ``FAILED`` in the run log.
     """
 
-    def __call__(self, alert_payload: AlertPayload) -> InvestigationResult | None: ...
+    def __call__(self, alert_payload: AlertPayload) -> InvestigationResult | None:
+        """Run the investigation pipeline for ``alert_payload``."""
 
 
 class InvestigationRunnerNotRegisteredError(RuntimeError):

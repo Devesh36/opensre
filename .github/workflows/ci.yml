@@ -236,21 +236,27 @@ jobs:
       - name: Run tests
         env:
           COVERAGE_FILE: .coverage.${{ matrix.shard }}
-        run: >-
-          uv run python -m pytest -n auto -v
-          ${{ matrix.pytest_paths }}
-          --cov=config
-          --cov=core
-          --cov=infra.deployment
-          --cov=integrations
-          --cov=platform
-          --cov=surfaces
-          --cov=tools
-          --cov-report=
-          --ignore=tests/e2e/kubernetes_local_alert_simulation
-          --ignore=tests/synthetic
-          ${{ matrix.extra_pytest_args || '' }}
-          -m "not synthetic"
+        run: |
+          MARKERS="not synthetic"
+          # Fork PRs do not receive repository secrets, so live_llm turn
+          # contracts would fail credential preflight (see interactive-shell-live.yml).
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.pull_request.head.repo.fork }}" = "true" ]; then
+            MARKERS="${MARKERS} and not live_llm"
+          fi
+          uv run python -m pytest -n auto -v \
+            ${{ matrix.pytest_paths }} \
+            --cov=config \
+            --cov=core \
+            --cov=infra.deployment \
+            --cov=integrations \
+            --cov=platform \
+            --cov=surfaces \
+            --cov=tools \
+            --cov-report= \
+            --ignore=tests/e2e/kubernetes_local_alert_simulation \
+            --ignore=tests/synthetic \
+            ${{ matrix.extra_pytest_args || '' }} \
+            -m "${MARKERS}"
 
       - name: Upload shard coverage data
         if: >-
