@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from collections.abc import Iterator
@@ -38,6 +39,8 @@ from core.llm.usage import UsageHook, emit_usage, set_usage_hook
 
 if TYPE_CHECKING:
     from core.llm.sdk.llm_clients import BedrockLLMClient, LLMClient, OpenAILLMClient
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "LLMClient",
@@ -189,6 +192,13 @@ def _create_llm_client(model_type: ModelType) -> _LLMClientType:
         from core.llm.ports import get_cli_provider_registry
 
         factory = get_cli_provider_registry().get_client_factory("CLIBackedLLMClient")
+        if factory is None:
+            logger.warning(
+                "CLIBackedLLMClient factory not registered for provider %r — "
+                "falling through to next transport. Ensure integrations.llm_cli is imported "
+                "at startup.",
+                runtime_provider,
+            )
         if factory is not None:
             model_name = os.getenv(cli_reg.model_env_key, "").strip() or None
             return factory(

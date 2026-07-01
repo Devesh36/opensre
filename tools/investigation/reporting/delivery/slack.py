@@ -72,6 +72,11 @@ def deliver_slack_report(
 
     providers = _slack_delivery_registry()
     if providers is None:
+        if thread_ts:
+            raise RuntimeError(
+                "[publish] Slack delivery failed: no provider registered, "
+                f"channel={channel}, thread_ts={thread_ts}"
+            )
         logger.warning("[publish] Slack delivery: no provider registered")
         return
     delivery, reaction = providers
