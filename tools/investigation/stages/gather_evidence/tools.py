@@ -151,7 +151,7 @@ def build_connected_tool_context(
 ) -> dict[str, Any]:
     from pydantic import BaseModel
 
-    from integrations.registry import family_key
+    from core.domain.family import family_key
 
     connected_integrations = sorted(
         key

@@ -29,3 +29,24 @@ __all__ = (
     "stream_opensre_query_alerts",
     "strip_scoring_points_from_alert",
 )
+
+
+def _register_with_core() -> None:
+    from core.domain.opensre_scoring import get_opensre_scoring_registry
+
+    from integrations.opensre.hf_remote import (
+        extract_scoring_points as _extract,
+        strip_scoring_points_from_alert as _strip,
+    )
+
+    class _Provider:
+        def extract_scoring_points(self, alert_payload: dict) -> str:
+            return _extract(alert_payload)
+
+        def strip_scoring_points_from_alert(self, alert_payload: dict) -> dict:
+            return _strip(alert_payload)
+
+    get_opensre_scoring_registry().register(_Provider())
+
+
+_register_with_core()

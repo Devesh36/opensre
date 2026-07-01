@@ -562,13 +562,16 @@ class CLIBackedAgentClient:
     )
 
     def __init__(self, adapter: Any, *, model: str | None = None) -> None:
-        from integrations.llm_cli.runner import CLIBackedLLMClient
+        from core.llm.ports import get_cli_provider_registry
 
+        factory = get_cli_provider_registry().get_client_factory("CLIBackedLLMClient")
+        if factory is None:
+            raise RuntimeError("CLIBackedLLMClient factory not registered")
         self._adapter = adapter
         self._model = model
         # Reuse one subprocess client so the 45s probe cache in CLIBackedLLMClient
         # applies across ReAct iterations instead of re-probing every invoke.
-        self._cli_client = CLIBackedLLMClient(adapter, model=self._model)
+        self._cli_client = factory(adapter, model=self._model)
 
     def tool_schemas(self, tools: list[Any]) -> list[dict[str, Any]]:
         # Return the same dicts — used only to pass back into invoke() below.
@@ -584,7 +587,9 @@ class CLIBackedAgentClient:
         system: str | None = None,
         tools: list[dict[str, Any]] | None = None,
     ) -> AgentLLMResponse:
-        from integrations.llm_cli.text import flatten_messages_to_prompt
+        from core.llm.ports import get_cli_provider_registry
+
+        prompt_text = get_cli_provider_registry().flatten_messages(messages)
 
         tool_block = ""
         if tools:
@@ -593,7 +598,7 @@ class CLIBackedAgentClient:
 
         system_block = f"System: {system}\n" if system else ""
         instruction = self._TOOL_CALL_INSTRUCTION + tool_block
-        prompt = f"{system_block}{instruction}\n\n{flatten_messages_to_prompt(messages)}"
+        prompt = f"{system_block}{instruction}\n\n{prompt_text}"
 
         response = self._cli_client.invoke(prompt)
         text = response.content.strip()

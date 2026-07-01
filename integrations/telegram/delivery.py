@@ -195,3 +195,24 @@ def send_telegram_report(
         reply_markup=reply_markup,
     )
     return (True, "") if post_success else (False, error)
+
+
+def _dispatch_telegram_report(
+    message: str,
+    credentials: dict[str, Any],
+) -> tuple[bool, str]:
+    """Adapter registered with the DeliveryRegistry for investigation dispatch."""
+    return send_telegram_report(message, credentials)
+
+
+def _register_delivery_provider() -> None:
+    try:
+        from core.domain.delivery import get_delivery_registry
+
+        registry = get_delivery_registry()
+        registry.register_delivery("telegram", _dispatch_telegram_report)
+    except Exception:
+        pass
+
+
+_register_delivery_provider()

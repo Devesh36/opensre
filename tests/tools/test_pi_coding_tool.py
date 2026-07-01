@@ -8,13 +8,21 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from integrations.pi import PiCodingResult
+from core.domain.pi_coding import PiCodingResult, get_pi_coding_registry, reset_pi_coding_registry
 from tools.pi_coding_tool import PiCodingTool, pi_coding_task
 from tools.pi_coding_tool.errors import PiCodingError
 from tools.pi_coding_tool.validation import validate_model, validate_task, validate_workspace
 
-_VERIFY = "tools.pi_coding_tool.runner.verify_pi_coding"
-_RUN = "tools.pi_coding_tool.runner.run_pi_coding_task"
+
+@pytest.fixture(autouse=True)
+def _clean_registry() -> None:
+    reset_pi_coding_registry()
+
+
+def _mock_provider() -> MagicMock:
+    provider = MagicMock()
+    get_pi_coding_registry().register(provider)
+    return provider
 
 
 # --------------------------------------------------------------------------- #
@@ -87,18 +95,19 @@ def test_run_invalid_task() -> None:
     assert out["error_kind"] == "invalid_input"
 
 
-@patch(_VERIFY, return_value=(False, "pi not installed"))
-def test_run_cli_unavailable(_mock_verify: MagicMock, tmp_path: Path) -> None:
+def test_run_cli_unavailable(tmp_path: Path) -> None:
+    provider = _mock_provider()
+    provider.verify.return_value = (False, "pi not installed")
     with patch.dict(os.environ, {"PI_CODING_ENABLED": "1"}, clear=False):
         out = pi_coding_task.run(task="fix it", workspace=str(tmp_path))
     assert out["success"] is False
     assert out["error_kind"] == "cli_unavailable"
 
 
-@patch(_RUN)
-@patch(_VERIFY, return_value=(True, "ok"))
-def test_run_success(_mock_verify: MagicMock, mock_run: MagicMock, tmp_path: Path) -> None:
-    mock_run.return_value = PiCodingResult(
+def test_run_success(tmp_path: Path) -> None:
+    provider = _mock_provider()
+    provider.verify.return_value = (True, "ok")
+    provider.run_task.return_value = PiCodingResult(
         success=True,
         summary="edited foo.py",
         changed_files=["foo.py"],
@@ -113,33 +122,33 @@ def test_run_success(_mock_verify: MagicMock, mock_run: MagicMock, tmp_path: Pat
     assert out["error_kind"] is None
     assert out["changed_files"] == ["foo.py"]
     assert "diff --git" in out["diff"]
-    kwargs = mock_run.call_args.kwargs
+    kwargs = provider.run_task.call_args.kwargs
     assert kwargs["workspace"] == str(tmp_path)
     assert kwargs["model"] == "groq/llama-3.1-8b-instant"
 
 
-@patch(_RUN)
-@patch(_VERIFY, return_value=(True, "ok"))
-def test_run_error_kinds(_mock_verify: MagicMock, mock_run: MagicMock, tmp_path: Path) -> None:
-    mock_run.return_value = PiCodingResult(
+def test_run_error_kinds(tmp_path: Path) -> None:
+    provider = _mock_provider()
+    provider.verify.return_value = (True, "ok")
+
+    provider.run_task.return_value = PiCodingResult(
         success=False, summary="", error="pi timed out", timed_out=True
     )
     with patch.dict(os.environ, {"PI_CODING_ENABLED": "1"}, clear=False):
         out = pi_coding_task.run(task="fix it", workspace=str(tmp_path))
     assert out["error_kind"] == "timeout"
 
-    mock_run.return_value = PiCodingResult(success=False, summary="", error="model not found")
+    provider.run_task.return_value = PiCodingResult(
+        success=False, summary="", error="model not found"
+    )
     with patch.dict(os.environ, {"PI_CODING_ENABLED": "1"}, clear=False):
         out = pi_coding_task.run(task="fix it", workspace=str(tmp_path))
     assert out["error_kind"] == "execution_error"
 
 
-@patch(_VERIFY, return_value=(True, "ok"))
-@patch(_RUN, side_effect=RuntimeError("boom"))
-def test_run_unexpected_exception_returns_error_dict(
-    _mock_run: MagicMock, _mock_verify: MagicMock, tmp_path: Path
-) -> None:
-    # __call__ wraps run(); an unexpected exception is reported + degraded to a dict.
+def test_run_unexpected_exception_returns_error_dict(tmp_path: Path) -> None:
+    provider = _mock_provider()
+    provider.verify.side_effect = RuntimeError("boom")
     with patch.dict(os.environ, {"PI_CODING_ENABLED": "1"}, clear=False):
         out = pi_coding_task(task="fix it", workspace=str(tmp_path))
     assert "error" in out

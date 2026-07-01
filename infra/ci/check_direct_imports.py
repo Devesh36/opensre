@@ -34,18 +34,29 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 # defensive — it activates the moment ``infra/`` is brought into the
 # graph. Keep it documented so the intent is not lost.
 _FORBIDDEN_DIRECT: dict[str, frozenset[str]] = {
-    "platform": frozenset({"surfaces"}),
+    "platform": frozenset({"surfaces", "integrations", "tools"}),
     "infra": frozenset({"surfaces"}),
-    "core": frozenset({"surfaces"}),
+    "core": frozenset({"surfaces", "integrations", "tools"}),
     "gateway": frozenset({"surfaces"}),
     "integrations": frozenset({"tools", "surfaces"}),
-    "tools": frozenset({"surfaces"}),
+    "tools": frozenset({"surfaces", "integrations"}),
 }
 
 # Known direct violations being burned down — remove entries as fixes land.
 # Format: ``"source.module -> dest.module"`` (exact modules from the graph).
 _BASELINE_IGNORES: frozenset[str] = frozenset(
     {
+        # core/agent_harness agents need direct integration access for
+        # LLM error introspection, GitHub repo-scope filtering, and
+        # integration-catalog resolution. Option B (formal baseline):
+        # these imports are exempted rather than extracting the packages.
+        "core.agent_harness.agents.action_agent -> integrations.llm_cli.failure_explain",
+        "core.agent_harness.agents.evidence_agent -> integrations.github.repo_scope",
+        "core.agent_harness.agents.turn_orchestrator -> integrations.llm_cli.errors",
+        "core.agent_harness.integrations.resolution -> integrations.catalog",
+        "core.agent_harness.tools.action_tools -> tools.registry",
+        # tools/watch_dog uses TYPE_CHECKING-only import for Telegram alarms.
+        "tools.watch_dog.monitor -> integrations.telegram.alarms",
         # Gateway hosts the interactive_shell runtime — pre-existing reuse
         # to be burned down by extracting shared runtime primitives out of
         # ``surfaces/interactive_shell/`` and into a layer below ``surfaces``.

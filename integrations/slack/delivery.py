@@ -109,46 +109,10 @@ def swap_reaction(
 def build_action_blocks(
     investigation_url: str, investigation_id: str | None = None
 ) -> list[dict[str, Any]]:
-    """Build Slack Block Kit action blocks with interactive buttons.
+    """Build Slack Block Kit action blocks with interactive buttons."""
+    from tools.investigation.reporting.delivery.slack import build_action_blocks as _bab
 
-    Args:
-        investigation_url: URL to the investigation details page in Tracer.
-        investigation_id: Investigation ID embedded in feedback option values so the
-            interactivity handler can update the correct record.
-
-    Returns:
-        List of Block Kit block dicts ready for the blocks parameter.
-    """
-    feedback_options = [
-        {
-            "text": {"type": "plain_text", "text": "\U0001f44d Accurate"},
-            "value": f"accurate|{investigation_id or ''}",
-        },
-        {
-            "text": {"type": "plain_text", "text": "\U0001f914 Partially accurate"},
-            "value": f"partial|{investigation_id or ''}",
-        },
-        {
-            "text": {"type": "plain_text", "text": "\U0001f44e Inaccurate"},
-            "value": f"inaccurate|{investigation_id or ''}",
-        },
-    ]
-    elements: list[dict[str, Any]] = [
-        {
-            "type": "button",
-            "text": {"type": "plain_text", "text": "View Details in Tracer"},
-            "url": investigation_url,
-            "style": "primary",
-            "action_id": "view_investigation",
-        },
-        {
-            "type": "static_select",
-            "placeholder": {"type": "plain_text", "text": "\U0001f4dd Give Feedback"},
-            "action_id": "give_feedback",
-            "options": feedback_options,
-        },
-    ]
-    return [{"type": "actions", "elements": elements}]
+    return _bab(investigation_url, investigation_id)
 
 
 def _merge_payload(
@@ -392,3 +356,44 @@ def _post_via_incoming_webhook(
         return False
     debug_print("Slack report posted via incoming webhook.")
     return True
+
+
+def _dispatch_slack_report(
+    message: str,
+    credentials: dict[str, Any],
+) -> tuple[bool, str]:
+    """Adapter registered with the DeliveryRegistry for investigation dispatch."""
+    blocks = credentials.pop("_blocks", None)
+    return send_slack_report(
+        message,
+        channel=credentials.get("channel_id"),
+        thread_ts=credentials.get("thread_ts"),
+        access_token=credentials.get("access_token"),
+        blocks=blocks,
+    )
+
+
+class _SlackReactionProvider:
+    """Adapter wrapping slack reaction functions into the ReactionProvider protocol."""
+
+    def add_reaction(self, emoji: str, channel: str, timestamp: str, token: str) -> None:
+        add_reaction(emoji, channel, timestamp, token)
+
+    def swap_reaction(
+        self, remove_emoji: str, add_emoji: str, channel: str, timestamp: str, token: str
+    ) -> None:
+        swap_reaction(remove_emoji, add_emoji, channel, timestamp, token)
+
+
+def _register_delivery_provider() -> None:
+    try:
+        from core.domain.delivery import get_delivery_registry
+
+        registry = get_delivery_registry()
+        registry.register_delivery("slack", _dispatch_slack_report)
+        registry.register_reaction("slack", _SlackReactionProvider())
+    except Exception:
+        pass
+
+
+_register_delivery_provider()

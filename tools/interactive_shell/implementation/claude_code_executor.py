@@ -26,8 +26,6 @@ from typing import Protocol, cast
 from rich.console import Console
 from rich.markup import escape
 
-from integrations.llm_cli.claude_code import ClaudeCodeAdapter
-from integrations.llm_cli.subprocess_env import build_cli_subprocess_env
 from surfaces.interactive_shell.runtime import ReplSession, TaskKind
 from surfaces.interactive_shell.runtime.subprocess_runner.task_streaming import (
     _MAX_COMMAND_OUTPUT_CHARS,
@@ -42,6 +40,25 @@ from tools.interactive_shell.shared import allow_tool
 
 _IMPLEMENT_PERMISSION_MODE_ENV = "CLAUDE_CODE_IMPLEMENT_PERMISSION_MODE"
 _DEFAULT_IMPLEMENT_PERMISSION_MODE = "acceptEdits"
+
+# Lazily resolved adapter and env builder from the CLI provider registry.
+_ClaudeCodeAdapter: type | None = None
+_build_cli_subprocess_env: Callable[..., dict[str, str]] | None = None
+
+
+def _ensure_claude_code_resources() -> None:
+    global _ClaudeCodeAdapter, _build_cli_subprocess_env
+    if _ClaudeCodeAdapter is not None:
+        return
+    from core.llm.ports import get_cli_provider_registry
+
+    registry = get_cli_provider_registry()
+    env_builder = registry.get_env_builder("claude_code")
+    if env_builder is not None:
+        _build_cli_subprocess_env = env_builder
+    registration = registry.get_provider("claude_code")
+    if registration is not None:
+        _ClaudeCodeAdapter = registration.adapter_factory  # type: ignore[assignment]
 
 
 class _ClaudeInvocation(Protocol):
@@ -119,7 +136,8 @@ def _implementation_argv(argv: tuple[str, ...]) -> list[str]:
 def _spawn_claude_code(invocation: _ClaudeInvocation) -> subprocess.Popen[str]:
     argv = _implementation_argv(invocation.argv)
     cwd = str(Path(invocation.cwd).resolve())
-    env = build_cli_subprocess_env(invocation.env)
+    _ensure_claude_code_resources()
+    env = _build_cli_subprocess_env(invocation.env) if _build_cli_subprocess_env else None
     popen = cast("type[subprocess.Popen[str]]", subprocess.__dict__["Popen"])
     return popen(
         argv,
@@ -165,7 +183,13 @@ def run_claude_code_implementation(
         session.record("implementation", request, ok=False)
         return
 
-    adapter = ClaudeCodeAdapter()
+    _ensure_claude_code_resources()
+    if _ClaudeCodeAdapter is None:
+        console.print(f"[{ERROR}]Claude Code CLI not available:[/] adapter not registered")
+        session.record("implementation", request, ok=False)
+        return
+
+    adapter = _ClaudeCodeAdapter()
     probe = adapter.detect()
     if not probe.installed or not probe.bin_path:
         console.print(f"[{ERROR}]Claude Code CLI not available:[/] {escape(probe.detail)}")

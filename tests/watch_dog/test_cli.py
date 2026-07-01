@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from click.testing import CliRunner
 
+from platform.common.errors import OpenSREError
 from surfaces.cli.__main__ import cli
 from surfaces.cli.commands.watchdog import watchdog_command
 from tools.watch_dog.config import WatchdogConfig
@@ -34,7 +35,7 @@ def test_watchdog_help_lists_expected_flags() -> None:
 def test_watchdog_cli_maps_flags_to_config(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, WatchdogConfig] = {}
 
-    def _fake_run(config: WatchdogConfig) -> int:
+    def _fake_run(config: WatchdogConfig, **kwargs: object) -> int:
         captured["config"] = config
         return 0
 
@@ -86,6 +87,34 @@ def test_watchdog_cli_rejects_invalid_selector() -> None:
 
     assert result.exit_code != 0
     assert "Invalid watchdog configuration" in result.output
+
+
+def test_missing_credentials_fail_fast_before_sampling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _raise_missing_credentials(*, chat_id_override: str | None = None) -> dict:
+        raise OpenSREError("missing telegram credentials")
+
+    monkeypatch.setattr(
+        "surfaces.cli.commands.watchdog.load_credentials_from_env",
+        _raise_missing_credentials,
+    )
+
+    with pytest.raises(OpenSREError, match="missing telegram credentials"):
+        watchdog_command.callback(
+            pid=123,
+            process_name=None,
+            pick_first=False,
+            max_cpu=90,
+            cpu_window="30",
+            max_runtime=None,
+            max_rss=None,
+            interval=5,
+            cooldown="5m",
+            once=False,
+            chat_id=None,
+            verbose=False,
+        )
 
 
 def test_root_cli_registers_watchdog_command() -> None:

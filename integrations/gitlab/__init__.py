@@ -258,3 +258,31 @@ def classify(credentials: dict[str, Any], record_id: str) -> tuple[GitlabConfig 
         report_classify_failure(exc, logger=logger, integration="gitlab", record_id=record_id)
         return None, None
     return cfg, "gitlab"
+
+
+def _gitlab_mr_writeback(state: dict[str, Any], message: str) -> None:
+    gl = (state.get("available_sources") or {}).get("gitlab", {})
+    mr_iid = gl.get("merge_request_iid", "")
+    project_id = gl.get("project_id", "")
+    if not mr_iid or not project_id:
+        return
+    gl_config = build_gitlab_config(
+        {
+            "base_url": gl.get("gitlab_url", ""),
+            "auth_token": gl.get("gitlab_token", ""),
+        }
+    )
+    post_gitlab_mr_note(config=gl_config, project_id=project_id, mr_iid=mr_iid, body=message)
+
+
+def _register_gitlab_writeback() -> None:
+    try:
+        from core.domain.gitlab import get_gitlab_provider_registry
+
+        registry = get_gitlab_provider_registry()
+        registry.register_writeback(_gitlab_mr_writeback)
+    except Exception:
+        pass
+
+
+_register_gitlab_writeback()

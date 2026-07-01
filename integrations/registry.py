@@ -467,3 +467,15 @@ def resolve_management_service(service_name: str) -> str:
     if aliased is not None:
         return aliased
     return service_key(lowered)
+
+
+def _register_family_key() -> None:
+    try:
+        from core.domain.family import register_family_key
+
+        register_family_key(family_key)
+    except Exception:
+        pass
+
+
+_register_family_key()

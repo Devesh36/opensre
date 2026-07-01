@@ -118,3 +118,24 @@ def send_discord_report(report: str, discord_ctx: dict[str, Any]) -> tuple[bool,
     target = thread_id if thread_id else channel_id
     post_message_success, error, _ = post_discord_message(target, [embed], bot_token)
     return (True, "") if post_message_success else (False, error)
+
+
+def _dispatch_discord_report(
+    message: str,
+    credentials: dict[str, Any],
+) -> tuple[bool, str]:
+    """Adapter registered with the DeliveryRegistry for investigation dispatch."""
+    return send_discord_report(message, credentials)
+
+
+def _register_delivery_provider() -> None:
+    try:
+        from core.domain.delivery import get_delivery_registry
+
+        registry = get_delivery_registry()
+        registry.register_delivery("discord", _dispatch_discord_report)
+    except Exception:
+        pass
+
+
+_register_delivery_provider()

@@ -5,6 +5,8 @@ from __future__ import annotations
 import click
 from pydantic import ValidationError
 
+from integrations.telegram.alarms import AlarmDispatcher
+from integrations.telegram.credentials import load_credentials_from_env
 from surfaces.interactive_shell.utils.error_handling.errors import OpenSREError
 from tools.watch_dog.config import WatchdogConfig
 from tools.watch_dog.runner import run_watchdog
@@ -85,7 +87,9 @@ def watchdog_command(
             suggestion=_validation_suggestion(exc),
         ) from exc
 
-    raise SystemExit(run_watchdog(config))
+    creds = load_credentials_from_env(chat_id_override=config.chat_id)
+    dispatcher = AlarmDispatcher(creds, cooldown_seconds=config.cooldown, parse_mode="HTML")
+    raise SystemExit(run_watchdog(config, dispatcher=dispatcher))
 
 
 def _validation_suggestion(exc: ValidationError) -> str:

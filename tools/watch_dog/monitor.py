@@ -5,10 +5,13 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
-from integrations.telegram.alarms import AlarmDispatcher
 from platform.common.task_types import TaskRecord, TaskStatus
 from tools.fleet_monitoring.probe import probe
+
+if TYPE_CHECKING:
+    from integrations.telegram.alarms import AlarmDispatcher
 
 
 def run_watchdog(

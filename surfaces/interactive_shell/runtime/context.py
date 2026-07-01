@@ -104,6 +104,13 @@ def _bind_shell_grounding(session: ReplSession) -> None:
         return SLASH_COMMANDS
 
     session.grounding.set_slash_commands_provider(_slash_commands)
+    from surfaces.cli.__main__ import cli
+
+    session.grounding.set_cli_group(cli)
+
+    from surfaces.cli.tests.discover import SYNTHETIC_SCENARIOS_DIR
+
+    session.synthetic_scenarios_dir = SYNTHETIC_SCENARIOS_DIR
 
 
 def prepare_repl_session(

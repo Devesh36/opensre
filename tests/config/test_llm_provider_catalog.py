@@ -5,7 +5,7 @@ from config.llm_auth.provider_catalog import (
     PROVIDER_BY_VALUE,
     PROVIDER_SPECS,
 )
-from integrations.llm_cli.registry import CLI_PROVIDER_REGISTRY
+from integrations.llm_cli.registry import _CLI_PROVIDER_REGISTRY as CLI_PROVIDER_REGISTRY
 from surfaces.cli.wizard.config import SUPPORTED_PROVIDERS
 
 

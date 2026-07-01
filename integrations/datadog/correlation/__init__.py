@@ -17,3 +17,16 @@ __all__ = [
     "build_datadog_provider",
     "datadog_avg_query",
 ]
+
+
+def _register_upstream_provider() -> None:
+    try:
+        from core.domain.upstream import get_upstream_provider_registry
+
+        registry = get_upstream_provider_registry()
+        registry.register("datadog", build_datadog_provider)
+    except Exception:
+        pass
+
+
+_register_upstream_provider()

@@ -126,3 +126,25 @@ def send_twilio_sms_report(
         messaging_service_sid=messaging_service_sid,
         status_callback=status_callback,
     )
+
+
+def _dispatch_twilio_sms_report(
+    message: str,
+    credentials: dict[str, Any],
+) -> tuple[bool, str]:
+    """Adapter registered with the DeliveryRegistry for investigation dispatch."""
+    ok, error, _sms_id = send_twilio_sms_report(message, credentials)
+    return ok, error
+
+
+def _register_delivery_provider() -> None:
+    try:
+        from core.domain.delivery import get_delivery_registry
+
+        registry = get_delivery_registry()
+        registry.register_delivery("twilio", _dispatch_twilio_sms_report)
+    except Exception:
+        pass
+
+
+_register_delivery_provider()

@@ -51,5 +51,9 @@ class GroundingContext:
         """Bind a surface-owned slash command registry for CLI reference grounding."""
         self.cli.set_slash_commands_provider(provider)
 
+    def set_cli_group(self, cli_group: Any | None) -> None:
+        """Bind a Click CLI group for help-text rendering."""
+        self.cli.set_cli_group(cli_group)
+
 
 __all__ = ["GroundingContext"]

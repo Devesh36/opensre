@@ -36,16 +36,18 @@ def _slash_command_names(provider: SlashCommandProvider | None) -> list[str]:
     return sorted(provider().keys())
 
 
-def _current_cli_signature(provider: SlashCommandProvider | None = None) -> str:
+def _current_cli_signature(
+    provider: SlashCommandProvider | None = None,
+    cli_group: click.Group | None = None,
+) -> str:
     """Stable signature of the CLI command surface and interactive slash commands.
 
     Bumps cache when subcommands change, slash-command metadata changes, or the
     installed package version changes.
     """
     from config.version import get_version
-    from surfaces.cli.__main__ import cli
 
-    cmd_names = ",".join(sorted(cli.commands.keys()))
+    cmd_names = ",".join(sorted(cli_group.commands.keys())) if cli_group else ""
     slash_names = ",".join(_slash_command_names(provider))
     return f"opensre={get_version()}|commands={cmd_names}|slash={slash_names}"
 
@@ -122,22 +124,27 @@ def _format_command_reference(
     return "\n".join(lines).rstrip() + "\n"
 
 
-def _build_cli_reference_text_uncached(provider: SlashCommandProvider | None = None) -> str:
+def _build_cli_reference_text_uncached(
+    provider: SlashCommandProvider | None = None,
+    cli_group: click.Group | None = None,
+) -> str:
     """Build a side-effect-free CLI reference without invoking Click commands."""
-    from surfaces.cli.__main__ import cli
-
     parts: list[str] = []
 
-    parts.append("=== opensre --help ===\n")
-    parts.append(_format_command_reference(cli, path="opensre"))
+    if cli_group is not None:
+        parts.append("=== opensre --help ===\n")
+        parts.append(_format_command_reference(cli_group, path="opensre"))
 
-    with click.Context(cli, info_name="opensre") as ctx:
-        for name in sorted(cli.commands.keys()):
-            command = cli.get_command(ctx, name)
-            if command is None or command.hidden:
-                continue
-            parts.append(f"\n=== opensre {name} --help ===\n")
-            parts.append(_format_command_reference(command, path=f"opensre {name}"))
+        with click.Context(cli_group, info_name="opensre") as ctx:
+            for name in sorted(cli_group.commands.keys()):
+                command = cli_group.get_command(ctx, name)
+                if command is None or command.hidden:
+                    continue
+                parts.append(f"\n=== opensre {name} --help ===\n")
+                parts.append(_format_command_reference(command, path=f"opensre {name}"))
+    else:
+        parts.append("=== opensre --help ===\n")
+        parts.append("(CLI reference unavailable — no CLI group injected)\n")
 
     parts.append("\n=== Interactive-shell slash commands ===\n")
     parts.append(_interactive_shell_slash_hints(provider))
@@ -187,17 +194,23 @@ class CliReference:
 
     name = "cli"
 
-    def __init__(self) -> None:
+    def __init__(self, cli_group: click.Group | None = None) -> None:
         self._signature: str | None = None
         self._text: str | None = None
         self._created_at_monotonic: float = 0.0
         self._hits: int = 0
         self._misses: int = 0
         self._slash_commands_provider: SlashCommandProvider | None = None
+        self._cli_group: click.Group | None = cli_group
 
     def set_slash_commands_provider(self, provider: SlashCommandProvider | None) -> None:
         """Set the shell-owned slash command source used for grounding text."""
         self._slash_commands_provider = provider
+        self.invalidate()
+
+    def set_cli_group(self, cli_group: click.Group | None) -> None:
+        """Set the Click CLI group used for help-text rendering."""
+        self._cli_group = cli_group
         self.invalidate()
 
     def build_text(self) -> str:
@@ -206,17 +219,14 @@ class CliReference:
         Cached on this instance while the command registry signature matches.
         """
         provider = self._slash_commands_provider
-        sig = _current_cli_signature() if provider is None else _current_cli_signature(provider)
+        cli_group = self._cli_group
+        sig = _current_cli_signature(provider, cli_group)
         if self._text is not None and self._signature == sig:
             self._hits += 1
             return self._text
 
         self._misses += 1
-        text = (
-            _build_cli_reference_text_uncached()
-            if provider is None
-            else _build_cli_reference_text_uncached(provider)
-        )
+        text = _build_cli_reference_text_uncached(provider, cli_group)
         if _is_cacheable_cli_reference(text):
             self._signature = sig
             self._text = text

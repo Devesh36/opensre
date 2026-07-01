@@ -22,10 +22,19 @@ def run_optional_opensre_evaluation(state: dict[str, Any]) -> dict[str, Any]:
             }
         }
 
-    from integrations.opensre.llm_eval_judge import run_opensre_llm_judge
+    from core.domain.evaluation import get_evaluation_registry
+
+    provider = get_evaluation_registry().get("opensre")
+    if provider is None:
+        return {
+            "opensre_llm_eval": {
+                "skipped": True,
+                "reason": "No evaluation provider registered",
+            }
+        }
 
     try:
-        judge_result = run_opensre_llm_judge(
+        judge_result = provider(
             state=state,
             rubric=rubric_value,
         )

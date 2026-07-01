@@ -141,9 +141,9 @@ def _create_sdk_openai_compat_client(settings: Any, provider: str) -> Any:
 
 def _get_cli_provider_registration(provider: str) -> Any:
     """Return the CLI registry entry for *provider*, or None if not CLI-backed."""
-    from integrations.llm_cli.registry import get_cli_provider_registration
+    from core.llm.ports import get_cli_provider_registry
 
-    return get_cli_provider_registration(provider)
+    return get_cli_provider_registry().get_provider(provider)
 
 
 def reset_agent_client() -> None:

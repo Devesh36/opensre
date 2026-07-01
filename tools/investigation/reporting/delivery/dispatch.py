@@ -6,7 +6,8 @@ import logging
 from typing import Any
 
 from core.context.state import InvestigationState
-from tools.investigation.reporting.delivery.slack import deliver_slack_report
+from core.domain.delivery import get_delivery_registry
+from tools.investigation.reporting.delivery.slack import build_action_blocks, deliver_slack_report
 from tools.investigation.reporting.formatters.messages import ReportMessages
 from tools.investigation.reporting.gitlab_writeback import post_gitlab_mr_writeback
 
@@ -24,8 +25,6 @@ def dispatch_report(
 
     Returns the Slack blocks sent, including the investigation action blocks.
     """
-    from integrations.slack.delivery import build_action_blocks
-
     all_blocks = messages.slack_blocks + build_action_blocks(
         investigation_url or "", investigation_id
     )
@@ -56,8 +55,6 @@ def _dispatch_discord(
         logger.debug("[publish] discord delivery: no discord integration configured")
         return
 
-    from integrations.discord.delivery import send_discord_report
-
     discord_ctx = state.get("discord_context") or {}
     bot_token = discord_ctx.get("bot_token") or discord_creds.get("bot_token", "")
     channel_id = discord_ctx.get("channel_id") or discord_creds.get("default_channel_id", "")
@@ -68,27 +65,30 @@ def _dispatch_discord(
         thread_id,
         bool(bot_token),
     )
-    if bot_token and channel_id:
-        discord_posted, discord_error = send_discord_report(
-            slack_message,
-            {"bot_token": bot_token, "channel_id": channel_id, "thread_id": thread_id},
-        )
+    if not (bot_token and channel_id):
         logger.debug(
-            "[publish] discord delivery: posted=%s error=%s", discord_posted, discord_error
+            "[publish] discord delivery: skipped - auth_configured=%s channel_id=%s",
+            bool(bot_token),
+            channel_id,
         )
-        if not discord_posted:
-            logger.warning(
-                "[publish] Discord delivery failed: channel=%s error=%s",
-                channel_id,
-                discord_error,
-            )
         return
 
-    logger.debug(
-        "[publish] discord delivery: skipped - auth_configured=%s channel_id=%s",
-        bool(bot_token),
-        channel_id,
+    provider = get_delivery_registry().get_delivery("discord")
+    if provider is None:
+        logger.warning("[publish] discord delivery: no provider registered")
+        return
+
+    discord_posted, discord_error = provider(
+        slack_message,
+        {"bot_token": bot_token, "channel_id": channel_id, "thread_id": thread_id},
     )
+    logger.debug("[publish] discord delivery: posted=%s error=%s", discord_posted, discord_error)
+    if not discord_posted:
+        logger.warning(
+            "[publish] Discord delivery failed: channel=%s error=%s",
+            channel_id,
+            discord_error,
+        )
 
 
 def _dispatch_telegram(
@@ -100,8 +100,6 @@ def _dispatch_telegram(
         logger.debug("[publish] telegram delivery: no telegram integration configured")
         return
 
-    from integrations.telegram.delivery import send_telegram_report
-
     telegram_ctx = state.get("telegram_context") or {}
     bot_token = telegram_ctx.get("bot_token") or telegram_creds.get("bot_token", "")
     chat_id = telegram_ctx.get("chat_id") or telegram_creds.get("default_chat_id", "")
@@ -112,25 +110,30 @@ def _dispatch_telegram(
         reply_to,
         bool(bot_token),
     )
-    if bot_token and chat_id:
-        tg_posted, tg_error = send_telegram_report(
-            telegram_message,
-            {"bot_token": bot_token, "chat_id": chat_id, "reply_to_message_id": reply_to},
+    if not (bot_token and chat_id):
+        logger.debug(
+            "[publish] telegram delivery: skipped - auth_configured=%s chat_id=%s",
+            bool(bot_token),
+            chat_id,
         )
-        logger.debug("[publish] telegram delivery: posted=%s error=%s", tg_posted, tg_error)
-        if not tg_posted:
-            logger.warning(
-                "[publish] Telegram delivery failed: chat_id=%s error=%s",
-                chat_id,
-                tg_error,
-            )
         return
 
-    logger.debug(
-        "[publish] telegram delivery: skipped - auth_configured=%s chat_id=%s",
-        bool(bot_token),
-        chat_id,
+    provider = get_delivery_registry().get_delivery("telegram")
+    if provider is None:
+        logger.warning("[publish] telegram delivery: no provider registered")
+        return
+
+    tg_posted, tg_error = provider(
+        telegram_message,
+        {"bot_token": bot_token, "chat_id": chat_id, "reply_to_message_id": reply_to},
     )
+    logger.debug("[publish] telegram delivery: posted=%s error=%s", tg_posted, tg_error)
+    if not tg_posted:
+        logger.warning(
+            "[publish] Telegram delivery failed: chat_id=%s error=%s",
+            chat_id,
+            tg_error,
+        )
 
 
 def _dispatch_whatsapp(
@@ -141,8 +144,6 @@ def _dispatch_whatsapp(
     if not whatsapp_creds:
         logger.debug("[publish] whatsapp delivery: no whatsapp integration configured")
         return
-
-    from integrations.whatsapp.delivery import send_whatsapp_report
 
     whatsapp_ctx: dict[str, Any] = state.get("whatsapp_context") or {}
     account_sid = whatsapp_ctx.get("account_sid") or whatsapp_creds.get("account_sid", "")
@@ -156,33 +157,38 @@ def _dispatch_whatsapp(
         bool(auth_token),
         from_number,
     )
-    if account_sid and auth_token and from_number and to:
-        wa_posted, wa_error = send_whatsapp_report(
-            whatsapp_message,
-            {
-                "account_sid": account_sid,
-                "auth_token": auth_token,
-                "from_number": from_number,
-                "to": to,
-            },
+    if not (account_sid and auth_token and from_number and to):
+        logger.debug(
+            "[publish] whatsapp delivery: skipped - account_sid_present=%s "
+            "auth_token_present=%s from_number_present=%s to_present=%s",
+            bool(account_sid),
+            bool(auth_token),
+            bool(from_number),
+            bool(to),
         )
-        logger.debug("[publish] whatsapp delivery: posted=%s error=%s", wa_posted, wa_error)
-        if not wa_posted:
-            logger.warning(
-                "[publish] WhatsApp delivery failed: to=%s error=%s",
-                to,
-                wa_error,
-            )
         return
 
-    logger.debug(
-        "[publish] whatsapp delivery: skipped - account_sid_present=%s "
-        "auth_token_present=%s from_number_present=%s to_present=%s",
-        bool(account_sid),
-        bool(auth_token),
-        bool(from_number),
-        bool(to),
+    provider = get_delivery_registry().get_delivery("whatsapp")
+    if provider is None:
+        logger.warning("[publish] whatsapp delivery: no provider registered")
+        return
+
+    wa_posted, wa_error = provider(
+        whatsapp_message,
+        {
+            "account_sid": account_sid,
+            "auth_token": auth_token,
+            "from_number": from_number,
+            "to": to,
+        },
     )
+    logger.debug("[publish] whatsapp delivery: posted=%s error=%s", wa_posted, wa_error)
+    if not wa_posted:
+        logger.warning(
+            "[publish] WhatsApp delivery failed: to=%s error=%s",
+            to,
+            wa_error,
+        )
 
 
 def _dispatch_twilio_sms(
@@ -198,8 +204,6 @@ def _dispatch_twilio_sms(
     if not sms_cfg.get("enabled"):
         return
 
-    from integrations.twilio.delivery import send_twilio_sms_report
-
     twilio_sms_ctx: dict[str, Any] = state.get("twilio_sms_context") or {}
     sms_to = twilio_sms_ctx.get("to") or sms_cfg.get("default_to") or ""
     sms_from = sms_cfg.get("from_number", "")
@@ -213,41 +217,45 @@ def _dispatch_twilio_sms(
         messaging_service_sid,
         bool(account_sid),
     )
-    if account_sid and auth_token and sms_to and (sms_from or messaging_service_sid):
-        sms_ok, sms_error, sms_sid = send_twilio_sms_report(
-            sms_message,
-            {
-                "account_sid": account_sid,
-                "auth_token": auth_token,
-                "from_number": sms_from,
-                "messaging_service_sid": messaging_service_sid,
-                "to": sms_to,
-            },
+    if not (account_sid and auth_token and sms_to and (sms_from or messaging_service_sid)):
+        logger.warning(
+            "[publish] twilio sms delivery: skipped - SMS channel is enabled "
+            "but not deliverable (recipient_present=%s sender_present=%s "
+            "account_sid_present=%s auth_token_present=%s). "
+            "Set TWILIO_SMS_DEFAULT_TO to enable auto-delivery.",
+            bool(sms_to),
+            bool(sms_from or messaging_service_sid),
+            bool(account_sid),
+            bool(auth_token),
         )
-        logger.debug(
-            "[publish] twilio sms delivery: posted=%s sid=%s error=%s",
-            sms_ok,
-            sms_sid,
-            sms_error,
-        )
-        if not sms_ok:
-            logger.warning(
-                "[publish] Twilio SMS delivery failed: to=%s error=%s",
-                sms_to,
-                sms_error,
-            )
         return
 
-    logger.warning(
-        "[publish] twilio sms delivery: skipped - SMS channel is enabled "
-        "but not deliverable (recipient_present=%s sender_present=%s "
-        "account_sid_present=%s auth_token_present=%s). "
-        "Set TWILIO_SMS_DEFAULT_TO to enable auto-delivery.",
-        bool(sms_to),
-        bool(sms_from or messaging_service_sid),
-        bool(account_sid),
-        bool(auth_token),
+    provider = get_delivery_registry().get_delivery("twilio")
+    if provider is None:
+        logger.warning("[publish] twilio sms delivery: no provider registered")
+        return
+
+    sms_ok, sms_error = provider(
+        sms_message,
+        {
+            "account_sid": account_sid,
+            "auth_token": auth_token,
+            "from_number": sms_from,
+            "messaging_service_sid": messaging_service_sid,
+            "to": sms_to,
+        },
     )
+    logger.debug(
+        "[publish] twilio sms delivery: posted=%s error=%s",
+        sms_ok,
+        sms_error,
+    )
+    if not sms_ok:
+        logger.warning(
+            "[publish] Twilio SMS delivery failed: to=%s error=%s",
+            sms_to,
+            sms_error,
+        )
 
 
 def _dispatch_openclaw(
@@ -259,9 +267,20 @@ def _dispatch_openclaw(
         logger.debug("[publish] openclaw delivery: no openclaw integration configured")
         return
 
-    from integrations.openclaw.delivery import send_openclaw_report
+    provider = get_delivery_registry().get_delivery("openclaw")
+    if provider is None:
+        logger.warning("[publish] openclaw delivery: no provider registered")
+        return
 
-    oc_posted, oc_error = send_openclaw_report(state, slack_message, openclaw_creds)
+    openclaw_ctx = state.get("openclaw_context") or {}
+    creds = dict(openclaw_creds)
+    creds["_conversation_id"] = openclaw_ctx.get("conversation_id", "")
+    creds["_alert_name"] = str(state.get("alert_name", "")).strip() or "OpenSRE Investigation"
+    creds["_root_cause"] = str(state.get("root_cause") or "").strip()
+    creds["_remediation_steps"] = state.get("remediation_steps", [])
+    creds["_validity_score"] = state.get("validity_score")
+
+    oc_posted, oc_error = provider(slack_message, creds)
     logger.debug("[publish] openclaw delivery: posted=%s error=%s", oc_posted, oc_error)
     if not oc_posted:
-        logger.debug("[publish] OpenClaw delivery failed: %s", oc_error)
+        logger.warning("[publish] OpenClaw delivery failed: %s", oc_error)

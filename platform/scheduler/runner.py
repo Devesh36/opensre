@@ -15,7 +15,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 from platform.scheduler.executor import execute_task
+from platform.scheduler.ports import SchedulerInvestigationRunner
 from platform.scheduler.store import get_task, list_tasks, update_task
+from platform.scheduler.tasks import set_investigation_runner
 from platform.scheduler.types import ScheduledTask
 
 logger = logging.getLogger(__name__)
@@ -91,6 +93,24 @@ def _scheduled_job(task_id: str) -> None:
         update_task(task)
 
 
+def _create_investigation_runner() -> SchedulerInvestigationRunner | None:
+    """Build the investigation runner that the scheduler uses for report generation.
+
+    Avoids importing ``tools.investigation`` at module level — only invoked
+    when ``start_scheduler`` or ``run_task_now`` is called.
+    """
+    try:
+        from tools.investigation.capability import run_investigation
+
+        class _Runner:
+            def run(self, alert_payload: dict[str, object]) -> dict[str, object] | None:
+                return run_investigation(alert_payload)  # type: ignore[arg-type]
+
+        return _Runner()
+    except Exception:
+        return None
+
+
 def start_scheduler() -> None:
     """Load all enabled tasks and start the blocking scheduler.
 
@@ -99,6 +119,10 @@ def start_scheduler() -> None:
     """
     from apscheduler.events import EVENT_JOB_SUBMITTED
     from apscheduler.schedulers.blocking import BlockingScheduler
+
+    runner = _create_investigation_runner()
+    if runner is not None:
+        set_investigation_runner(runner)
 
     scheduler = BlockingScheduler()
     scheduler.add_listener(_on_job_submitted, EVENT_JOB_SUBMITTED)
@@ -165,8 +189,9 @@ def run_task_now(task_id: str) -> bool:
     if task is None:
         return False
 
+    runner = _create_investigation_runner()
     fire_time = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    return execute_task(task, fire_time)
+    return execute_task(task, fire_time, investigation_runner=runner)
 
 
 __all__ = ["run_task_now", "start_scheduler"]

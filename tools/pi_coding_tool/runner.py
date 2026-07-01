@@ -14,12 +14,8 @@ from __future__ import annotations
 
 from typing import Any, Final
 
-from integrations.pi import (
-    PiCodingResult,
-    is_pi_coding_enabled,
-    run_pi_coding_task,
-    verify_pi_coding,
-)
+from core.domain.pi_coding import PiCodingProvider, PiCodingResult, get_pi_coding_registry
+from tools.pi_coding_tool.config import is_pi_coding_enabled
 from tools.pi_coding_tool.errors import (
     ERR_CLI_UNAVAILABLE,
     ERR_DISABLED,
@@ -43,14 +39,21 @@ def ensure_enabled() -> None:
         raise PiCodingError(ERR_DISABLED, _DISABLED_MESSAGE)
 
 
+def _provider() -> PiCodingProvider:
+    provider = get_pi_coding_registry().get()
+    if provider is None:
+        raise PiCodingError(ERR_CLI_UNAVAILABLE, "Pi coding provider is not registered.")
+    return provider
+
+
 def ensure_cli_ready() -> None:
-    available, detail = verify_pi_coding()
+    available, detail = _provider().verify()
     if not available:
         raise PiCodingError(ERR_CLI_UNAVAILABLE, f"Pi CLI is not ready: {detail}")
 
 
 def execute(request: ResolvedRequest) -> PiCodingResult:
-    return run_pi_coding_task(
+    return _provider().run_task(
         request.task,
         workspace=request.workspace,
         model=request.model,

@@ -175,6 +175,23 @@ Respond with ONE JSON object only (no markdown), exactly this shape:
 """
 
 
+def _run_judge_provider(*, state: dict[str, Any], rubric: str) -> dict[str, Any]:
+    return run_opensre_llm_judge(state=state, rubric=rubric)
+
+
+def _register_evaluation_provider() -> None:
+    try:
+        from core.domain.evaluation import get_evaluation_registry
+
+        registry = get_evaluation_registry()
+        registry.register("opensre", _run_judge_provider)
+    except Exception:
+        pass
+
+
+_register_evaluation_provider()
+
+
 def run_opensre_llm_judge(*, state: dict[str, Any], rubric: str) -> dict[str, Any]:
     from config.config import resolve_llm_settings
     from core.llm.llm_client import get_llm_for_reasoning

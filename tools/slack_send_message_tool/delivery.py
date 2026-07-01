@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 
-from integrations.slack.delivery import send_slack_webhook_message
 from tools.slack_send_message_tool.models import SlackDeliveryTarget
 
 
@@ -36,6 +35,8 @@ def resolve_webhook_url(webhook_url: str = "") -> tuple[SlackDeliveryTarget | No
 
 def dispatch_message(message: str, target: SlackDeliveryTarget) -> tuple[bool, str]:
     """Post a message via the resolved Slack incoming webhook."""
+    from integrations.slack.delivery import send_slack_webhook_message
+
     ok, error = send_slack_webhook_message(message, webhook_url=target.webhook_url)
     if ok:
         return True, ""

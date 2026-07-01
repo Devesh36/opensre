@@ -20,8 +20,10 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 
+from core.domain.pi_coding import PiCodingResult, get_pi_coding_registry
 from integrations.llm_cli.timeout_utils import resolve_timeout_from_env
-from integrations.pi.client import PiCodingResult, run_pi_coding_task
+from integrations.pi.adapter import _PiCodingAdapter
+from integrations.pi.client import run_pi_coding_task
 from integrations.pi.verifier import verify_pi_coding
 
 _DEFAULT_TIMEOUT_SEC = 600.0
@@ -57,6 +59,8 @@ def pi_coding_workspace(env: Mapping[str, str] | None = None) -> str:
     source = env if env is not None else os.environ
     return source.get("PI_CODING_WORKSPACE", "").strip() or os.getcwd()
 
+
+get_pi_coding_registry().register(_PiCodingAdapter())
 
 __all__ = [
     "PiCodingResult",

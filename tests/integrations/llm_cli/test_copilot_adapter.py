@@ -625,14 +625,14 @@ def test_cli_backed_client_invokes_copilot_and_forwards_token_env(
 
 def test_registry_resolves_copilot_provider() -> None:
     from integrations.llm_cli.registry import (
-        CLI_PROVIDER_REGISTRY,
+        _CLI_PROVIDER_REGISTRY,
         get_cli_provider_registration,
     )
 
     reg = get_cli_provider_registration("copilot")
     assert reg is not None
     assert reg.model_env_key == "COPILOT_MODEL"
-    assert "copilot" in CLI_PROVIDER_REGISTRY
+    assert "copilot" in _CLI_PROVIDER_REGISTRY
     adapter = reg.adapter_factory()
     assert isinstance(adapter, CopilotAdapter)
 

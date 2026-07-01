@@ -1,0 +1,61 @@
+[importlinter]
+root_packages =
+    config
+    core
+    infra
+    integrations
+    platform
+    surfaces
+    tools
+
+[importlinter:contract:config-independent]
+name = Config is independent
+type = independence
+modules =
+    config
+
+[importlinter:contract:core-layer]
+name = Core must not import integrations, tools, or surfaces
+type = forbidden
+source_modules =
+    core
+forbidden_modules =
+    integrations
+    tools
+    surfaces
+
+[importlinter:contract:tools-layer]
+name = Tools must not import integrations or surfaces
+type = forbidden
+source_modules =
+    tools
+forbidden_modules =
+    integrations
+    surfaces
+
+[importlinter:contract:platform-layer]
+name = Platform must not import integrations, tools, or surfaces
+type = forbidden
+source_modules =
+    platform
+forbidden_modules =
+    integrations
+    tools
+    surfaces
+
+[importlinter:contract:integrations-layer]
+name = Integrations must not import tools or surfaces
+type = forbidden
+source_modules =
+    integrations
+forbidden_modules =
+    tools
+    surfaces
+
+[importlinter:contract:infra-layer]
+name = Infra must not import surfaces
+type = forbidden
+source_modules =
+    infra
+forbidden_modules =
+    surfaces

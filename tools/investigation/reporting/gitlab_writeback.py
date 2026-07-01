@@ -4,7 +4,7 @@ import logging
 import os
 
 from core.context.state import InvestigationState
-from integrations.gitlab import build_gitlab_config, post_gitlab_mr_note
+from core.domain.gitlab import get_gitlab_provider_registry
 from platform.common.truncation import truncate
 
 logger = logging.getLogger(__name__)
@@ -37,18 +37,8 @@ def post_gitlab_mr_writeback(state: InvestigationState, report: str) -> None:
         return
 
     try:
-        gl_config = build_gitlab_config(
-            {
-                "base_url": gl.get("gitlab_url", ""),
-                "auth_token": gl.get("gitlab_token", ""),
-            }
-        )
-        post_gitlab_mr_note(
-            config=gl_config,
-            project_id=project_id,
-            mr_iid=mr_iid,
-            body=_build_mr_note(report),
-        )
+        registry = get_gitlab_provider_registry()
+        registry.post_writeback(dict(state), _build_mr_note(report))
         logger.info("[publish] GitLab MR note posted: project=%s mr_iid=%s", project_id, mr_iid)
     except Exception as exc:
         logger.warning("[publish] GitLab MR write-back failed: %s", exc)

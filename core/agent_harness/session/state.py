@@ -8,6 +8,7 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from prompt_toolkit.history import History
@@ -301,6 +302,13 @@ class ReplSession:
     prompt_refresh_fn: Callable[[], None] | None = field(default=None, repr=False)
     """Loop-owned hook to apply pending prefill and redraw the active prompt."""
 
+    synthetic_scenarios_dir: Path | None = field(default=None, repr=False)
+    """Path to the synthetic scenarios directory, injected from the surface layer.
+
+    When set, ``_bind_last_synthetic_observation`` uses this path instead of
+    importing from ``surfaces.cli.tests.discover``.
+    """
+
     last_synthetic_observation_path: str | None = None
     """Absolute path to ``latest.json`` for the last finished synthetic run (set on failure)."""
 
@@ -374,12 +382,11 @@ class ReplSession:
         if not scenario_id:
             self.last_synthetic_observation_path = None
             return
-        try:
-            from surfaces.cli.tests.discover import SYNTHETIC_SCENARIOS_DIR
-        except Exception:
+        scenarios_dir = self.synthetic_scenarios_dir
+        if scenarios_dir is None:
             self.last_synthetic_observation_path = None
             return
-        latest = SYNTHETIC_SCENARIOS_DIR / "_observations" / scenario_id / "latest.json"
+        latest = scenarios_dir / "_observations" / scenario_id / "latest.json"
         for _ in range(8):
             if latest.is_file():
                 self.last_synthetic_observation_path = str(latest.resolve())

@@ -116,3 +116,38 @@ def send_openclaw_report(
         logger.debug("[openclaw_delivery] %s failed: %s", tool_name, error)
 
     return False, last_error
+
+
+def _dispatch_openclaw_report(
+    message: str,
+    credentials: dict[str, Any],
+) -> tuple[bool, str]:
+    """Adapter registered with the DeliveryRegistry for investigation dispatch."""
+    from core.context.state import InvestigationState
+
+    state = InvestigationState(
+        {
+            "openclaw_context": {
+                "conversation_id": credentials.get("_conversation_id", ""),
+            },
+            "alert_name": credentials.get("_alert_name", "OpenSRE Investigation"),
+            "root_cause": credentials.get("_root_cause", ""),
+            "remediation_steps": credentials.get("_remediation_steps", []),
+            "validity_score": credentials.get("_validity_score", None),
+        }
+    )
+    ok, error = send_openclaw_report(state, message, credentials)
+    return ok, error or ""
+
+
+def _register_delivery_provider() -> None:
+    try:
+        from core.domain.delivery import get_delivery_registry
+
+        registry = get_delivery_registry()
+        registry.register_delivery("openclaw", _dispatch_openclaw_report)
+    except Exception:
+        pass
+
+
+_register_delivery_provider()

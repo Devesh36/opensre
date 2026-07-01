@@ -5,7 +5,7 @@ from typing import Any
 from core.domain.types.upstream import (
     UpstreamEvidenceProvider,
 )
-from integrations.datadog.correlation import build_datadog_provider
+from core.domain.upstream import get_upstream_provider_registry
 
 
 def target_resource_from_state(state: dict[str, Any]) -> str:
@@ -58,13 +58,19 @@ def build_upstream_evidence_provider(state: dict[str, Any]) -> UpstreamEvidenceP
     target_resource = target_resource_from_state(state)
     candidate_services = candidate_services_from_state(state)
 
-    datadog_cfg_raw = resolved.get("datadog")
-    datadog_provider = build_datadog_provider(
-        datadog_config=datadog_cfg_raw if isinstance(datadog_cfg_raw, dict) else None,
-        target_resource=target_resource,
-        candidate_services=candidate_services,
-    )
-    if datadog_provider is not None:
-        return datadog_provider
+    registry = get_upstream_provider_registry()
+    for vendor in registry.all_vendors():
+        factory = registry.get(vendor)
+        if factory is None:
+            continue
+        vendor_config = resolved.get(vendor)
+        if vendor == "datadog":
+            provider: UpstreamEvidenceProvider | None = factory(
+                datadog_config=vendor_config if isinstance(vendor_config, dict) else None,
+                target_resource=target_resource,
+                candidate_services=candidate_services,
+            )
+            if provider is not None:
+                return provider
 
     return None

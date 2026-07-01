@@ -5,25 +5,30 @@ from __future__ import annotations
 from typing import Any
 
 from core.tool_framework.tool_decorator import tool
-from integrations.github.client import GitHubApiError, GitHubRestClient, resolve_github_token
-from integrations.github.helpers import github_creds, github_source_available
-from integrations.github.tools.workflow import summarize_community_followups_from_comments
 
 
 def _community_available(sources: dict[str, dict]) -> bool:
+    from core.domain.github_provider import get_github_registry
+
+    provider = get_github_registry().get()
+    if not provider:
+        return False
     gh = sources.get("github", {})
     return bool(
-        (github_source_available(sources) or resolve_github_token(None))
+        (provider.is_source_available(sources) or provider.resolve_token(None))
         and gh.get("owner")
         and gh.get("repo")
     )
 
 
 def _community_extract_params(sources: dict[str, dict]) -> dict[str, Any]:
+    from core.domain.github_provider import get_github_registry
+
+    provider = get_github_registry().get()
     gh = sources.get("github", {})
-    if not gh:
+    if not gh or not provider:
         return {}
-    return {"owner": gh.get("owner"), "repo": gh.get("repo"), **github_creds(gh)}
+    return {"owner": gh.get("owner"), "repo": gh.get("repo"), **provider.extract_creds(gh)}
 
 
 @tool(
@@ -62,16 +67,33 @@ def summarize_community_followups(
     github_token: str | None = None,
     **_kwargs: Any,
 ) -> dict[str, Any]:
+    from core.domain.github_provider import get_github_registry
+
+    from integrations.github.tools.workflow import summarize_community_followups_from_comments
+
+    provider = get_github_registry().get()
+    if not provider:
+        return {
+            "source": "github",
+            "available": False,
+            "error": "GitHub provider is not configured.",
+            "unanswered_questions": [],
+            "agenda_items": [],
+            "suggested_replies": [],
+            "side_effects": [],
+        }
+
     try:
+        rest_client = provider.create_rest_client(github_token)
         normalized_comments = (
             comments
             if comments is not None
-            else GitHubRestClient(github_token).paginate(
+            else rest_client.paginate(
                 f"/repos/{owner}/{repo}/issues/comments",
                 params={"per_page": max(1, min(per_page, 100))},
             )
         )
-    except GitHubApiError as exc:
+    except provider.api_error_type as exc:
         return {
             "source": "github",
             "available": False,

@@ -5,26 +5,30 @@ from __future__ import annotations
 from typing import Any
 
 from core.tool_framework.tool_decorator import tool
-from integrations.github.client import resolve_github_token
-from integrations.github.helpers import github_creds, github_source_available
-from integrations.github.tools.work_status import list_github_work_items, summarize_github_pr_status
-from integrations.github.tools.workflow import build_work_status_report
 
 
 def _report_available(sources: dict[str, dict]) -> bool:
+    from core.domain.github_provider import get_github_registry
+
+    provider = get_github_registry().get()
+    if not provider:
+        return False
     gh = sources.get("github", {})
     return bool(
-        (github_source_available(sources) or resolve_github_token(None))
+        (provider.is_source_available(sources) or provider.resolve_token(None))
         and gh.get("owner")
         and gh.get("repo")
     )
 
 
 def _report_extract_params(sources: dict[str, dict]) -> dict[str, Any]:
+    from core.domain.github_provider import get_github_registry
+
+    provider = get_github_registry().get()
     gh = sources.get("github", {})
-    if not gh:
+    if not gh or not provider:
         return {}
-    return {"owner": gh.get("owner"), "repo": gh.get("repo"), **github_creds(gh)}
+    return {"owner": gh.get("owner"), "repo": gh.get("repo"), **provider.extract_creds(gh)}
 
 
 @tool(
@@ -63,14 +67,25 @@ def generate_work_status_report(
     github_token: str | None = None,
     **_kwargs: Any,
 ) -> dict[str, Any]:
+    from core.domain.github_provider import get_github_registry
+
+    from integrations.github.tools.work_status import (
+        list_github_work_items,
+        summarize_github_pr_status,
+    )
+    from integrations.github.tools.workflow import build_work_status_report
+
+    provider = get_github_registry().get()
+    token = provider.resolve_token(github_token) if provider else github_token
+
     errors: list[str] = []
     if work_items is None and owner and repo:
-        work_result = list_github_work_items(owner=owner, repo=repo, github_token=github_token)
+        work_result = list_github_work_items(owner=owner, repo=repo, github_token=token)
         if not work_result.get("available", False):
             errors.append(f"work_items: {work_result.get('error', 'unavailable')}")
         work_items = list(work_result.get("items", []))
     if pull_requests is None and owner and repo:
-        pr_result = summarize_github_pr_status(owner=owner, repo=repo, github_token=github_token)
+        pr_result = summarize_github_pr_status(owner=owner, repo=repo, github_token=token)
         if not pr_result.get("available", False):
             errors.append(f"pull_requests: {pr_result.get('error', 'unavailable')}")
         pull_requests = list(pr_result.get("pull_requests", []))

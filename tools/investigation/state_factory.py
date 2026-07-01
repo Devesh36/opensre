@@ -7,10 +7,6 @@ from typing import Any, cast
 
 from core.context.state.models import AgentState, AgentStateModel, model_default_payload
 from core.domain.alerts.normalization import normalize_alert_payload
-from integrations.opensre.hf_remote import (
-    extract_scoring_points,
-    strip_scoring_points_from_alert,
-)
 
 
 def make_initial_state(
@@ -25,16 +21,21 @@ def make_initial_state(
     severity)`` for initial state instead of deriving them only from ``raw_alert``.
     Callers use this for HTTP/CLI overrides without mutating the alert dict.
     """
+    from core.domain.opensre_scoring import get_opensre_scoring_registry
+
     rubric = ""
     alert_payload: str | dict[str, Any] = raw_alert
+    scoring_provider = get_opensre_scoring_registry().get()
     if isinstance(alert_payload, dict):
-        if opensre_evaluate:
-            rubric = extract_scoring_points(alert_payload)
+        if opensre_evaluate and scoring_provider:
+            rubric = scoring_provider.extract_scoring_points(alert_payload)
             if rubric:
-                alert_payload = strip_scoring_points_from_alert(dict(alert_payload))
-        elif extract_scoring_points(alert_payload):
+                alert_payload = scoring_provider.strip_scoring_points_from_alert(
+                    dict(alert_payload)
+                )
+        elif scoring_provider and scoring_provider.extract_scoring_points(alert_payload):
             # Blind investigation: drop rubric from agent-visible alert (file may include it).
-            alert_payload = strip_scoring_points_from_alert(dict(alert_payload))
+            alert_payload = scoring_provider.strip_scoring_points_from_alert(dict(alert_payload))
 
         # Normalize source-specific payloads into a canonical alert shape once,
         # before any downstream extraction/planning nodes run.

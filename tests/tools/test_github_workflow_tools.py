@@ -157,11 +157,11 @@ def test_summarize_github_pr_status_reports_unknown_mergeability() -> None:
 def test_generate_work_status_report_surfaces_fetch_errors() -> None:
     with (
         patch(
-            "tools.work_status_report_tool.list_github_work_items",
+            "integrations.github.tools.work_status.list_github_work_items",
             return_value={"available": False, "error": "boom", "items": []},
         ),
         patch(
-            "tools.work_status_report_tool.summarize_github_pr_status",
+            "integrations.github.tools.work_status.summarize_github_pr_status",
             return_value={"available": True, "pull_requests": []},
         ),
     ):

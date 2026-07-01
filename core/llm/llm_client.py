@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
-    from integrations.llm_cli.registry import CLIProviderRegistration
+    from core.llm.ports import CLIProviderRegistration
 
 from anthropic import BadRequestError as AnthropicBadRequestError
 from anthropic import NotFoundError
@@ -155,10 +155,10 @@ def _ensure_llm_transport_current() -> None:
 
 
 def _get_cli_provider_registration(provider: str) -> CLIProviderRegistration | None:
-    """Local import avoids package import cycle (llm_cli __init__ → runner → llm_client)."""
-    from integrations.llm_cli.registry import get_cli_provider_registration
+    """Look up a CLI provider registration from the core registry."""
+    from core.llm.ports import get_cli_provider_registry
 
-    return get_cli_provider_registration(provider)
+    return get_cli_provider_registry().get_provider(provider)
 
 
 def _select_model(settings: Any, provider_prefix: str, model_type: ModelType) -> str:
@@ -186,15 +186,17 @@ def _create_llm_client(model_type: ModelType) -> _LLMClientType:
 
     if (cli_reg := _get_cli_provider_registration(runtime_provider)) is not None:
         from config.config import DEFAULT_MAX_TOKENS
-        from integrations.llm_cli.runner import CLIBackedLLMClient
+        from core.llm.ports import get_cli_provider_registry
 
-        model_name = os.getenv(cli_reg.model_env_key, "").strip() or None
-        return CLIBackedLLMClient(
-            cli_reg.adapter_factory(),
-            model=model_name,
-            max_tokens=DEFAULT_MAX_TOKENS,
-            model_type=model_type,
-        )
+        factory = get_cli_provider_registry().get_client_factory("CLIBackedLLMClient")
+        if factory is not None:
+            model_name = os.getenv(cli_reg.model_env_key, "").strip() or None
+            return factory(
+                cli_reg.adapter_factory(),
+                model=model_name,
+                max_tokens=DEFAULT_MAX_TOKENS,
+                model_type=model_type,
+            )
 
     if use_litellm_transport():
         from core.llm.litellm.routing import build_litellm_llm_client

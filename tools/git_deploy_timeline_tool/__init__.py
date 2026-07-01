@@ -24,13 +24,6 @@ from typing import Any
 
 from core.domain.types.incident_window import IncidentWindow
 from core.tool_framework.tool_decorator import tool
-from integrations.github.helpers import (
-    github_creds,
-    github_source_available,
-    normalize_github_tool_result,
-    resolve_github_mcp_config,
-)
-from integrations.github_mcp import call_github_mcp_tool
 
 DEFAULT_WINDOW_MINUTES = 120
 MAX_WINDOW_MINUTES = 7 * 24 * 60  # 7 days
@@ -127,28 +120,31 @@ def _summarize_commit(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 def _extract_params(sources: dict[str, dict]) -> dict[str, Any]:
+    from core.domain.github_provider import get_github_registry
+
+    provider = get_github_registry().get()
     gh = sources["github"]
-    # ``_meta`` carries investigation-level context shared across tools
-    # (today: incident_window). Tools that don't care about it ignore the
-    # key. See the investigation agent tool context for where this is set.
-    # Defensive isinstance check: if anything ever stuffs a non-dict under
-    # the reserved ``_meta`` key, we degrade to no-shared-window rather
-    # than crashing with AttributeError on the .get below.
     raw_meta = sources.get("_meta")
     meta = raw_meta if isinstance(raw_meta, dict) else {}
     incident_window = meta.get("incident_window")
+    creds = provider.extract_creds(gh) if provider else {}
     return {
         "owner": gh["owner"],
         "repo": gh["repo"],
         "branch": gh.get("branch") or gh.get("default_branch") or "main",
         "shared_incident_window": incident_window if isinstance(incident_window, dict) else None,
-        **github_creds(gh),
+        **creds,
     }
 
 
 def _is_available(sources: dict[str, dict]) -> bool:
+    from core.domain.github_provider import get_github_registry
+
+    provider = get_github_registry().get()
     gh = sources.get("github", {})
-    return bool(github_source_available(sources) and gh.get("owner") and gh.get("repo"))
+    return bool(
+        provider and provider.is_source_available(sources) and gh.get("owner") and gh.get("repo")
+    )
 
 
 @tool(
@@ -229,7 +225,19 @@ def get_git_deploy_timeline(
            and ``until`` are empty AND no explicit window-minutes override).
         4. ``DEFAULT_WINDOW_MINUTES`` (120 minutes before now).
     """
-    config = resolve_github_mcp_config(
+    from core.domain.github_provider import get_github_registry
+
+    provider = get_github_registry().get()
+    if not provider:
+        return {
+            "source": "github",
+            "available": False,
+            "error": "GitHub provider is not configured.",
+            "commits": [],
+            "window": {},
+        }
+
+    config = provider.resolve_mcp_config(
         github_url, github_mode, github_token, github_command, github_args
     )
     if config is None:
@@ -277,8 +285,8 @@ def get_git_deploy_timeline(
         "perPage": effective_per_page,
     }
 
-    result = call_github_mcp_tool(config, "list_commits", arguments)
-    payload = normalize_github_tool_result(result)
+    result = provider.call_mcp_tool(config, "list_commits", arguments)
+    payload = provider.normalize_tool_result(result)
     raw_commits = payload.pop("structured_content", None) or []
     if not isinstance(raw_commits, list):
         raw_commits = []

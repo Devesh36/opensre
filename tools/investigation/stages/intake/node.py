@@ -175,15 +175,22 @@ def _extract_alert_details(state: InvestigationState) -> AlertDetails:
         return fallback_details(state, raw_alert)
 
 
+def _reaction_provider() -> Any | None:
+    """Look up the Slack reaction provider from the delivery registry."""
+    from core.domain.delivery import get_delivery_registry
+
+    return get_delivery_registry().get_reaction("slack")
+
+
 def _handle_noise_reaction(state: InvestigationState) -> None:
     slack_context = _slack_reaction_context(state)
     if slack_context is None:
         return
 
     channel, timestamp, token = slack_context
-    from integrations.slack.delivery import swap_reaction
-
-    swap_reaction("eyes", "white_check_mark", channel, timestamp, token)
+    provider = _reaction_provider()
+    if provider is not None:
+        provider.swap_reaction("eyes", "white_check_mark", channel, timestamp, token)
 
 
 def _handle_start_reaction(state: InvestigationState) -> None:
@@ -192,9 +199,9 @@ def _handle_start_reaction(state: InvestigationState) -> None:
         return
 
     channel, timestamp, token = slack_context
-    from integrations.slack.delivery import add_reaction
-
-    add_reaction("eyes", channel, timestamp, token)
+    provider = _reaction_provider()
+    if provider is not None:
+        provider.add_reaction("eyes", channel, timestamp, token)
 
 
 def _slack_reaction_context(state: InvestigationState) -> tuple[str, str, str] | None:

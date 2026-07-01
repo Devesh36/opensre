@@ -102,3 +102,24 @@ def send_whatsapp_report(
         from_number=from_number,
     )
     return (True, "") if post_success else (False, error)
+
+
+def _dispatch_whatsapp_report(
+    message: str,
+    credentials: dict[str, Any],
+) -> tuple[bool, str]:
+    """Adapter registered with the DeliveryRegistry for investigation dispatch."""
+    return send_whatsapp_report(message, credentials)
+
+
+def _register_delivery_provider() -> None:
+    try:
+        from core.domain.delivery import get_delivery_registry
+
+        registry = get_delivery_registry()
+        registry.register_delivery("whatsapp", _dispatch_whatsapp_report)
+    except Exception:
+        pass
+
+
+_register_delivery_provider()

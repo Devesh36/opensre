@@ -13,8 +13,6 @@ from typing import Protocol
 
 import click
 
-from integrations.telegram.alarms import AlarmDispatcher
-from integrations.telegram.credentials import load_credentials_from_env
 from platform.common.exit_codes import ERROR, SUCCESS
 from tools.watch_dog.config import WatchdogConfig
 from tools.watch_dog.process_monitor import ProcessMonitor, ProcessSample, Sampler
@@ -41,13 +39,13 @@ def run_watchdog(
     config: WatchdogConfig,
     *,
     sampler: Sampler | None = None,
-    dispatcher: Dispatcher | None = None,
+    dispatcher: Dispatcher,
     _sleep: Callable[[float], None] = time.sleep,
     _clock: Callable[[], float] = time.monotonic,
 ) -> int:
     """Run the watchdog loop until target exit, SIGINT, or --once alarm."""
     active_sampler = sampler or ProcessMonitor(config)
-    active_dispatcher = dispatcher or _build_dispatcher(config)
+    active_dispatcher = dispatcher
     cpu_window = _CpuWindow()
 
     try:
@@ -75,11 +73,6 @@ def run_watchdog(
             _sleep(config.interval)
     except KeyboardInterrupt:
         return SUCCESS
-
-
-def _build_dispatcher(config: WatchdogConfig) -> AlarmDispatcher:
-    creds = load_credentials_from_env(chat_id_override=config.chat_id)
-    return AlarmDispatcher(creds, cooldown_seconds=config.cooldown, parse_mode="HTML")
 
 
 def _evaluate_thresholds(

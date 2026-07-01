@@ -166,9 +166,10 @@ def status(provider: str) -> CredentialStatus:
                 detail=record.get("detail") or f"{spec.label} auth metadata is present.",
             )
         try:
-            from integrations.llm_cli.registry import get_cli_provider_registration
+            from config.llm_auth._cli_probe import get_cli_probe_registry
 
-            reg = get_cli_provider_registration(spec.value)
+            probe = get_cli_probe_registry().get("llm_cli")
+            reg = probe(spec.value) if probe is not None else None
             if reg is None:
                 return CredentialStatus(
                     spec.value,
