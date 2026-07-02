@@ -358,6 +358,14 @@ def run_architecture_scan_and_propose_github_issues(
     tasks = scan.get("proposed_refactor_tasks", [])
     if not isinstance(tasks, list):
         tasks = []
+    if not tasks:
+        return {
+            "scan": _scan_context_from_result(scan),
+            "proposals": [],
+            "count": 0,
+            "skipped_indices": [],
+        }
+
     proposal_payload = propose_github_issues_from_tasks(
         owner=owner,
         repo=repo,

@@ -282,3 +282,45 @@ def test_architecture_scan_invalid_task_indices(tmp_path) -> None:
 
     assert result.exit_code != 0
     assert "Invalid task index 'abc': must be an integer." in result.output
+
+
+def test_architecture_scan_propose_succeeds_with_no_violations(tmp_path) -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "architecture-scan",
+            "propose",
+            "Tracer-Cloud",
+            "opensre",
+            "--repo-root",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Architecture violation scan: 0 total" in result.output
+    assert "GitHub issue proposals: 0" in result.output
+    assert "proposed_refactor_tasks is empty" not in result.output
+
+
+def test_architecture_scan_file_issues_succeeds_with_no_violations(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "architecture-scan",
+            "file-issues",
+            "Tracer-Cloud",
+            "opensre",
+            "--repo-root",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Architecture violation scan: 0 total" in result.output
+    assert "GitHub issue proposals: 0" in result.output
+    assert "no issues filed" in result.output
