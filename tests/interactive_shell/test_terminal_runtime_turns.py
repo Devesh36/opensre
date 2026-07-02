@@ -187,6 +187,13 @@ def test_turn_needs_exclusive_stdin_for_architecture_scan(
         )
         is False
     )
+    assert (
+        loop_input_policy.turn_needs_exclusive_stdin(
+            "/architecture-scan --include-baselines propose Tracer-Cloud opensre",
+            session,
+        )
+        is False
+    )
 
 
 def test_queued_literal_quit_requests_runtime_exit() -> None:

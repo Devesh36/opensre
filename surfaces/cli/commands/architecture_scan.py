@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import Any
 
 import click
+from click.core import ParameterSource
 
 from platform.common.exit_codes import ERROR, SUCCESS
 from platform.common.runtime_flags import is_json_output
@@ -47,6 +48,35 @@ def _scan_options(func: Any) -> Any:
     return decorated
 
 
+ARCHITECTURE_SCAN_GITHUB_SUBCOMMANDS = frozenset({"propose", "file-issues"})
+_SCAN_OPTION_FLAGS = frozenset({"--repo-root", "--max-file-lines", "--task-indices"})
+_SCAN_FLAG_ONLY = frozenset({"--include-baselines"})
+
+
+def architecture_scan_github_subcommand(args: list[str]) -> str | None:
+    """Return ``propose``/``file-issues`` when present, skipping scan flags and values."""
+    i = 0
+    while i < len(args):
+        token = args[i]
+        if token in _SCAN_OPTION_FLAGS:
+            i += 2
+            continue
+        if token in _SCAN_FLAG_ONLY:
+            i += 1
+            continue
+        if any(token.startswith(f"{flag}=") for flag in _SCAN_OPTION_FLAGS):
+            i += 1
+            continue
+        if token.startswith("-"):
+            i += 1
+            continue
+        lowered = token.lower()
+        if lowered in ARCHITECTURE_SCAN_GITHUB_SUBCOMMANDS:
+            return lowered
+        return None
+    return None
+
+
 def _scan_kwargs(ctx: click.Context) -> dict[str, Any]:
     obj = ctx.obj if isinstance(ctx.obj, dict) else {}
     return {
@@ -62,11 +92,15 @@ def _store_scan_options(
     max_file_lines: int,
     include_baselines: bool,
 ) -> None:
-    ctx.obj = {
-        "repo_root": repo_root,
-        "max_file_lines": max_file_lines,
-        "include_baselines": include_baselines,
-    }
+    if not isinstance(ctx.obj, dict):
+        ctx.obj = {}
+    for name, value in (
+        ("repo_root", repo_root),
+        ("max_file_lines", max_file_lines),
+        ("include_baselines", include_baselines),
+    ):
+        if ctx.get_parameter_source(name) == ParameterSource.COMMANDLINE or name not in ctx.obj:
+            ctx.obj[name] = value
 
 
 def _emit_text_or_json(

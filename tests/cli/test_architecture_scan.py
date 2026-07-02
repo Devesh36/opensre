@@ -3,6 +3,20 @@ from __future__ import annotations
 from click.testing import CliRunner
 
 from surfaces.cli.__main__ import cli
+from surfaces.cli.commands.architecture_scan import architecture_scan_github_subcommand
+
+
+def test_architecture_scan_github_subcommand_skips_leading_flags() -> None:
+    assert (
+        architecture_scan_github_subcommand(
+            ["--include-baselines", "propose", "Tracer-Cloud", "opensre"]
+        )
+        == "propose"
+    )
+    assert architecture_scan_github_subcommand(["--repo-root", "/tmp", "file-issues"]) == (
+        "file-issues"
+    )
+    assert architecture_scan_github_subcommand(["--include-baselines"]) is None
 
 
 def test_architecture_scan_command_prints_report(tmp_path) -> None:
@@ -73,6 +87,34 @@ def test_architecture_scan_propose_subcommand(tmp_path) -> None:
     assert "Architecture violation scan: 1 total" in result.output
     assert "GitHub issue proposals: 1" in result.output
     assert "Remove compatibility forwarding module" in result.output
+
+
+def test_architecture_scan_subcommand_inherits_group_scan_options(tmp_path) -> None:
+    integrations_dir = tmp_path / "integrations"
+    integrations_dir.mkdir()
+    (integrations_dir / "shim.py").write_text(
+        'from core.module import foo\n__all__ = ["foo"]\n',
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "architecture-scan",
+            "--repo-root",
+            str(tmp_path),
+            "propose",
+            "Tracer-Cloud",
+            "opensre",
+            "--task-indices",
+            "0",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Architecture violation scan: 1 total" in result.output
+    assert "GitHub issue proposals: 1" in result.output
 
 
 def test_architecture_scan_file_issues_subcommand(tmp_path, monkeypatch) -> None:

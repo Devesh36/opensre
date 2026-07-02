@@ -73,14 +73,15 @@ _EXCLUSIVE_STDIN_SUBCOMMANDS: frozenset[tuple[str, str]] = frozenset(
 _WAIT_FOR_COMPLETION_COMMANDS: frozenset[str] = frozenset(
     {"/exit", "/quit", "/update", "/onboard", "/config", "/auth", "/login"}
 )
-_ARCHITECTURE_SCAN_GITHUB_SUBCOMMANDS = frozenset({"propose", "file-issues"})
 
 
 def _architecture_scan_needs_exclusive_stdin(args: list[str]) -> bool:
     """Plain scans print a long report and may show a GitHub follow-up picker."""
+    from surfaces.cli.commands.architecture_scan import architecture_scan_github_subcommand
+
     if not args:
         return True
-    return args[0].lower() not in _ARCHITECTURE_SCAN_GITHUB_SUBCOMMANDS
+    return architecture_scan_github_subcommand(args) is None
 
 
 def turn_should_show_spinner(text: str, _session: ReplSession) -> bool:

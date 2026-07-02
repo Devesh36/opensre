@@ -313,8 +313,9 @@ def _cmd_misses(session: ReplSession, console: Console, args: list[str]) -> bool
 
 
 def _cmd_architecture_scan(session: ReplSession, console: Console, args: list[str]) -> bool:  # noqa: ARG001
-    subcommand = args[0] if args else None
-    if subcommand in {"propose", "file-issues"}:
+    from surfaces.cli.commands.architecture_scan import architecture_scan_github_subcommand
+
+    if architecture_scan_github_subcommand(args) is not None:
         return run_cli_command(console, ["architecture-scan", *args], capture_output=True)
 
     ran = run_cli_command(console, ["architecture-scan", *args], capture_output=True)
