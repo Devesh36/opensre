@@ -208,7 +208,7 @@ def _get_ci_bridge() -> _CiBridge | None:
             find_direct_violations=check_direct.find_direct_violations,
             top_level_imports=check_cycles._top_level_imports,
         )
-    except ModuleNotFoundError:
+    except ImportError:
         _CI_BRIDGE = None
     return _CI_BRIDGE
 

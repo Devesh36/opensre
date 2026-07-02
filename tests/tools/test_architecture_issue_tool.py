@@ -464,3 +464,24 @@ def test_scan_dependency_violations_without_ci_bridge_still_runs(
 
     violations = scan_dependency_violations(tmp_path)
     assert any(v.type == "dependency_direction" for v in violations)
+
+
+def test_get_ci_bridge_tolerates_missing_ci_symbols(monkeypatch: pytest.MonkeyPatch) -> None:
+    from tools.architecture_issue_tool import scanners as scanners_module
+
+    monkeypatch.setattr(scanners_module, "_CI_BRIDGE", None)
+    monkeypatch.setattr(scanners_module, "_CI_BRIDGE_LOAD_ATTEMPTED", False)
+
+    class _BrokenModule:
+        pass
+
+    def _broken_import_module(_name: str) -> _BrokenModule:
+        return _BrokenModule()
+
+    monkeypatch.setattr(
+        scanners_module.importlib,
+        "import_module",
+        _broken_import_module,
+    )
+
+    assert scanners_module._get_ci_bridge() is None
