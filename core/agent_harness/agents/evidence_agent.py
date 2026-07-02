@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Protocol
 
 from core.agent import Agent
 from core.agent_harness.agent_builder import AgentConfig, build_agent
@@ -25,11 +25,6 @@ from core.agent_harness.ports import ErrorReporter, SessionStore, ToolEventObser
 from core.agent_harness.prompts.conversation_memory import (
     NO_HISTORY_PLACEHOLDER,
     format_recent_conversation,
-)
-from core.agent_harness.session.integrations_cache import (
-    has_only_runtime_metadata,
-    has_resolved_integrations,
-    merge_resolved_integrations,
 )
 from core.domain.alerts.alert_source import SECONDARY_TOOL_SOURCES
 from core.events import runtime_event_callback_from_observer
@@ -53,23 +48,25 @@ _MAX_PER_TOOL_CHARS = 4_000
 PersistToolCalls = Callable[[list[tuple[Any, Any]]], None]
 
 
+class EvidenceAgentFactory(Protocol):
+    """Build the runtime :class:`Agent` for one evidence-gather turn."""
+
+    def __call__(
+        self,
+        *,
+        llm: Any,
+        session: SessionStore,
+        gather_tools: list[Any],
+        resolved: dict[str, Any],
+        on_progress: ToolEventObserver | None,
+    ) -> Agent[Any]: ...
+
+
 def _resolve_session_integrations(session: SessionStore) -> dict[str, Any]:
     """Resolve integration configs once per session and cache the result."""
-    cached = session.resolved_integrations_cache
-    if cached is not None and (
-        has_resolved_integrations(cached) or not has_only_runtime_metadata(cached)
-    ):
-        return cached
+    from core.agent_harness.integrations.resolution import resolve_and_cache_integrations
 
-    from core.agent_harness.integrations.resolution import resolve_integrations
-
-    resolved = resolve_integrations()
-    if resolved:
-        session.resolved_integrations_cache = merge_resolved_integrations(
-            cached,
-            resolved,
-        )
-    return session.resolved_integrations_cache or {}
+    return resolve_and_cache_integrations(session)
 
 
 def _truncate(text: str, limit: int) -> str:
@@ -185,7 +182,7 @@ def _build_evidence_agent(
     config = AgentConfig(
         llm=llm,
         system=_build_gather_system_prompt(session),
-        tools=gather_tools,
+        tools=tuple(gather_tools),
         resolved_integrations=resolved,
         max_iterations=_MAX_GATHER_ITERATIONS,
         on_runtime_event=runtime_event_callback_from_observer(on_progress),
@@ -201,6 +198,7 @@ def gather_tool_evidence(
     persist: PersistToolCalls | None = None,
     error_reporter: ErrorReporter | None = None,
     is_tty: bool | None = None,  # noqa: ARG001 — reserved for parity with answer agents
+    agent_factory: EvidenceAgentFactory | None = None,
 ) -> str | None:
     """Run a bounded tool-calling loop and return collected evidence, or None.
 
@@ -222,7 +220,8 @@ def gather_tool_evidence(
         llm = _load_gather_llm_or_none(error_reporter)
         if llm is None:
             return None
-        agent = _build_evidence_agent(
+        build_agent_for_turn = agent_factory or _build_evidence_agent
+        agent = build_agent_for_turn(
             llm=llm,
             session=session,
             gather_tools=gather_tools,
@@ -248,4 +247,4 @@ def gather_tool_evidence(
     return _format_observation(result.executed)
 
 
-__all__ = ["PersistToolCalls", "gather_tool_evidence"]
+__all__ = ["EvidenceAgentFactory", "PersistToolCalls", "gather_tool_evidence"]
