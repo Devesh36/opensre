@@ -7,8 +7,8 @@ from typing import Self
 from prompt_toolkit import PromptSession
 from pydantic import BaseModel, ConfigDict, Field, InstanceOf, field_validator, model_validator
 
-from core.agent_harness.session.state import ReplSession
-from core.agent_harness.session.tasks import TaskRegistry
+from core.agent_harness.session import SessionManager
+from core.agent_harness.session.state import Session
 from core.domain.alerts import inbox as _alert_inbox
 from surfaces.interactive_shell.runtime.core.state import (
     ReplState,
@@ -17,12 +17,12 @@ from surfaces.interactive_shell.runtime.core.state import (
 )
 
 
-class ReplSessionBootstrapSpec(BaseModel):
+class SessionBootstrapSpec(BaseModel):
     """Pydantic-enforced inputs for preparing a REPL session."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
-    session: InstanceOf[ReplSession] = Field(default_factory=ReplSession)
+    session: InstanceOf[Session] = Field(default_factory=Session)
     pt_session: PromptSession[str] | None = None
     active_theme_name: str | None = None
     hydrate_integrations: bool = True
@@ -37,12 +37,18 @@ class ReplSessionBootstrapSpec(BaseModel):
 
     @model_validator(mode="after")
     def apply_to_session(self) -> Self:
-        """Apply the canonical startup mutations to the validated session."""
+        """Apply the canonical startup mutations to the validated session.
+
+        Core bootstrap (persistent task registry + integration hydration) is
+        delegated to :class:`SessionManager`; the shell layers its own UI
+        concerns (theme, grounding providers, prompt history) on top.
+        """
+        SessionManager().bootstrap(
+            self.session,
+            hydrate_integrations=self.hydrate_integrations,
+            persistent_tasks=self.persistent_tasks,
+        )
         self.session.active_theme_name = self.active_theme_name or _current_theme_name()
-        if self.hydrate_integrations:
-            self.session.hydrate_configured_integrations()
-        if self.persistent_tasks:
-            self.session.task_registry = TaskRegistry.persistent()
         if self.pt_session is not None:
             self.session.prompt_history_backend = self.pt_session.history
         return self
@@ -57,7 +63,7 @@ class ReplRuntimeContext(BaseModel):
         validate_assignment=True,
     )
 
-    session: InstanceOf[ReplSession]
+    session: InstanceOf[Session]
     state: InstanceOf[ReplState]
     spinner: InstanceOf[SpinnerState]
     pt_session: PromptSession[str] | None = None
@@ -96,16 +102,16 @@ def _current_theme_name() -> str:
 
 
 def prepare_repl_session(
-    session: ReplSession | None = None,
+    session: Session | None = None,
     *,
     pt_session: PromptSession[str] | None = None,
     active_theme_name: str | None = None,
     hydrate_integrations: bool = True,
     persistent_tasks: bool = True,
-) -> ReplSession:
+) -> Session:
     """Return a session with the same defaults used by REPL boot."""
-    spec = ReplSessionBootstrapSpec(
-        session=session or ReplSession(),
+    spec = SessionBootstrapSpec(
+        session=session or Session(),
         pt_session=pt_session,
         active_theme_name=active_theme_name,
         hydrate_integrations=hydrate_integrations,
@@ -115,7 +121,7 @@ def prepare_repl_session(
 
 
 def create_repl_runtime_context(
-    session: ReplSession | None = None,
+    session: Session | None = None,
     *,
     state: ReplState | None = None,
     spinner: SpinnerState | None = None,
@@ -145,7 +151,7 @@ def create_repl_runtime_context(
 
 __all__ = [
     "ReplRuntimeContext",
-    "ReplSessionBootstrapSpec",
+    "SessionBootstrapSpec",
     "create_repl_runtime_context",
     "prepare_repl_session",
 ]

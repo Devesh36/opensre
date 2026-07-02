@@ -6,7 +6,7 @@ import click
 import pytest
 
 import surfaces.interactive_shell.grounding.cli_reference as cli_reference_module
-from core.agent_harness.session.state import ReplSession
+from core.agent_harness.session.state import Session
 
 
 def _reference_with_cli() -> cli_reference_module.CliReference:
@@ -145,14 +145,14 @@ def test_command_group_provider_is_bound_lazily() -> None:
 
 
 def test_shell_prompt_context_provider_includes_cli_reference() -> None:
-    provider = cli_reference_module.shell_prompt_context_provider(ReplSession())
+    provider = cli_reference_module.shell_prompt_context_provider(Session())
     text = provider.cli_reference()
     assert "=== opensre --help ===" in text
     assert "Usage: opensre" in text
 
 
 def test_shell_prompt_context_provider_reuses_session_cli_cache() -> None:
-    session = ReplSession()
+    session = Session()
     first = cli_reference_module.shell_prompt_context_provider(session)
     second = cli_reference_module.shell_prompt_context_provider(session)
     first.cli_reference()

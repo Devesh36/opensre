@@ -9,7 +9,7 @@ from config.llm_reasoning_effort import display_reasoning_effort
 from core.agent_harness.accounting.token_accounting import format_token_total
 from surfaces.interactive_shell.command_registry.types import SlashCommand
 from surfaces.interactive_shell.grounding.cli_reference import session_cli_reference
-from surfaces.interactive_shell.runtime import ReplSession
+from surfaces.interactive_shell.runtime import Session
 from surfaces.interactive_shell.ui import (
     BOLD_BRAND,
     DIM,
@@ -38,7 +38,7 @@ def _status_provider_display() -> str:
     return f"{resolution.resolved_provider} [{WARNING}]({note})[/]"
 
 
-def _cmd_status(session: ReplSession, console: Console, _args: list[str]) -> bool:
+def _cmd_status(session: Session, console: Console, _args: list[str]) -> bool:
     table = repl_table(title="Session status\n", title_style=BOLD_BRAND, show_header=False)
     table.add_column("key", style="bold")
     table.add_column("value")
@@ -70,18 +70,18 @@ def _cmd_status(session: ReplSession, console: Console, _args: list[str]) -> boo
     return True
 
 
-def _cmd_cost(session: ReplSession, console: Console, _args: list[str]) -> bool:
+def _cmd_cost(session: Session, console: Console, _args: list[str]) -> bool:
     title = "Session cost"
-    if session.token_usage_has_estimates:
+    if session.tokens.has_estimates:
         title = "Session cost (includes estimates)"
     table = repl_table(title=f"{title}\n", title_style=BOLD_BRAND, show_header=False)
     table.add_column("key", style="bold")
     table.add_column("value")
     table.add_row("history entries", str(len(session.history)))
-    if session.llm_call_count:
-        table.add_row("llm calls", str(session.llm_call_count))
+    if session.tokens.call_count:
+        table.add_row("llm calls", str(session.tokens.call_count))
 
-    if session.token_usage:
+    if session.tokens.totals:
         for direction in ("input", "output"):
             label, value = format_token_total(session, direction=direction)
             table.add_row(label, value)
@@ -92,7 +92,7 @@ def _cmd_cost(session: ReplSession, console: Console, _args: list[str]) -> bool:
     return True
 
 
-def _cmd_context(session: ReplSession, console: Console, _args: list[str]) -> bool:
+def _cmd_context(session: Session, console: Console, _args: list[str]) -> bool:
     if not session.accumulated_context:
         console.print(f"[{DIM}]no infra context accumulated yet.[/]")
         return True

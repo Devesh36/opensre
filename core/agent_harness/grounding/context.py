@@ -1,7 +1,7 @@
 """Session-scoped grounding context aggregating the LLM grounding caches.
 
 A single :class:`GroundingContext` owns one instance of each cached grounding
-reference (docs, AGENTS.md). It is created per ``ReplSession`` and threaded
+reference (docs, AGENTS.md). It is created per ``Session`` and threaded
 through prompt assembly, so the grounding caches have a clear, process-scoped
 lifetime with no module-level mutable globals.
 """

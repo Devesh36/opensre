@@ -8,7 +8,7 @@ from core.agent_harness.grounding.diagnostics import (
     log_grounding_cache_diagnostics,
 )
 from core.agent_harness.grounding.models import CacheStats
-from core.agent_harness.session.state import ReplSession
+from core.agent_harness.session.state import Session
 from surfaces.interactive_shell.grounding.cli_reference import ShellPromptContextProvider
 
 
@@ -40,8 +40,8 @@ def test_invalidate_clears_every_cache() -> None:
 
 
 def test_shell_prompt_provider_cli_cache_is_session_scoped() -> None:
-    session_a = ReplSession()
-    session_b = ReplSession()
+    session_a = Session()
+    session_b = Session()
     provider_a = ShellPromptContextProvider(session_a)
     provider_b = ShellPromptContextProvider(session_a)
     provider_c = ShellPromptContextProvider(session_b)
