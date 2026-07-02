@@ -27,10 +27,39 @@ class GitHubApiError(RuntimeError):
         return f"GitHub API error {self.status_code}: {self.message}"
 
 
-def resolve_github_token(github_token: str | None = None) -> str:
-    """Resolve a GitHub token from explicit input or standard env vars."""
+def resolve_github_token_from_integration_store() -> str:
+    """Load a GitHub REST token saved by ``opensre integrations setup github``."""
+    from integrations.github_mcp import build_github_mcp_config, github_mcp_config_from_env
+    from integrations.store import get_integration
 
-    return (github_token or os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN") or "").strip()
+    record = get_integration("github")
+    if record is not None:
+        credentials = record.get("credentials") or {}
+        if isinstance(credentials, dict):
+            try:
+                token = build_github_mcp_config(credentials).auth_token.strip()
+                if token:
+                    return token
+            except Exception:
+                pass
+    try:
+        env_config = github_mcp_config_from_env()
+    except Exception:
+        return ""
+    if env_config is None:
+        return ""
+    return env_config.auth_token.strip()
+
+
+def resolve_github_token(github_token: str | None = None) -> str:
+    """Resolve a GitHub token from explicit input, env vars, or integrations store."""
+    if github_token and github_token.strip():
+        return github_token.strip()
+    for env_name in ("GITHUB_TOKEN", "GH_TOKEN", "GITHUB_MCP_AUTH_TOKEN"):
+        value = os.getenv(env_name, "").strip()
+        if value:
+            return value
+    return resolve_github_token_from_integration_store()
 
 
 def _next_link(headers: Any) -> str | None:
@@ -75,7 +104,8 @@ class GitHubRestClient:
     ) -> JsonPayload:
         if not self._token:
             raise GitHubApiError(
-                "GitHub token is required. Configure github_token, GITHUB_TOKEN, or GH_TOKEN."
+                "GitHub token is required. Configure github_token, GITHUB_TOKEN, GH_TOKEN, "
+                "or run `opensre integrations setup github`."
             )
 
         url = self._url(path, params=params)
@@ -121,7 +151,8 @@ class GitHubRestClient:
     ) -> list[dict[str, Any]]:
         if not self._token:
             raise GitHubApiError(
-                "GitHub token is required. Configure github_token, GITHUB_TOKEN, or GH_TOKEN."
+                "GitHub token is required. Configure github_token, GITHUB_TOKEN, GH_TOKEN, "
+                "or run `opensre integrations setup github`."
             )
 
         url: str | None = self._url(path, params=params)
@@ -177,4 +208,10 @@ class GitHubRestClient:
         return f"{base}{separator}{query}"
 
 
-__all__ = ["GitHubApiError", "GitHubRestClient", "JsonPayload", "resolve_github_token"]
+__all__ = [
+    "GitHubApiError",
+    "GitHubRestClient",
+    "JsonPayload",
+    "resolve_github_token",
+    "resolve_github_token_from_integration_store",
+]

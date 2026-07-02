@@ -22,6 +22,12 @@ from surfaces.interactive_shell.runtime.subprocess_runner import (
     start_background_cli_task,
 )
 from surfaces.interactive_shell.ui import DIM, ERROR, print_command_output
+from surfaces.interactive_shell.ui.components.choice_menu import (
+    print_valid_choice_list,
+    repl_choose_one,
+    repl_section_break,
+    repl_tty_interactive,
+)
 from surfaces.interactive_shell.utils.telemetry.turn_outcome import format_wizard_cli_outcome
 
 _UPDATE_SUBPROCESS_TIMEOUT_SECONDS = 300
@@ -307,7 +313,98 @@ def _cmd_misses(session: ReplSession, console: Console, args: list[str]) -> bool
 
 
 def _cmd_architecture_scan(session: ReplSession, console: Console, args: list[str]) -> bool:  # noqa: ARG001
-    return run_cli_command(console, ["architecture-scan", *args], capture_output=True)
+    subcommand = args[0] if args else None
+    if subcommand in {"propose", "file-issues"}:
+        return run_cli_command(console, ["architecture-scan", *args], capture_output=True)
+
+    ran = run_cli_command(console, ["architecture-scan", *args], capture_output=True)
+    _offer_architecture_scan_github_follow_up(session, console, scan_args=args)
+    return ran
+
+
+def _prepare_repl_inline_menu_stdin() -> None:
+    """Restore TTY state and discard stale bytes before an inline arrow-key menu."""
+    import time
+
+    from surfaces.interactive_shell.ui.components.cpr_stdin import drain_stale_cpr_bytes
+    from surfaces.interactive_shell.ui.components.key_reader import (
+        flush_stdin_unix,
+        restore_stdin_terminal,
+    )
+
+    restore_stdin_terminal()
+    time.sleep(0.05)
+    flush_stdin_unix()
+    drain_stale_cpr_bytes()
+
+
+def _offer_architecture_scan_github_follow_up(
+    session: ReplSession,
+    console: Console,
+    *,
+    scan_args: list[str],
+) -> None:
+    """After a plain scan report, offer deterministic GitHub follow-up slash commands."""
+    if not repl_tty_interactive():
+        return
+    if not getattr(session, "exclusive_stdin_active", False):
+        return
+
+    from integrations.github.repo_scope import detect_git_remote_repo_scope
+
+    _prepare_repl_inline_menu_stdin()
+
+    scope = detect_git_remote_repo_scope()
+    if not scope:
+        console.print()
+        print_valid_choice_list(
+            console,
+            title="GitHub issue next steps (set OWNER/REPO):",
+            choices=[
+                "/architecture-scan propose OWNER REPO",
+                "/architecture-scan file-issues OWNER REPO",
+            ],
+        )
+        return
+
+    owner, repo = scope
+    choice = repl_choose_one(
+        title="GitHub issues",
+        breadcrumb="/architecture-scan",
+        choices=[
+            ("propose", f"Propose issues for {owner}/{repo}"),
+            ("file-issues", f"Create issues on {owner}/{repo}"),
+            ("done", "Done"),
+        ],
+    )
+    if choice is None or choice == "done":
+        return
+
+    if choice == "file-issues":
+        from integrations.github.client import resolve_github_token
+        from tools.architecture_issue_tool.scan import GITHUB_TOKEN_SETUP_HINT
+
+        if not resolve_github_token():
+            console.print()
+            console.print(f"[{ERROR}]{GITHUB_TOKEN_SETUP_HINT}[/]")
+            return
+        confirmed = repl_choose_one(
+            title="Create GitHub issues?",
+            breadcrumb="/architecture-scan › file-issues",
+            choices=[
+                ("yes", "Yes, create issues for all refactor tasks"),
+                ("no", "Cancel"),
+            ],
+        )
+        if confirmed != "yes":
+            return
+
+    repl_section_break(console)
+    run_cli_command(
+        console,
+        ["architecture-scan", choice, owner, repo, *scan_args],
+        capture_output=True,
+    )
 
 
 COMMANDS: list[SlashCommand] = [
@@ -315,7 +412,12 @@ COMMANDS: list[SlashCommand] = [
         "/architecture-scan",
         "Scan the repository for architecture violations (layering, shims, size, placement).",
         _cmd_architecture_scan,
-        usage=("/architecture-scan", "/architecture-scan --include-baselines"),
+        usage=(
+            "/architecture-scan",
+            "/architecture-scan --include-baselines",
+            "/architecture-scan propose Tracer-Cloud opensre --task-indices 0",
+            "/architecture-scan file-issues Tracer-Cloud opensre --task-indices 0",
+        ),
     ),
     SlashCommand(
         "/auth",

@@ -9,7 +9,12 @@ from urllib import error, request
 
 import pytest
 
-from integrations.github.client import GitHubApiError, GitHubRestClient, resolve_github_token
+from integrations.github.client import (
+    GitHubApiError,
+    GitHubRestClient,
+    resolve_github_token,
+    resolve_github_token_from_integration_store,
+)
 
 
 class _Response:
@@ -41,13 +46,59 @@ class _RawResponse(_Response):
 
 def test_resolve_github_token_prefers_explicit_then_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GITHUB_TOKEN", "env-token")
+    monkeypatch.setattr(
+        "integrations.github.client.resolve_github_token_from_integration_store",
+        lambda: "store-token",
+    )
     assert resolve_github_token("explicit") == "explicit"
     assert resolve_github_token(None) == "env-token"
+
+
+def test_resolve_github_token_falls_back_to_integration_store(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    monkeypatch.delenv("GITHUB_MCP_AUTH_TOKEN", raising=False)
+    monkeypatch.setattr(
+        "integrations.github.client.resolve_github_token_from_integration_store",
+        lambda: "store-token",
+    )
+    assert resolve_github_token(None) == "store-token"
+
+
+def test_resolve_github_token_from_integration_store_reads_saved_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from integrations import github_mcp as github_mcp_module
+
+    monkeypatch.setattr(
+        "integrations.store.get_integration",
+        lambda service: (
+            {
+                "credentials": {
+                    "mode": "streamable-http",
+                    "url": github_mcp_module.DEFAULT_GITHUB_MCP_URL,
+                    "auth_token": "gho_saved",
+                }
+            }
+            if service == "github"
+            else None
+        ),
+    )
+    monkeypatch.setattr(github_mcp_module, "github_mcp_config_from_env", lambda: None)
+
+    assert resolve_github_token_from_integration_store() == "gho_saved"
 
 
 def test_missing_token_raises_typed_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.delenv("GH_TOKEN", raising=False)
+    monkeypatch.delenv("GITHUB_MCP_AUTH_TOKEN", raising=False)
+    monkeypatch.setattr(
+        "integrations.github.client.resolve_github_token_from_integration_store",
+        lambda: "",
+    )
     client = GitHubRestClient(github_token=None)
 
     with pytest.raises(GitHubApiError) as exc:

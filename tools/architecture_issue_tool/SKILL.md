@@ -18,18 +18,23 @@ When presenting results to the user:
 2. Prefer echoing the full `report` text verbatim when the user asked for a scan or audit.
 3. Never omit a non-zero violation type from the summary (especially compatibility shims).
 
-For guaranteed identical output across CLI and REPL without summarization, the user may run:
+For guaranteed identical output across CLI and REPL without summarization:
 
-- `opensre architecture-scan` (CLI)
-- `/architecture-scan` (REPL slash command)
+- `opensre architecture-scan` or `/architecture-scan` (report only)
+- `opensre architecture-scan propose OWNER REPO` or `/architecture-scan propose OWNER REPO`
+- `opensre architecture-scan file-issues OWNER REPO` or `/architecture-scan file-issues OWNER REPO`
 
 Do not route natural-language requests to those commands unless the user explicitly asks to run them.
 
 ## GitHub issue creation
 
-The scanner is read-only. To file GitHub issues from `proposed_refactor_tasks`:
+Prefer explicit slash/CLI subcommands over chat-tool chaining:
 
-1. `propose_github_issues_from_architecture_tasks` — build create-issue proposals (read-only)
-2. `execute_github_issue_mutation` — create each issue after explicit human approval
+1. `/architecture-scan propose Tracer-Cloud opensre --task-indices 0` — scan + proposals (read-only)
+2. `/architecture-scan file-issues Tracer-Cloud opensre --task-indices 0` — scan + create issues
+
+Agent tools `propose_github_issues_from_architecture_tasks` and `execute_github_issue_mutation`
+remain available for programmatic use, but the REPL gather loop only runs investigation-surface
+tools — use slash subcommands for reliable GitHub filing from the terminal.
 
 Do not auto-create issues from scan output.

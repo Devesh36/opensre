@@ -73,6 +73,14 @@ _EXCLUSIVE_STDIN_SUBCOMMANDS: frozenset[tuple[str, str]] = frozenset(
 _WAIT_FOR_COMPLETION_COMMANDS: frozenset[str] = frozenset(
     {"/exit", "/quit", "/update", "/onboard", "/config", "/auth", "/login"}
 )
+_ARCHITECTURE_SCAN_GITHUB_SUBCOMMANDS = frozenset({"propose", "file-issues"})
+
+
+def _architecture_scan_needs_exclusive_stdin(args: list[str]) -> bool:
+    """Plain scans print a long report and may show a GitHub follow-up picker."""
+    if not args:
+        return True
+    return args[0].lower() not in _ARCHITECTURE_SCAN_GITHUB_SUBCOMMANDS
 
 
 def turn_should_show_spinner(text: str, _session: ReplSession) -> bool:
@@ -107,6 +115,8 @@ def turn_needs_exclusive_stdin(text: str, _session: ReplSession) -> bool:
         return True
     if name == "/theme":
         return True
+    if name == "/architecture-scan":
+        return _architecture_scan_needs_exclusive_stdin(args)
     if name in _EXCLUSIVE_STDIN_MENU_COMMANDS and not args:
         return True
     if name == "/tests" and not args:

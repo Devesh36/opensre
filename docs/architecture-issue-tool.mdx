@@ -14,7 +14,9 @@ The tool does **not** modify code, execute refactors, or create GitHub issues au
 | `find_architecture_violations` | Scan repo for dependency, size, shim, and placement violations |
 | `propose_github_issues_from_architecture_tasks` | Build GitHub create-issue proposals from scan tasks (read-only) |
 | `opensre architecture-scan` | Same scan with deterministic text report (CLI) |
-| `/architecture-scan` | Same as CLI command inside the interactive shell |
+| `opensre architecture-scan propose OWNER REPO` | Scan + build GitHub issue proposals (read-only) |
+| `opensre architecture-scan file-issues OWNER REPO` | Scan + propose + create GitHub issues |
+| `/architecture-scan` | Same as CLI inside the interactive shell |
 
 ## What it checks
 
@@ -46,6 +48,35 @@ Inside the interactive shell:
 ```
 
 Both print the same `report` text. Add `--json` (CLI) for the full structured payload.
+
+### Propose GitHub issues (read-only)
+
+```bash
+opensre architecture-scan propose Tracer-Cloud opensre --task-indices 0
+```
+
+REPL:
+
+```text
+/architecture-scan propose Tracer-Cloud opensre --task-indices 0
+```
+
+This runs the scan and prints GitHub create-issue **proposals** — nothing is filed yet.
+
+### File GitHub issues (mutating)
+
+```bash
+opensre architecture-scan file-issues Tracer-Cloud opensre --task-indices 0
+```
+
+REPL:
+
+```text
+/architecture-scan file-issues Tracer-Cloud opensre --task-indices 0
+```
+
+This runs scan → propose → `execute_github_issue_mutation` for each selected task.
+Requires GitHub to be configured. Omit `--task-indices` to file an issue for every task.
 
 ### Tool / Python API
 

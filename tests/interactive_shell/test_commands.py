@@ -283,6 +283,78 @@ class TestDispatchSlash:
         assert dispatch_slash("/hermes", session, console) is True
         assert calls == [["hermes"]]
 
+    def test_architecture_scan_offers_github_follow_up(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from surfaces.interactive_shell.command_registry import cli_parity
+
+        calls: list[list[str]] = []
+
+        def _fake_run_cli_command(_console: Console, args: list[str], **_kwargs) -> bool:
+            calls.append(args)
+            return True
+
+        monkeypatch.setattr(cli_parity, "run_cli_command", _fake_run_cli_command)
+        monkeypatch.setattr(cli_parity, "repl_tty_interactive", lambda: True)
+        from integrations.github import repo_scope
+
+        monkeypatch.setattr(
+            repo_scope,
+            "detect_git_remote_repo_scope",
+            lambda **_kwargs: ("Tracer-Cloud", "opensre"),
+        )
+        picks = iter(["propose"])
+        monkeypatch.setattr(cli_parity, "repl_choose_one", lambda **_kw: next(picks))
+        monkeypatch.setattr(cli_parity, "repl_section_break", lambda _console: None)
+        monkeypatch.setattr(cli_parity, "_prepare_repl_inline_menu_stdin", lambda: None)
+
+        session = ReplSession()
+        session.exclusive_stdin_active = True
+        console, _ = _capture()
+
+        assert dispatch_slash("/architecture-scan", session, console) is True
+        assert calls == [
+            ["architecture-scan"],
+            ["architecture-scan", "propose", "Tracer-Cloud", "opensre"],
+        ]
+
+    def test_architecture_scan_subcommand_skips_follow_up_menu(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from surfaces.interactive_shell.command_registry import cli_parity
+
+        calls: list[list[str]] = []
+
+        def _fake_run_cli_command(_console: Console, args: list[str], **_kwargs) -> bool:
+            calls.append(args)
+            return True
+
+        monkeypatch.setattr(cli_parity, "run_cli_command", _fake_run_cli_command)
+        choose_calls = 0
+
+        def _should_not_choose(**_kwargs: object) -> str:
+            nonlocal choose_calls
+            choose_calls += 1
+            return "propose"
+
+        monkeypatch.setattr(cli_parity, "repl_choose_one", _should_not_choose)
+
+        session = ReplSession()
+        console, _ = _capture()
+
+        assert (
+            dispatch_slash(
+                "/architecture-scan propose Tracer-Cloud opensre",
+                session,
+                console,
+            )
+            is True
+        )
+        assert calls == [
+            ["architecture-scan", "propose", "Tracer-Cloud", "opensre"],
+        ]
+        assert choose_calls == 0
+
     def test_empty_input_is_noop(self) -> None:
         session = ReplSession()
         console, _ = _capture()

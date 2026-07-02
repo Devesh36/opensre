@@ -7,10 +7,16 @@ from pathlib import Path
 
 from tests.tools.conftest import BaseToolContract
 from tools.architecture_issue_tool.scan import (
+    GITHUB_TOKEN_SETUP_HINT,
+    build_github_issue_guidance,
     build_github_issue_proposal_for_task,
     format_architecture_scan_report,
+    format_github_issue_error,
+    format_scan_workflow_header,
     propose_github_issues_from_tasks,
     run_architecture_scan,
+    run_architecture_scan_and_file_github_issues,
+    summarize_issue_results,
 )
 from tools.architecture_issue_tool.scanners import (
     _matches_prefix,
@@ -116,6 +122,58 @@ def test_format_architecture_scan_report_lists_all_types(tmp_path: Path) -> None
 def test_format_architecture_scan_report_error() -> None:
     report = format_architecture_scan_report({"error": "missing repo"})
     assert "missing repo" in report
+
+
+def test_build_github_issue_guidance_includes_repo_scope() -> None:
+    guidance = build_github_issue_guidance(owner="Tracer-Cloud", repo="opensre")
+    assert "Tracer-Cloud/opensre" in guidance
+    assert "/architecture-scan propose Tracer-Cloud opensre" in guidance
+    assert "/architecture-scan file-issues Tracer-Cloud opensre" in guidance
+
+
+def test_build_github_issue_guidance_generic_without_scope() -> None:
+    guidance = build_github_issue_guidance()
+    assert "OWNER REPO" in guidance
+
+
+def test_format_scan_workflow_header_summarizes_counts() -> None:
+    header = format_scan_workflow_header(
+        {
+            "summary": {
+                "total": 3,
+                "by_type": {
+                    "dependency_direction": 1,
+                    "compatibility_shim": 2,
+                    "oversized_file": 0,
+                },
+            }
+        }
+    )
+    assert header == (
+        "Architecture violation scan: 3 total (dependency_direction: 1, compatibility_shim: 2)"
+    )
+
+
+def test_format_github_issue_error_adds_disabled_repo_hint() -> None:
+    message = format_github_issue_error(
+        'GitHub API error 410: {"message":"Issues has been disabled in this repository."}'
+    )
+    assert "Settings → General → Features" in message
+
+
+def test_summarize_issue_results_groups_duplicate_failures() -> None:
+    lines = summarize_issue_results(
+        [
+            {"error": "same"},
+            {"error": "same"},
+            {
+                "executed": True,
+                "issue": {"number": 1, "html_url": "https://github.com/o/r/issues/1"},
+            },
+        ]
+    )
+    assert any("failed (2): same" in line for line in lines)
+    assert any("created #1" in line for line in lines)
 
 
 def test_scan_report_matches_cli_format(tmp_path: Path) -> None:
@@ -246,6 +304,27 @@ def test_build_github_issue_proposal_for_task_is_deterministic() -> None:
     first = build_github_issue_proposal_for_task(owner="o", repo="r", task=task, task_index=0)
     second = build_github_issue_proposal_for_task(owner="o", repo="r", task=task, task_index=0)
     assert first == second
+
+
+def test_file_github_issues_requires_token(tmp_path: Path, monkeypatch) -> None:
+    integrations_dir = tmp_path / "integrations"
+    integrations_dir.mkdir()
+    (integrations_dir / "shim.py").write_text(
+        'from core.module import foo\n__all__ = ["foo"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    monkeypatch.setattr("integrations.store.get_integration", lambda _service: None)
+
+    result = run_architecture_scan_and_file_github_issues(
+        owner="o",
+        repo="r",
+        repo_root=str(tmp_path),
+        task_indices=[0],
+    )
+    assert result["error"] == GITHUB_TOKEN_SETUP_HINT
+    assert result["issue_results"] == []
 
 
 def test_misplaced_detects_base_tool_subclass(tmp_path: Path) -> None:

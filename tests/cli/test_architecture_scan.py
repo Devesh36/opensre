@@ -44,3 +44,179 @@ def test_architecture_scan_missing_repo_root_exits_error(tmp_path) -> None:
 
     assert result.exit_code != 0
     assert "does not exist" in result.output
+
+
+def test_architecture_scan_propose_subcommand(tmp_path) -> None:
+    integrations_dir = tmp_path / "integrations"
+    integrations_dir.mkdir()
+    (integrations_dir / "shim.py").write_text(
+        'from core.module import foo\n__all__ = ["foo"]\n',
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "architecture-scan",
+            "propose",
+            "Tracer-Cloud",
+            "opensre",
+            "--repo-root",
+            str(tmp_path),
+            "--task-indices",
+            "0",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Architecture violation scan: 1 total" in result.output
+    assert "GitHub issue proposals: 1" in result.output
+    assert "Remove compatibility forwarding module" in result.output
+
+
+def test_architecture_scan_file_issues_subcommand(tmp_path, monkeypatch) -> None:
+    integrations_dir = tmp_path / "integrations"
+    integrations_dir.mkdir()
+    (integrations_dir / "shim.py").write_text(
+        'from core.module import foo\n__all__ = ["foo"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+
+    def _fake_execute(owner: str, repo: str, proposal: dict) -> dict:
+        return {
+            "source": "github",
+            "available": True,
+            "executed": True,
+            "side_effect": "created_github_issue",
+            "issue": {
+                "number": 1234,
+                "html_url": f"https://github.com/{owner}/{repo}/issues/1234",
+                "title": proposal.get("payload", {}).get("title", ""),
+            },
+        }
+
+    monkeypatch.setattr(
+        "integrations.github.tools.work_status.execute_github_issue_mutation",
+        _fake_execute,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "architecture-scan",
+            "file-issues",
+            "Tracer-Cloud",
+            "opensre",
+            "--repo-root",
+            str(tmp_path),
+            "--task-indices",
+            "0",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "created #1234" in result.output
+    assert "https://github.com/Tracer-Cloud/opensre/issues/1234" in result.output
+
+
+def test_architecture_scan_file_issues_uses_integration_store_token(tmp_path, monkeypatch) -> None:
+    from integrations import github_mcp as github_mcp_module
+
+    integrations_dir = tmp_path / "integrations"
+    integrations_dir.mkdir()
+    (integrations_dir / "shim.py").write_text(
+        'from core.module import foo\n__all__ = ["foo"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    monkeypatch.delenv("GITHUB_MCP_AUTH_TOKEN", raising=False)
+    monkeypatch.setattr(
+        "integrations.store.get_integration",
+        lambda service: (
+            {
+                "credentials": {
+                    "mode": "streamable-http",
+                    "url": github_mcp_module.DEFAULT_GITHUB_MCP_URL,
+                    "auth_token": "store-token",
+                }
+            }
+            if service == "github"
+            else None
+        ),
+    )
+
+    def _fake_execute(
+        owner: str, repo: str, proposal: dict, github_token: str | None = None
+    ) -> dict:
+        assert github_token is None or github_token == "store-token"
+        return {
+            "source": "github",
+            "available": True,
+            "executed": True,
+            "side_effect": "created_github_issue",
+            "issue": {
+                "number": 99,
+                "html_url": f"https://github.com/{owner}/{repo}/issues/99",
+                "title": proposal.get("payload", {}).get("title", ""),
+            },
+        }
+
+    monkeypatch.setattr(
+        "integrations.github.tools.work_status.execute_github_issue_mutation",
+        _fake_execute,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "architecture-scan",
+            "file-issues",
+            "Tracer-Cloud",
+            "opensre",
+            "--repo-root",
+            str(tmp_path),
+            "--task-indices",
+            "0",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "created #99" in result.output
+
+
+def test_architecture_scan_file_issues_without_token_exits_once(tmp_path, monkeypatch) -> None:
+    integrations_dir = tmp_path / "integrations"
+    integrations_dir.mkdir()
+    (integrations_dir / "shim.py").write_text(
+        'from core.module import foo\n__all__ = ["foo"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    monkeypatch.delenv("GITHUB_MCP_AUTH_TOKEN", raising=False)
+    monkeypatch.setattr("integrations.store.get_integration", lambda _service: None)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "architecture-scan",
+            "file-issues",
+            "Tracer-Cloud",
+            "opensre",
+            "--repo-root",
+            str(tmp_path),
+            "--task-indices",
+            "0",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert result.output.count("GitHub token is required") == 1
+    assert "integrations setup github" in result.output
+    assert "GitHub issue results:" not in result.output

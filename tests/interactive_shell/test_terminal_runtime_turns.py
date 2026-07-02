@@ -157,6 +157,38 @@ def test_turn_needs_exclusive_stdin_for_config(
     )
 
 
+def test_turn_needs_exclusive_stdin_for_architecture_scan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from surfaces.interactive_shell.runtime.utils import input_policy as loop_input_policy
+
+    monkeypatch.setattr(loop_input_policy, "repl_tty_interactive", lambda: True)
+    session = ReplSession()
+
+    assert loop_input_policy.turn_needs_exclusive_stdin("/architecture-scan", session) is True
+    assert (
+        loop_input_policy.turn_needs_exclusive_stdin(
+            "/architecture-scan --include-baselines",
+            session,
+        )
+        is True
+    )
+    assert (
+        loop_input_policy.turn_needs_exclusive_stdin(
+            "/architecture-scan propose Tracer-Cloud opensre",
+            session,
+        )
+        is False
+    )
+    assert (
+        loop_input_policy.turn_needs_exclusive_stdin(
+            "/architecture-scan file-issues Tracer-Cloud opensre",
+            session,
+        )
+        is False
+    )
+
+
 def test_queued_literal_quit_requests_runtime_exit() -> None:
     async def _scenario() -> None:
         from surfaces.interactive_shell.runtime.core.state import ReplState
