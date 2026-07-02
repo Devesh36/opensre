@@ -94,6 +94,62 @@ def test_shim_scanner_skips_substantive_init(tmp_path: Path) -> None:
     assert violations == []
 
 
+def test_shim_scanner_skips_constants_module(tmp_path: Path) -> None:
+    constants = tmp_path / "config" / "constants"
+    constants.mkdir(parents=True)
+    (constants / "opensre.py").write_text(
+        "from __future__ import annotations\n\n"
+        "from typing import Final\n\n"
+        'DEFAULT_RELEASE_VERSION: Final[str] = "0.1"\n',
+        encoding="utf-8",
+    )
+    assert scan_compatibility_shims(tmp_path) == []
+
+
+def test_shim_scanner_skips_prompt_module(tmp_path: Path) -> None:
+    prompts = tmp_path / "core" / "prompts"
+    prompts.mkdir(parents=True)
+    (prompts / "system_prompt.py").write_text(
+        'from __future__ import annotations\n\n_SYSTEM_PROMPT_BASE = """You are an agent."""\n',
+        encoding="utf-8",
+    )
+    assert scan_compatibility_shims(tmp_path) == []
+
+
+def test_misplaced_detects_base_tool_subclass(tmp_path: Path) -> None:
+    module = tmp_path / "core" / "bad_tool.py"
+    module.parent.mkdir(parents=True)
+    module.write_text(
+        "from core.tool_framework.base import BaseTool\n\n"
+        "class BadTool(BaseTool):\n"
+        '    name = "bad_tool"\n',
+        encoding="utf-8",
+    )
+    result = find_architecture_violations(repo_root=str(tmp_path))
+    misplaced = [v for v in result["violations"] if v["type"] == "misplaced_module"]
+    assert any(v["file_path"] == "core/bad_tool.py" for v in misplaced)
+
+
+def test_misplaced_allows_framework_base_tool(tmp_path: Path) -> None:
+    framework = tmp_path / "core" / "tool_framework"
+    framework.mkdir(parents=True)
+    (framework / "base.py").write_text(
+        "from abc import ABC\n\nclass BaseTool(ABC):\n    pass\n",
+        encoding="utf-8",
+    )
+    result = find_architecture_violations(repo_root=str(tmp_path))
+    misplaced = [v for v in result["violations"] if v["type"] == "misplaced_module"]
+    assert misplaced == []
+
+
+def test_scan_skips_unparseable_file(tmp_path: Path) -> None:
+    broken = tmp_path / "core"
+    broken.mkdir()
+    (broken / "broken.py").write_text("def oops(:\n", encoding="utf-8")
+    result = find_architecture_violations(repo_root=str(tmp_path))
+    assert "error" not in result
+
+
 def test_baseline_prefix_does_not_suppress_distinct_module() -> None:
     graph = {
         "integrations.client.module": {"tools.registry"},

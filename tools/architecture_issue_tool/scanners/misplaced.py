@@ -6,6 +6,7 @@ import ast
 import re
 from pathlib import Path
 
+from tools.architecture_issue_tool.ast_utils import inherits_from, parse_module
 from tools.architecture_issue_tool.models import ArchitectureViolation
 from tools.architecture_issue_tool.paths import (
     discover_first_party_roots_cached,
@@ -17,11 +18,12 @@ _TOOL_DECORATOR_NAMES = {"tool"}
 _BASE_TOOL_NAMES = {"BaseTool"}
 _CLIENT_FILE_NAMES = frozenset({"client.py", "verifier.py"})
 _CLIENT_CLASS_PATTERN = re.compile(r"^class\s+(\w+(Client|Verifier))\b")
+_ALLOWED_TOOL_FRAMEWORK_PREFIXES = ("core/tool_framework/",)
 
 
 def _is_tool_definition(tree: ast.Module) -> bool:
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef) and node.name in _BASE_TOOL_NAMES:
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and inherits_from(node, _BASE_TOOL_NAMES):
             return True
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             for decorator in node.decorator_list:
@@ -36,9 +38,11 @@ def _is_tool_definition(tree: ast.Module) -> bool:
 
 
 def _is_allowed_tool_path(rel_path: str) -> bool:
-    return rel_path.startswith("tools/") or (
-        "/tools/" in rel_path and rel_path.startswith("integrations/")
-    )
+    if any(rel_path.startswith(prefix) for prefix in _ALLOWED_TOOL_FRAMEWORK_PREFIXES):
+        return True
+    if rel_path.startswith("tools/"):
+        return True
+    return "/tools/" in rel_path and rel_path.startswith("integrations/")
 
 
 def _is_integration_client_file(rel_path: str, source: str) -> bool:
@@ -57,7 +61,9 @@ def scan_misplaced_modules(repo_root: Path) -> list[ArchitectureViolation]:
         rel_path = str(py_file.relative_to(repo_root))
         source = py_file.read_text(encoding="utf-8")
         module = module_path_from_file(repo_root, py_file)
-        tree = ast.parse(source)
+        tree = parse_module(source)
+        if tree is None:
+            continue
 
         if _is_tool_definition(tree) and not _is_allowed_tool_path(rel_path):
             violations.append(

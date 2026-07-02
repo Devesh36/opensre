@@ -5,12 +5,17 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from tools.architecture_issue_tool.ast_utils import parse_module
 from tools.architecture_issue_tool.models import ArchitectureViolation
 from tools.architecture_issue_tool.paths import (
     discover_first_party_roots_cached,
     iter_python_files,
     module_path_from_file,
 )
+
+
+def _is_reexport_value(node: ast.expr | None) -> bool:
+    return isinstance(node, (ast.Name, ast.Attribute))
 
 
 def _is_simple_alias(node: ast.stmt) -> bool:
@@ -21,7 +26,19 @@ def _is_simple_alias(node: ast.stmt) -> bool:
     return False
 
 
-def _is_allowed_statement(node: ast.stmt) -> bool:
+def _has_real_import(body: list[ast.stmt]) -> bool:
+    for node in body:
+        if isinstance(node, ast.ImportFrom):
+            if node.module and node.module != "__future__":
+                return True
+        elif isinstance(node, ast.Import) and any(
+            alias.name != "__future__" for alias in node.names
+        ):
+            return True
+    return False
+
+
+def _is_allowed_shim_statement(node: ast.stmt) -> bool:
     if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
         return isinstance(node.value.value, str)
     if isinstance(node, (ast.Import, ast.ImportFrom)):
@@ -29,21 +46,20 @@ def _is_allowed_statement(node: ast.stmt) -> bool:
     if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name):
         if node.targets[0].id == "__all__":
             return True
-        return _is_simple_alias(node)
+        return _is_simple_alias(node) and _is_reexport_value(node.value)
     if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-        return _is_simple_alias(node)
+        return node.value is not None and _is_reexport_value(node.value)
     return isinstance(node, ast.FunctionDef) and node.name == "__getattr__"
 
 
 def _is_compatibility_shim(source: str) -> bool:
-    tree = ast.parse(source)
+    tree = parse_module(source)
+    if tree is None:
+        return False
     body = tree.body
-    if not body:
+    if not body or not _has_real_import(body):
         return False
-    if any(not _is_allowed_statement(node) for node in body):
-        return False
-    has_import = any(isinstance(node, (ast.Import, ast.ImportFrom)) for node in body)
-    return has_import
+    return all(_is_allowed_shim_statement(node) for node in body)
 
 
 def scan_compatibility_shims(repo_root: Path) -> list[ArchitectureViolation]:

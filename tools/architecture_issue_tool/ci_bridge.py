@@ -14,6 +14,19 @@ if str(_CI_DIR) not in sys.path:
 _check_direct_imports = importlib.import_module("check_direct_imports")
 _check_import_cycles = importlib.import_module("check_import_cycles")
 
+_REQUIRED_DIRECT_SYMBOLS = ("_BASELINE_IGNORES", "DirectViolation", "find_direct_violations")
+_REQUIRED_CYCLE_SYMBOLS = ("_build_graph",)
+
+for symbol in _REQUIRED_DIRECT_SYMBOLS:
+    if not hasattr(_check_direct_imports, symbol):
+        msg = f"check_direct_imports is missing required symbol {symbol!r}"
+        raise ImportError(msg)
+
+for symbol in _REQUIRED_CYCLE_SYMBOLS:
+    if not hasattr(_check_import_cycles, symbol):
+        msg = f"check_import_cycles is missing required symbol {symbol!r}"
+        raise ImportError(msg)
+
 _BASELINE_IGNORES = cast(Any, _check_direct_imports._BASELINE_IGNORES)
 DirectViolation = cast(Any, _check_direct_imports.DirectViolation)
 find_direct_violations = cast(Any, _check_direct_imports.find_direct_violations)

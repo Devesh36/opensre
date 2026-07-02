@@ -17,8 +17,8 @@ The tool does **not** modify code, execute refactors, or create GitHub issues au
 
 1. **Dependency direction** — reuses CI layering rules (`core → surfaces`, `integrations → tools`, etc.) plus core boundary checks (`cli`, `integrations.tracer`, `tools.investigation`, core-domain → integrations).
 2. **Oversized files** — flags Python files above a non-blank line threshold (default 500).
-3. **Compatibility shims** — detects forwarding-only modules that should be deleted after import migration.
-4. **Misplaced modules** — finds `@tool` / `BaseTool` definitions outside `tools/` or `integrations/*/tools/`, and client/verifier logic under `tools/`.
+3. **Compatibility shims** — detects forwarding-only modules that re-export imported symbols (not constant-only or prompt modules).
+4. **Misplaced modules** — finds `@tool` / `BaseTool` subclasses outside `tools/` or `integrations/*/tools/` (framework code under `core/tool_framework/` is excluded), and client/verifier logic under `tools/`.
 
 ## Parameters
 

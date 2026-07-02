@@ -1009,6 +1009,7 @@ _TOOLS_WITHOUT_DELIBERATE_CATCH: frozenset[str] = frozenset(
         "execute_github_issue_mutation",
         "execute_python_code",
         "fetch_failed_run",
+        "find_architecture_violations",
         "generate_work_status_report",
         "get_airflow_dag_runs",
         "get_airflow_metrics",

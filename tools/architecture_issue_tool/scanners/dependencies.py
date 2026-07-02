@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from tools.architecture_issue_tool.ast_utils import parse_module
 from tools.architecture_issue_tool.ci_bridge import (
     _BASELINE_IGNORES,
     DirectViolation,
@@ -77,7 +78,9 @@ def _core_only_scan_files(repo_root: Path) -> list[Path]:
 
 
 def _imported_modules_with_lines(source: str) -> list[tuple[str, int]]:
-    tree = ast.parse(source)
+    tree = parse_module(source)
+    if tree is None:
+        return []
     imports: list[tuple[str, int]] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -202,8 +205,6 @@ def scan_dependency_violations(
     violations: list[ArchitectureViolation] = []
     for direct in direct_violations:
         is_baseline = direct.edge in _BASELINE_IGNORES
-        if not include_baselines and is_baseline:
-            continue
         violations.append(_violation_from_direct(repo_root, direct, is_baseline_ignore=is_baseline))
 
     violations.extend(_scan_core_prefix_violations(repo_root))
