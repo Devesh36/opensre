@@ -318,6 +318,52 @@ class TestDispatchSlash:
             ["architecture-scan", "propose", "Tracer-Cloud", "opensre"],
         ]
 
+    def test_architecture_scan_follow_up_uses_repo_root_scope(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from surfaces.interactive_shell.command_registry import cli_parity
+
+        calls: list[list[str]] = []
+        detected_cwds: list[str | None] = []
+
+        def _fake_run_cli_command(_console: Console, args: list[str], **_kwargs) -> bool:
+            calls.append(args)
+            return True
+
+        monkeypatch.setattr(cli_parity, "run_cli_command", _fake_run_cli_command)
+        monkeypatch.setattr(cli_parity, "repl_tty_interactive", lambda: True)
+        from integrations.github import repo_scope
+
+        def _fake_detect_git_remote_repo_scope(
+            cwd: str | Path | None = None,
+        ) -> tuple[str, str]:
+            detected_cwds.append(str(cwd) if cwd is not None else None)
+            return ("Tracer-Cloud", "opensre")
+
+        monkeypatch.setattr(
+            repo_scope,
+            "detect_git_remote_repo_scope",
+            _fake_detect_git_remote_repo_scope,
+        )
+        picks = iter(["propose"])
+        monkeypatch.setattr(cli_parity, "repl_choose_one", lambda **_kw: next(picks))
+        monkeypatch.setattr(cli_parity, "repl_section_break", lambda _console: None)
+        monkeypatch.setattr(cli_parity, "_prepare_repl_inline_menu_stdin", lambda: None)
+
+        session = ReplSession()
+        session.exclusive_stdin_active = True
+        console, _ = _capture()
+        repo_root = "/tmp/arch-scan-repo"
+
+        assert (
+            dispatch_slash(f"/architecture-scan --repo-root {repo_root}", session, console) is True
+        )
+        assert detected_cwds == [repo_root]
+        assert calls == [
+            ["architecture-scan", "--repo-root", repo_root],
+            ["architecture-scan", "propose", "Tracer-Cloud", "opensre", "--repo-root", repo_root],
+        ]
+
     def test_architecture_scan_subcommand_skips_follow_up_menu(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

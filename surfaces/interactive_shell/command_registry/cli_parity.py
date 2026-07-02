@@ -312,7 +312,7 @@ def _cmd_misses(session: ReplSession, console: Console, args: list[str]) -> bool
     return run_cli_command(console, ["misses", *args], capture_output=True)
 
 
-def _cmd_architecture_scan(session: ReplSession, console: Console, args: list[str]) -> bool:  # noqa: ARG001
+def _cmd_architecture_scan(session: ReplSession, console: Console, args: list[str]) -> bool:
     from surfaces.cli.commands.architecture_scan import architecture_scan_github_subcommand
 
     if architecture_scan_github_subcommand(args) is not None:
@@ -339,6 +339,23 @@ def _prepare_repl_inline_menu_stdin() -> None:
     drain_stale_cpr_bytes()
 
 
+def _architecture_scan_repo_root(scan_args: list[str]) -> Path | None:
+    """Parse ``--repo-root`` from architecture-scan args when provided."""
+    for index, arg in enumerate(scan_args):
+        if arg == "--repo-root":
+            if index + 1 < len(scan_args):
+                value = scan_args[index + 1].strip()
+                if value:
+                    return Path(value).expanduser()
+            return None
+        if arg.startswith("--repo-root="):
+            value = arg.split("=", 1)[1].strip()
+            if value:
+                return Path(value).expanduser()
+            return None
+    return None
+
+
 def _offer_architecture_scan_github_follow_up(
     session: ReplSession,
     console: Console,
@@ -355,7 +372,7 @@ def _offer_architecture_scan_github_follow_up(
 
     _prepare_repl_inline_menu_stdin()
 
-    scope = detect_git_remote_repo_scope()
+    scope = detect_git_remote_repo_scope(cwd=_architecture_scan_repo_root(scan_args))
     if not scope:
         console.print()
         print_valid_choice_list(

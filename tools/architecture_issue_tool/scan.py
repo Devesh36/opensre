@@ -404,7 +404,7 @@ def run_architecture_scan_and_file_github_issues(
     proposals = payload.get("proposals", [])
     if not isinstance(proposals, list):
         proposals = []
-    if not github_token_configured():
+    if proposals and not github_token_configured():
         return {
             **payload,
             "issue_results": [],

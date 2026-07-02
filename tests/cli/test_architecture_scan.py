@@ -324,3 +324,28 @@ def test_architecture_scan_file_issues_succeeds_with_no_violations(tmp_path, mon
     assert "Architecture violation scan: 0 total" in result.output
     assert "GitHub issue proposals: 0" in result.output
     assert "no issues filed" in result.output
+
+
+def test_architecture_scan_file_issues_no_violations_without_token(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    monkeypatch.delenv("GITHUB_MCP_AUTH_TOKEN", raising=False)
+    monkeypatch.setattr("integrations.store.get_integration", lambda _service: None)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "architecture-scan",
+            "file-issues",
+            "Tracer-Cloud",
+            "opensre",
+            "--repo-root",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Architecture violation scan: 0 total" in result.output
+    assert "GitHub issue proposals: 0" in result.output
+    assert "GitHub token is required" not in result.output
