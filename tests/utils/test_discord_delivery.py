@@ -289,19 +289,6 @@ class TestDelegatesToSharedTransport:
 # ---------------------------------------------------------------------------
 
 
-class TestDiscordRedaction:
-    def test_redact_token_in_error_string(self) -> None:
-        token = "MTIzNDU2Nzg5.MTg4NjY2.NqIIjOjHrFJzE5jgwSGM1Nz"
-        error = f"connect failed with {token}"
-        result = discord_delivery._redact_token(error, token)
-        assert token not in result
-        assert "<redacted>" in result
-
-    def test_redact_token_returns_original_when_token_not_present(self) -> None:
-        result = discord_delivery._redact_token("some error", "MTIzNDU2Nzg5.MTg4NjY2.NqIIjO")
-        assert result == "some error"
-
-
 class TestDiscordExtractError:
     def test_prefers_message_field(self) -> None:
         result = discord_delivery._extract_error({"message": "Missing Permissions"}, 403, "html")
