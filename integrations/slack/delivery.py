@@ -7,26 +7,12 @@ import os
 from typing import Any
 
 from config.config import SLACK_CHANNEL
+from platform.notifications.delivery_errors import extract_http_error
 from platform.notifications.delivery_transport import post_json
 from platform.notifications.redaction import redact_slack_token
 from platform.observability import debug_print
 
 logger = logging.getLogger(__name__)
-
-
-def _extract_error(data: dict[str, Any], status_code: int, text: str) -> str:
-    """Return a human-readable error string from a Slack API response.
-
-    Tries ``data["error"]`` first, then falls back to the raw response body
-    or the HTTP status code so non-JSON failure bodies (HTML, plain text)
-    never cause a crash.
-    """
-    error = data.get("error")
-    if error:
-        return str(error)
-    if text:
-        return text[:500]
-    return f"HTTP {status_code}"
 
 
 def _slack_bearer_headers(token: str) -> dict[str, str]:
@@ -303,7 +289,7 @@ def _post_direct(
     if response.data.get("ok") is not True:
         error = response.data.get("error")
         if not error:
-            error = _extract_error(dict(response.data), response.status_code, response.text)
+            error = extract_http_error(response.data, response.status_code, response.text)
         safe_error = redact_slack_token(str(error), token)
         response_meta = response.data.get("response_metadata", {})
         logger.error(
