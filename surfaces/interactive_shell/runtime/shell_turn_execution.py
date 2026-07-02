@@ -21,7 +21,6 @@ from core.agent_harness.agents.turn_orchestrator import run_turn
 from core.agent_harness.models.turn_context import TurnContext
 from core.agent_harness.models.turn_results import ShellTurnResult, ToolCallingTurnResult
 from core.agent_harness.ports import OutputSink
-from core.agent_harness.providers.default_prompt_context import DefaultPromptContextProvider
 from core.agent_harness.providers.default_providers import (
     DefaultErrorReporter,
     DefaultReasoningClientProvider,
@@ -32,6 +31,7 @@ from core.agent_harness.session import ReplSession
 from core.execution import ToolExecutionHooks
 from surfaces.interactive_shell.command_registry import SLASH_COMMANDS
 from surfaces.interactive_shell.command_registry.suggestions import resolve_literal_slash_typo
+from surfaces.interactive_shell.grounding.cli_reference import ShellPromptContextProvider
 from surfaces.interactive_shell.runtime.agent_harness_adapters import ShellOutputSink
 from surfaces.interactive_shell.runtime.core.turn_accounting import ShellTurnAccounting
 from surfaces.interactive_shell.runtime.integration_tool_gathering import (
@@ -157,7 +157,7 @@ def answer_shell_question(
         message,
         session,
         _resolve_output_sink(console, output),
-        prompts=DefaultPromptContextProvider(session),
+        prompts=ShellPromptContextProvider(session),
         reasoning=DefaultReasoningClientProvider(
             output=_resolve_output_sink(console, output),
             error_reporter=DefaultErrorReporter(),

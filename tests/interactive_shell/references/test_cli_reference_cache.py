@@ -5,16 +5,19 @@ from __future__ import annotations
 import click
 import pytest
 
-from core.agent_harness.grounding import cli_reference as cli_reference_module
-from core.agent_harness.grounding.cli_reference import CliReference
+import surfaces.interactive_shell.grounding.cli_reference as cli_reference_module
+from core.agent_harness.session.state import ReplSession
+from surfaces.interactive_shell.grounding.cli_reference import (
+    CliReference,
+    ShellPromptContextProvider,
+)
 
 
 def _reference_with_cli() -> CliReference:
     """Return a :class:`CliReference` wired to the shell's CLI command group.
 
-    ``core/`` no longer imports ``surfaces.cli`` directly (T-4 boundary
-    fix — see issue #3352), so tests must inject the group the same way
-    the interactive shell does at startup.
+    CLI catalog assembly lives in ``surfaces/`` (T-05 — see issue #3538); tests
+    inject the group the same way ``ShellPromptContextProvider`` does.
     """
     from surfaces.cli.__main__ import cli
 
@@ -143,3 +146,10 @@ def test_command_group_provider_is_bound_lazily() -> None:
     assert not calls
     ref.build_text()
     assert calls == [1]
+
+
+def test_shell_prompt_context_provider_includes_cli_reference() -> None:
+    provider = ShellPromptContextProvider(ReplSession())
+    text = provider.cli_reference()
+    assert "=== opensre --help ===" in text
+    assert "Usage: opensre" in text

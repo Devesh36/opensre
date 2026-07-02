@@ -8,6 +8,8 @@ from core.agent_harness.grounding.diagnostics import (
     log_grounding_cache_diagnostics,
 )
 from core.agent_harness.grounding.models import CacheStats
+from core.agent_harness.session.state import ReplSession
+from surfaces.interactive_shell.grounding.cli_reference import ShellPromptContextProvider
 
 
 def _make_source(name: str, hits: int = 0) -> GroundingSource:
@@ -15,27 +17,34 @@ def _make_source(name: str, hits: int = 0) -> GroundingSource:
 
 
 def test_context_exposes_one_source_per_cache() -> None:
-    """A GroundingContext yields a diagnostics source for each grounding cache."""
+    """A GroundingContext yields a diagnostics source for each repo-level cache."""
     ctx = GroundingContext()
     names = [s.name for s in ctx.iter_sources()]
-    assert names == ["cli", "docs", "agents_md"]
+    assert names == ["docs", "agents_md"]
 
 
 def test_context_sources_are_isolated_per_instance() -> None:
     """Two contexts own independent caches (no shared module-level state)."""
     ctx_a = GroundingContext()
     ctx_b = GroundingContext()
-    assert ctx_a.cli is not ctx_b.cli
     assert ctx_a.docs is not ctx_b.docs
     assert ctx_a.agents_md is not ctx_b.agents_md
 
 
 def test_invalidate_clears_every_cache() -> None:
     ctx = GroundingContext()
-    ctx.cli.build_text()
-    assert ctx.cli.stats().misses >= 1
+    ctx.agents_md.build_text()
+    assert ctx.agents_md.stats().misses >= 1
     ctx.invalidate()
-    assert ctx.cli.stats().misses == 0
+    assert ctx.agents_md.stats().misses == 0
+
+
+def test_shell_prompt_provider_cli_cache_is_isolated_per_instance() -> None:
+    provider_a = ShellPromptContextProvider(ReplSession())
+    provider_b = ShellPromptContextProvider(ReplSession())
+    provider_a.cli_reference()
+    assert provider_a._cli.stats().misses >= 1  # noqa: SLF001 - intentional cache isolation check
+    assert provider_b._cli.stats().misses == 0  # noqa: SLF001 - intentional cache isolation check
 
 
 def test_log_grounding_iterates_provided_sources(monkeypatch: object) -> None:

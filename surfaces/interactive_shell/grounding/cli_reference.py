@@ -9,8 +9,12 @@ from typing import Any
 
 import click
 
-from core.agent_harness.grounding.diagnostics import GroundingSource
+from core.agent_harness.grounding.diagnostics import (
+    GroundingSource,
+    log_grounding_cache_diagnostics,
+)
 from core.agent_harness.grounding.models import CacheStats
+from core.agent_harness.providers.default_prompt_context import DefaultPromptContextProvider
 
 _logger = logging.getLogger(__name__)
 
@@ -21,9 +25,6 @@ _MAX_REFERENCE_CHARS = 28_000
 _MIN_CACHEABLE_CLI_REFERENCE_CHARS = 80
 _CLI_REFERENCE_SENTINEL = "=== opensre --help ==="
 SlashCommandProvider = Callable[[], Mapping[str, Any]]
-# Surface-owned supplier for the root Click command group inspected by this
-# grounding cache. Kept as an injected callable so ``core/`` never imports
-# ``surfaces.cli`` directly (a hard layering boundary).
 CommandGroupProvider = Callable[[], click.Command | None]
 
 
@@ -198,8 +199,8 @@ def _interactive_shell_slash_hints(provider: SlashCommandProvider | None = None)
 class CliReference:
     """Session-scoped cache for assembled CLI help reference text.
 
-    Holds its cache as instance state so each :class:`GroundingContext` (and
-    thus each ``ReplSession``) owns an isolated cache with no module-level
+    Holds its cache as instance state so each ``ShellPromptContextProvider``
+    (and thus each ``ReplSession``) owns an isolated cache with no module-level
     mutable globals.
     """
 
@@ -220,11 +221,7 @@ class CliReference:
         self.invalidate()
 
     def set_command_group_provider(self, provider: CommandGroupProvider | None) -> None:
-        """Bind a surface-owned callable that returns the root Click command group.
-
-        Injected so this grounding cache can inspect the CLI without importing
-        ``surfaces.cli`` directly (``core/`` must not depend on ``surfaces/``).
-        """
+        """Bind a surface-owned callable that returns the root Click command group."""
         self._command_group_provider = provider
         self.invalidate()
 
@@ -252,11 +249,6 @@ class CliReference:
 
         self._misses += 1
         text = _build_cli_reference_text_uncached(cli_group, slash_provider)
-        # A missing command group means we could only produce the "runtime
-        # doesn't expose the CLI" placeholder. That text is intentionally
-        # short-lived — once a real provider binds (typically inside the
-        # interactive shell startup), the cache must rebuild instead of
-        # serving the placeholder for the process lifetime.
         if cli_group is not None and _is_cacheable_cli_reference(text):
             self._signature = sig
             self._text = text
@@ -294,6 +286,55 @@ class CliReference:
         return GroundingSource(name=self.name, stats_fn=self.stats)
 
 
+def _slash_commands() -> Mapping[str, object]:
+    from surfaces.interactive_shell.command_registry import SLASH_COMMANDS
+
+    return SLASH_COMMANDS
+
+
+def _cli_command_group() -> click.Command | None:
+    from surfaces.cli.__main__ import cli
+
+    return cli
+
+
+class ShellPromptContextProvider:
+    """:class:`core.agent_harness.ports.PromptContextProvider` for the interactive shell.
+
+    Owns CLI catalog assembly (``surfaces.cli`` + slash commands) and delegates
+    repo-level grounding (AGENTS.md, environment block) to
+    :class:`~core.agent_harness.providers.default_prompt_context.DefaultPromptContextProvider`.
+    """
+
+    def __init__(self, session: Any) -> None:
+        self._base = DefaultPromptContextProvider(session)
+        self._cli = CliReference()
+        self._cli.set_command_group_provider(_cli_command_group)
+        self._cli.set_slash_commands_provider(_slash_commands)
+
+    def cli_reference(self) -> str:
+        return self._cli.build_text()
+
+    def agents_md(self) -> str:
+        return self._base.agents_md()
+
+    def investigation_flow(self) -> str:
+        return self._base.investigation_flow()
+
+    def environment_block(self) -> str:
+        return self._base.environment_block()
+
+    def suggested_synthetic_prompt(self) -> str:
+        return self._base.suggested_synthetic_prompt()
+
+    def log_diagnostics(self, reason: str) -> None:
+        self._base.log_diagnostics(reason)
+        log_grounding_cache_diagnostics([self._cli.as_grounding_source()], reason)
+
+
 __all__ = [
     "CliReference",
+    "CommandGroupProvider",
+    "ShellPromptContextProvider",
+    "SlashCommandProvider",
 ]
