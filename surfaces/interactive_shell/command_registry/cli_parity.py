@@ -306,7 +306,17 @@ def _cmd_misses(session: ReplSession, console: Console, args: list[str]) -> bool
     return run_cli_command(console, ["misses", *args], capture_output=True)
 
 
+def _cmd_architecture_scan(session: ReplSession, console: Console, args: list[str]) -> bool:  # noqa: ARG001
+    return run_cli_command(console, ["architecture-scan", *args], capture_output=True)
+
+
 COMMANDS: list[SlashCommand] = [
+    SlashCommand(
+        "/architecture-scan",
+        "Scan the repository for architecture violations (layering, shims, size, placement).",
+        _cmd_architecture_scan,
+        usage=("/architecture-scan", "/architecture-scan --include-baselines"),
+    ),
     SlashCommand(
         "/auth",
         "Log in to LLM providers and inspect local auth state.",

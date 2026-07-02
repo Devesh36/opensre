@@ -15,7 +15,10 @@ from tools.architecture_issue_tool.scan import run_architecture_scan
     description=(
         "Scan the repository for architecture violations: dependency direction "
         "problems, oversized files, compatibility shims, and misplaced modules. "
-        "Returns proposed refactor tasks only; does not modify code or create GitHub issues."
+        "Returns proposed refactor tasks plus a deterministic `report` text field "
+        "listing every violation type; does not modify code or create GitHub issues. "
+        "For identical CLI/REPL output without summarization, use "
+        "`opensre architecture-scan` or `/architecture-scan`."
     ),
     use_cases=[
         "Auditing layering violations before a refactor PR",

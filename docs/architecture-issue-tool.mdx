@@ -12,6 +12,8 @@ The tool does **not** modify code, execute refactors, or create GitHub issues au
 | Tool | What it does |
 | --- | --- |
 | `find_architecture_violations` | Scan repo for dependency, size, shim, and placement violations |
+| `opensre architecture-scan` | Same scan with deterministic text report (CLI) |
+| `/architecture-scan` | Same as CLI command inside the interactive shell |
 
 ## What it checks
 
@@ -30,12 +32,28 @@ The tool does **not** modify code, execute refactors, or create GitHub issues au
 
 ## Example
 
+### CLI or REPL (deterministic report)
+
+```bash
+opensre architecture-scan
+```
+
+Inside the interactive shell:
+
+```text
+/architecture-scan
+```
+
+Both print the same `report` text. Add `--json` (CLI) for the full structured payload.
+
+### Tool / Python API
+
 ```bash
 uv run python -c "
 from tools.architecture_issue_tool import find_architecture_violations
 import json
 result = find_architecture_violations(max_file_lines=500)
-print(json.dumps({'summary': result['summary'], 'sample_tasks': result['proposed_refactor_tasks'][:3]}, indent=2))
+print(result['report'])
 "
 ```
 
@@ -66,6 +84,7 @@ Sample output shape:
     }
   ],
   "summary": {"total": 1, "by_type": {"dependency_direction": 1}},
+  "report": "Architecture violation scan\nTotal: 1\n...",
   "github_issue_creation": "Use propose_github_issue_mutation_from_slack + execute_github_issue_mutation per task; the scanner does not create GitHub issues automatically."
 }
 ```

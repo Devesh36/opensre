@@ -6,13 +6,18 @@ import sys
 from pathlib import Path
 
 from tests.tools.conftest import BaseToolContract
-from tools.architecture_issue_tool.paths import default_repo_root, resolve_repo_root
-from tools.architecture_issue_tool.scan import run_architecture_scan
-from tools.architecture_issue_tool.scanners.dependencies import (
+from tools.architecture_issue_tool.scan import (
+    format_architecture_scan_report,
+    run_architecture_scan,
+)
+from tools.architecture_issue_tool.scanners import (
     _matches_prefix,
+    default_repo_root,
+    read_source_safe,
+    resolve_repo_root,
+    scan_compatibility_shims,
     scan_dependency_violations,
 )
-from tools.architecture_issue_tool.scanners.shims import scan_compatibility_shims
 from tools.architecture_issue_tool.tool import find_architecture_violations
 
 _CI_DIR = Path(__file__).resolve().parents[2] / ".github" / "ci"
@@ -79,6 +84,39 @@ def test_find_architecture_violations_mock_project(tmp_path: Path) -> None:
     assert len(proposed_tasks) == len(violations)
     assert result["summary"]["total"] == len(violations)
     assert "github_issue_creation" in result
+    assert "report" in result
+    report = result["report"]
+    assert "compatibility_shim:" in report
+    assert "integrations/shim.py" in report
+
+
+def test_format_architecture_scan_report_lists_all_types(tmp_path: Path) -> None:
+    result = find_architecture_violations(repo_root=str(tmp_path), max_file_lines=4)
+    report = format_architecture_scan_report(result)
+    assert "Summary by type:" in report
+    for violation_type in (
+        "dependency_direction",
+        "compatibility_shim",
+        "misplaced_module",
+        "oversized_file",
+    ):
+        assert violation_type in report
+
+
+def test_format_architecture_scan_report_error() -> None:
+    report = format_architecture_scan_report({"error": "missing repo"})
+    assert "missing repo" in report
+
+
+def test_scan_report_matches_cli_format(tmp_path: Path) -> None:
+    integrations_dir = tmp_path / "integrations"
+    integrations_dir.mkdir()
+    (integrations_dir / "shim.py").write_text(
+        'from core.module import foo\n__all__ = ["foo"]\n',
+        encoding="utf-8",
+    )
+    scan_result = run_architecture_scan(repo_root=str(tmp_path))
+    assert scan_result["report"] == format_architecture_scan_report(scan_result)
 
 
 def test_shim_scanner_skips_substantive_init(tmp_path: Path) -> None:
@@ -150,6 +188,20 @@ def test_scan_skips_unparseable_file(tmp_path: Path) -> None:
     assert "error" not in result
 
 
+def test_scan_skips_non_utf8_file(tmp_path: Path) -> None:
+    broken = tmp_path / "core"
+    broken.mkdir()
+    (broken / "broken.py").write_bytes(b"# legacy comment \xff\nx = 1\n")
+    result = find_architecture_violations(repo_root=str(tmp_path))
+    assert "error" not in result
+
+
+def test_read_source_safe_skips_non_utf8_file(tmp_path: Path) -> None:
+    py_file = tmp_path / "broken.py"
+    py_file.write_bytes(b"x = 1\n\xff")
+    assert read_source_safe(py_file) is None
+
+
 def test_baseline_prefix_does_not_suppress_distinct_module() -> None:
     graph = {
         "integrations.client.module": {"tools.registry"},
@@ -195,6 +247,8 @@ def test_dogfood_scan_on_repo_root() -> None:
     assert isinstance(result["proposed_refactor_tasks"], list)
     assert "total" in result["summary"]
     assert result["summary"]["total"] == len(result["violations"])
+    assert isinstance(result["report"], str)
+    assert "Summary by type:" in result["report"]
 
 
 def test_tool_discovered_on_investigation_surface() -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import click
 
 from surfaces.cli.commands.agent import fleet
+from surfaces.cli.commands.architecture_scan import architecture_scan_command
 from surfaces.cli.commands.auth import auth_command
 from surfaces.cli.commands.config import config_command
 from surfaces.cli.commands.cron import cron_command
@@ -43,6 +44,7 @@ _COMMANDS: tuple[click.Command, ...] = (
     watchdog_command,
     debug_command,
     gateway_command,
+    architecture_scan_command,
     health_command,
     doctor_command,
     update_command,

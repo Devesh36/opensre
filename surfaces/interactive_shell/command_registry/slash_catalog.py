@@ -58,6 +58,16 @@ _MCP_BY_COMMAND: dict[str, _SlashMcpFields] = {
         "User asks about the alert inbox, listener, or queued alerts",
         anti_examples=("User wants to investigate an alert body (use investigation_start)",),
     ),
+    "/architecture-scan": _mcp(
+        "Scan the local repository for architecture violations and print a deterministic "
+        "report (dependency direction, compatibility shims, misplaced modules, oversized files). "
+        "Optional flag: --include-baselines.",
+        "User explicitly asks to run an architecture scan or architecture violation report",
+        anti_examples=(
+            "User asks for a high-level explanation of layering rules without scanning",
+            "User asks to file GitHub issues from scan output (use GitHub workflow tools)",
+        ),
+    ),
     "/auth": _mcp(
         "Log in to LLM providers and inspect local auth state. Subcommands: login, status, logout.",
         "User asks to log in, authenticate, connect an LLM provider, or check provider auth",
