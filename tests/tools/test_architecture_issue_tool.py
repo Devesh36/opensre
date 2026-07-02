@@ -318,6 +318,7 @@ def test_file_github_issues_requires_token(tmp_path: Path, monkeypatch) -> None:
     )
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.delenv("GH_TOKEN", raising=False)
+    monkeypatch.delenv("GITHUB_MCP_AUTH_TOKEN", raising=False)
     monkeypatch.setattr("integrations.store.get_integration", lambda _service: None)
 
     result = run_architecture_scan_and_file_github_issues(
