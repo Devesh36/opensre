@@ -24,7 +24,7 @@ from unittest.mock import MagicMock, patch
 
 from core.agent import Agent
 from core.agent_harness.models.turn_results import ShellTurnResult, ToolCallingTurnResult
-from surfaces.interactive_shell.grounding.cli_reference import ShellPromptContextProvider
+from core.agent_harness.providers.default_prompt_context import DefaultPromptContextProvider
 from core.agent_harness.providers.default_providers import (
     DefaultErrorReporter,
     DefaultReasoningClientProvider,
@@ -154,7 +154,7 @@ def test_gateway_start_returns_running_gateway_handle(monkeypatch) -> None:
         "shell_run",
         "{'command': 'pwd'}",
     )
-    assert isinstance(dispatch_args.kwargs["prompts"], ShellPromptContextProvider)
+    assert isinstance(dispatch_args.kwargs["prompts"], DefaultPromptContextProvider)
     assert isinstance(dispatch_args.kwargs["reasoning"], DefaultReasoningClientProvider)
     assert isinstance(dispatch_args.kwargs["run_factory"], DefaultRunRecordFactory)
     assert isinstance(dispatch_args.kwargs["accounting"], DefaultTurnAccounting)
