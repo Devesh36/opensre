@@ -5,7 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 from core.tool_framework.tool_decorator import tool
-from tools.architecture_issue_tool.scan import run_architecture_scan
+from tools.architecture_issue_tool.scan import (
+    propose_github_issues_from_tasks,
+    run_architecture_scan,
+)
 
 
 @tool(
@@ -62,4 +65,64 @@ def find_architecture_violations(
         repo_root=repo_root,
         max_file_lines=max_file_lines,
         include_baselines=include_baselines,
+    )
+
+
+@tool(
+    name="propose_github_issues_from_architecture_tasks",
+    display_name="Propose GitHub issues from architecture tasks",
+    source="knowledge",
+    description=(
+        "Build read-only GitHub create-issue proposals from proposed_refactor_tasks "
+        "returned by find_architecture_violations. Does not call GitHub or create "
+        "issues; execute each approved proposal with execute_github_issue_mutation."
+    ),
+    use_cases=[
+        "Turning architecture scan refactor tasks into GitHub issue proposals",
+        "Preparing maintainer review packets before filing architecture debt issues",
+    ],
+    anti_examples=[
+        "Creating GitHub issues without human approval",
+        "Running during investigations that should stay read-only end-to-end",
+    ],
+    tags=("safe", "no-credentials"),
+    cost_tier="cheap",
+    side_effect_level="read_only",
+    surfaces=("chat",),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "owner": {"type": "string", "description": "GitHub repository owner."},
+            "repo": {"type": "string", "description": "GitHub repository name."},
+            "proposed_refactor_tasks": {
+                "type": "array",
+                "description": (
+                    "proposed_refactor_tasks array from find_architecture_violations output."
+                ),
+                "items": {"type": "object"},
+            },
+            "task_indices": {
+                "type": "array",
+                "description": (
+                    "Optional 0-based indices into proposed_refactor_tasks. "
+                    "Omit to propose issues for every task."
+                ),
+                "items": {"type": "integer"},
+            },
+        },
+        "required": ["owner", "repo", "proposed_refactor_tasks"],
+    },
+)
+def propose_github_issues_from_architecture_tasks(
+    owner: str,
+    repo: str,
+    proposed_refactor_tasks: list[dict[str, Any]],
+    task_indices: list[int] | None = None,
+) -> dict[str, Any]:
+    """Build GitHub issue mutation proposals for architecture refactor tasks."""
+    return propose_github_issues_from_tasks(
+        owner=owner,
+        repo=repo,
+        proposed_refactor_tasks=proposed_refactor_tasks,
+        task_indices=task_indices,
     )

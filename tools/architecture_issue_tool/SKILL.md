@@ -27,9 +27,9 @@ Do not route natural-language requests to those commands unless the user explici
 
 ## GitHub issue creation
 
-The scanner is read-only. To file GitHub issues from proposed tasks, make a **separate explicit call** to:
+The scanner is read-only. To file GitHub issues from `proposed_refactor_tasks`:
 
-1. `propose_github_issue_mutation_from_slack` (build proposal)
-2. `execute_github_issue_mutation` (create issue after approval)
+1. `propose_github_issues_from_architecture_tasks` — build create-issue proposals (read-only)
+2. `execute_github_issue_mutation` — create each issue after explicit human approval
 
 Do not auto-create issues from scan output.

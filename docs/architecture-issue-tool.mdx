@@ -12,6 +12,7 @@ The tool does **not** modify code, execute refactors, or create GitHub issues au
 | Tool | What it does |
 | --- | --- |
 | `find_architecture_violations` | Scan repo for dependency, size, shim, and placement violations |
+| `propose_github_issues_from_architecture_tasks` | Build GitHub create-issue proposals from scan tasks (read-only) |
 | `opensre architecture-scan` | Same scan with deterministic text report (CLI) |
 | `/architecture-scan` | Same as CLI command inside the interactive shell |
 
@@ -85,16 +86,16 @@ Sample output shape:
   ],
   "summary": {"total": 1, "by_type": {"dependency_direction": 1}},
   "report": "Architecture violation scan\nTotal: 1\n...",
-  "github_issue_creation": "Use propose_github_issue_mutation_from_slack + execute_github_issue_mutation per task; the scanner does not create GitHub issues automatically."
+  "github_issue_creation": "Call propose_github_issues_from_architecture_tasks to build create-issue proposals, then execute_github_issue_mutation per approved proposal. The scanner does not create GitHub issues automatically."
 }
 ```
 
 ## Filing GitHub issues from scan results
 
-Issue creation is a **separate explicit step**. After reviewing `proposed_refactor_tasks`, use the GitHub workflow tools documented in [GitHub workflow tools](/github-workflow-tools):
+Issue creation is a **separate explicit step**. After reviewing `proposed_refactor_tasks`:
 
-1. `propose_github_issue_mutation_from_slack` — build a create/update/close proposal
-2. `execute_github_issue_mutation` — execute an approved proposal
+1. `propose_github_issues_from_architecture_tasks` — build create-issue proposals from scan tasks
+2. `execute_github_issue_mutation` — execute each approved proposal
 
 Do not auto-file issues from scan output.
 

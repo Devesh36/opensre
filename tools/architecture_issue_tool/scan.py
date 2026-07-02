@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
 
+from integrations.github.tools.workflow.models import GitHubIssueMutationProposal
 from tools.architecture_issue_tool.models import (
     ArchitectureViolation,
     RefactorPriority,
@@ -18,8 +21,9 @@ from tools.architecture_issue_tool.scanners import (
 )
 
 _GITHUB_ISSUE_GUIDANCE = (
-    "Use propose_github_issue_mutation_from_slack + execute_github_issue_mutation "
-    "per task; the scanner does not create GitHub issues automatically."
+    "Call propose_github_issues_from_architecture_tasks to build create-issue proposals, "
+    "then execute_github_issue_mutation per approved proposal. "
+    "The scanner does not create GitHub issues automatically."
 )
 
 _VIOLATION_TYPE_ORDER = (
@@ -153,6 +157,122 @@ def format_architecture_scan_report(scan_result: dict[str, Any]) -> str:
         lines.extend(("", f"GitHub issues: {guidance}"))
 
     return "\n".join(lines)
+
+
+def _architecture_proposal_digest(data: dict[str, Any]) -> str:
+    raw = json.dumps(data, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def _issue_body_for_architecture_task(task: dict[str, Any], marker: str) -> str:
+    violation_type = str(task.get("violation_type", "unknown"))
+    target_file = str(task.get("target_file", ""))
+    priority = str(task.get("priority", "medium"))
+    description = str(task.get("description", "")).strip()
+    return "\n".join(
+        [
+            "## Architecture refactor task",
+            "",
+            f"**Violation type:** {violation_type}",
+            f"**Target file:** `{target_file}`",
+            f"**Priority:** {priority}",
+            "",
+            "### Description",
+            "",
+            description or "(No description provided.)",
+            "",
+            f"<!-- {marker} -->",
+        ]
+    )
+
+
+def build_github_issue_proposal_for_task(
+    *,
+    owner: str,
+    repo: str,
+    task: dict[str, Any],
+    task_index: int,
+) -> dict[str, Any]:
+    """Build a create-issue proposal compatible with execute_github_issue_mutation."""
+    seed = {
+        "owner": owner,
+        "repo": repo,
+        "task_index": task_index,
+        "title": str(task.get("title", "")),
+        "target_file": str(task.get("target_file", "")),
+        "violation_type": str(task.get("violation_type", "")),
+    }
+    proposal_id = f"gharch-{_architecture_proposal_digest(seed)}"
+    marker = f"opensre-architecture-proposal:{proposal_id}"
+    labels = task.get("suggested_labels")
+    payload: dict[str, Any] = {
+        "title": str(task.get("title", "Architecture refactor task")),
+        "body": _issue_body_for_architecture_task(task, marker),
+    }
+    if isinstance(labels, list) and all(isinstance(label, str) for label in labels):
+        payload["labels"] = labels
+
+    proposal = GitHubIssueMutationProposal(
+        proposal_id=proposal_id,
+        operation="create",
+        owner=owner,
+        repo=repo,
+        target={},
+        payload=payload,
+        slack_url="",
+        idempotency_marker=marker,
+    )
+    return proposal.to_dict()
+
+
+def propose_github_issues_from_tasks(
+    *,
+    owner: str,
+    repo: str,
+    proposed_refactor_tasks: list[dict[str, Any]],
+    task_indices: list[int] | None = None,
+) -> dict[str, Any]:
+    """Build read-only GitHub issue proposals for architecture refactor tasks."""
+    if not proposed_refactor_tasks:
+        return {
+            "error": "proposed_refactor_tasks is empty; run find_architecture_violations first",
+            "proposals": [],
+            "count": 0,
+        }
+
+    selected_indices = (
+        list(range(len(proposed_refactor_tasks)))
+        if task_indices is None
+        else sorted({index for index in task_indices if isinstance(index, int)})
+    )
+    proposals: list[dict[str, Any]] = []
+    skipped_indices: list[int] = []
+    for index in selected_indices:
+        if index < 0 or index >= len(proposed_refactor_tasks):
+            skipped_indices.append(index)
+            continue
+        task = proposed_refactor_tasks[index]
+        if not isinstance(task, dict):
+            skipped_indices.append(index)
+            continue
+        proposals.append(
+            build_github_issue_proposal_for_task(
+                owner=owner,
+                repo=repo,
+                task=task,
+                task_index=index,
+            )
+        )
+
+    return {
+        "proposals": proposals,
+        "count": len(proposals),
+        "skipped_indices": skipped_indices,
+        "execute_with": (
+            "Call execute_github_issue_mutation(owner, repo, proposal) for each approved "
+            "proposal. This step does not create issues automatically."
+        ),
+    }
 
 
 def run_architecture_scan(

@@ -496,7 +496,7 @@ def scan_compatibility_shims(repo_root: Path) -> list[ArchitectureViolation]:
 _TOOL_DECORATOR_NAMES = {"tool"}
 _BASE_TOOL_NAMES = {"BaseTool"}
 _CLIENT_FILE_NAMES = frozenset({"client.py", "verifier.py"})
-_CLIENT_CLASS_PATTERN = re.compile(r"^class\s+(\w+(Client|Verifier))\b")
+_CLIENT_CLASS_PATTERN = re.compile(r"^class\s+(\w+(Client|Verifier))\b", re.MULTILINE)
 _ALLOWED_TOOL_FRAMEWORK_PREFIXES = ("core/tool_framework/",)
 
 

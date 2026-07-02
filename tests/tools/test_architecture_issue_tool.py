@@ -7,7 +7,9 @@ from pathlib import Path
 
 from tests.tools.conftest import BaseToolContract
 from tools.architecture_issue_tool.scan import (
+    build_github_issue_proposal_for_task,
     format_architecture_scan_report,
+    propose_github_issues_from_tasks,
     run_architecture_scan,
 )
 from tools.architecture_issue_tool.scanners import (
@@ -18,7 +20,10 @@ from tools.architecture_issue_tool.scanners import (
     scan_compatibility_shims,
     scan_dependency_violations,
 )
-from tools.architecture_issue_tool.tool import find_architecture_violations
+from tools.architecture_issue_tool.tool import (
+    find_architecture_violations,
+    propose_github_issues_from_architecture_tasks,
+)
 
 _CI_DIR = Path(__file__).resolve().parents[2] / ".github" / "ci"
 if str(_CI_DIR) not in sys.path:
@@ -30,6 +35,11 @@ from check_direct_imports import find_direct_violations  # noqa: E402
 class TestArchitectureIssueToolContract(BaseToolContract):
     def get_tool_under_test(self):
         return find_architecture_violations.__opensre_registered_tool__
+
+
+class TestProposeGitHubIssuesFromArchitectureTasksContract(BaseToolContract):
+    def get_tool_under_test(self):
+        return propose_github_issues_from_architecture_tasks.__opensre_registered_tool__
 
 
 def test_find_architecture_violations_mock_project(tmp_path: Path) -> None:
@@ -152,6 +162,90 @@ def test_shim_scanner_skips_prompt_module(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     assert scan_compatibility_shims(tmp_path) == []
+
+
+def test_misplaced_detects_client_class_after_imports(tmp_path: Path) -> None:
+    module = tmp_path / "tools" / "nested" / "my_client.py"
+    module.parent.mkdir(parents=True)
+    module.write_text(
+        '"""Client module."""\nfrom __future__ import annotations\n\n'
+        "class MyIntegrationClient:\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+    result = find_architecture_violations(repo_root=str(tmp_path))
+    misplaced = [v for v in result["violations"] if v["type"] == "misplaced_module"]
+    assert any(v["file_path"] == "tools/nested/my_client.py" for v in misplaced)
+
+
+def test_propose_github_issues_from_architecture_tasks() -> None:
+    tasks = [
+        {
+            "title": "Remove compatibility forwarding module integrations/models.py",
+            "description": "Migrate imports and delete shim.",
+            "target_file": "integrations/models.py",
+            "violation_type": "compatibility_shim",
+            "priority": "medium",
+            "suggested_labels": ["refactor", "maintainability"],
+        }
+    ]
+    result = propose_github_issues_from_tasks(
+        owner="Tracer-Cloud",
+        repo="opensre",
+        proposed_refactor_tasks=tasks,
+    )
+    assert result["count"] == 1
+    proposal = result["proposals"][0]
+    assert proposal["operation"] == "create"
+    assert proposal["owner"] == "Tracer-Cloud"
+    assert proposal["repo"] == "opensre"
+    marker = proposal["idempotency_marker"]
+    assert marker in proposal["payload"]["body"]
+    assert proposal["payload"]["labels"] == ["refactor", "maintainability"]
+
+
+def test_propose_github_issues_respects_task_indices() -> None:
+    tasks = [
+        {
+            "title": "Task A",
+            "description": "a",
+            "target_file": "a.py",
+            "violation_type": "oversized_file",
+            "priority": "low",
+            "suggested_labels": [],
+        },
+        {
+            "title": "Task B",
+            "description": "b",
+            "target_file": "b.py",
+            "violation_type": "oversized_file",
+            "priority": "low",
+            "suggested_labels": [],
+        },
+    ]
+    result = propose_github_issues_from_tasks(
+        owner="o",
+        repo="r",
+        proposed_refactor_tasks=tasks,
+        task_indices=[1, 99],
+    )
+    assert result["count"] == 1
+    assert result["proposals"][0]["payload"]["title"] == "Task B"
+    assert result["skipped_indices"] == [99]
+
+
+def test_build_github_issue_proposal_for_task_is_deterministic() -> None:
+    task = {
+        "title": "Split oversized module tools/foo.py",
+        "description": "Extract helpers.",
+        "target_file": "tools/foo.py",
+        "violation_type": "oversized_file",
+        "priority": "low",
+        "suggested_labels": ["refactor"],
+    }
+    first = build_github_issue_proposal_for_task(owner="o", repo="r", task=task, task_index=0)
+    second = build_github_issue_proposal_for_task(owner="o", repo="r", task=task, task_index=0)
+    assert first == second
 
 
 def test_misplaced_detects_base_tool_subclass(tmp_path: Path) -> None:

@@ -1152,6 +1152,7 @@ _TOOLS_WITHOUT_DELIBERATE_CATCH: frozenset[str] = frozenset(
         "prefect_flow_runs",
         "prefect_worker_health",
         "propose_github_issue_mutation_from_slack",
+        "propose_github_issues_from_architecture_tasks",
         "query_betterstack_logs",
         "query_coralogix_logs",
         "query_datadog_all",
