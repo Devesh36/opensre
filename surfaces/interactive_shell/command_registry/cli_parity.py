@@ -319,7 +319,7 @@ def _cmd_misses(session: Session, console: Console, args: list[str]) -> bool:  #
     return run_cli_command(console, ["misses", *args], capture_output=True)
 
 
-def _cmd_architecture_scan(session: ReplSession, console: Console, args: list[str]) -> bool:
+def _cmd_architecture_scan(session: Session, console: Console, args: list[str]) -> bool:
     from surfaces.cli.commands.architecture_scan import architecture_scan_github_subcommand
 
     if architecture_scan_github_subcommand(args) is not None:
@@ -370,7 +370,7 @@ def _architecture_scan_repo_root(scan_args: list[str]) -> Path | None:
 
 
 def _offer_architecture_scan_github_follow_up(
-    session: ReplSession,
+    session: Session,
     console: Console,
     *,
     scan_args: list[str],

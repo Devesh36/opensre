@@ -308,7 +308,7 @@ class TestDispatchSlash:
         monkeypatch.setattr(cli_parity, "repl_section_break", lambda _console: None)
         monkeypatch.setattr(cli_parity, "_prepare_repl_inline_menu_stdin", lambda: None)
 
-        session = ReplSession()
+        session = Session()
         session.exclusive_stdin_active = True
         console, _ = _capture()
 
@@ -350,7 +350,7 @@ class TestDispatchSlash:
         monkeypatch.setattr(cli_parity, "repl_section_break", lambda _console: None)
         monkeypatch.setattr(cli_parity, "_prepare_repl_inline_menu_stdin", lambda: None)
 
-        session = ReplSession()
+        session = Session()
         session.exclusive_stdin_active = True
         console, _ = _capture()
         repo_root = "/tmp/arch-scan-repo"
@@ -385,7 +385,7 @@ class TestDispatchSlash:
 
         monkeypatch.setattr(cli_parity, "repl_choose_one", _should_not_choose)
 
-        session = ReplSession()
+        session = Session()
         console, _ = _capture()
 
         assert (
@@ -422,7 +422,7 @@ class TestDispatchSlash:
 
         monkeypatch.setattr(cli_parity, "repl_choose_one", _should_not_choose)
 
-        session = ReplSession()
+        session = Session()
         console, _ = _capture()
 
         assert (
@@ -457,7 +457,7 @@ class TestDispatchSlash:
             return False
 
         def _fake_offer_follow_up(
-            _session: ReplSession,
+            _session: Session,
             _console: Console,
             *,
             scan_args: list[str],
@@ -472,7 +472,7 @@ class TestDispatchSlash:
             _fake_offer_follow_up,
         )
 
-        session = ReplSession()
+        session = Session()
         console, _ = _capture()
 
         assert dispatch_slash("/architecture-scan --repo-root /missing", session, console) is True

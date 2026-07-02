@@ -35,11 +35,11 @@ from core.agent_harness.session import Session
 from core.agent_harness.session.storage.memory import InMemorySessionStorage
 from core.agent_harness.tools.action_tools import get_action_tool
 from gateway.config.get_gateway_settings import GatewaySettings, TelegramInboundMessage
+from gateway.manager import GatewayManager, start_gateway
 from gateway.polling.handle_polled_inbound_telegram_msg import (
     handle_polled_inbound_telegram_message,
 )
 from gateway.session.enforce_inbound_telegram_message_security import InboundDecision
-from gateway.manager import GatewayManager, start_gateway
 
 
 def test_gateway_start_returns_running_gateway_handle(monkeypatch) -> None:
