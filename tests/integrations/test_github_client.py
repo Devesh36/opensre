@@ -91,6 +91,33 @@ def test_resolve_github_token_from_integration_store_reads_saved_credentials(
     assert resolve_github_token_from_integration_store() == "gho_saved"
 
 
+def test_resolve_github_token_from_integration_store_ignores_invalid_store(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "integrations.store.get_integration",
+        lambda service: (
+            {
+                "credentials": {
+                    "mode": "streamable-http",
+                    "url": "https://example.com",
+                    "auth_token": "x",
+                }
+            }
+            if service == "github"
+            else None
+        ),
+    )
+
+    def _raise(_credentials: dict[str, object]) -> None:
+        raise ValueError("invalid credentials")
+
+    monkeypatch.setattr("integrations.github_mcp.build_github_mcp_config", _raise)
+    monkeypatch.setattr("integrations.github_mcp.github_mcp_config_from_env", lambda: None)
+
+    assert resolve_github_token_from_integration_store() == ""
+
+
 def test_missing_token_raises_typed_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.delenv("GH_TOKEN", raising=False)

@@ -5,6 +5,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 from tests.tools.conftest import BaseToolContract
 from tools.architecture_issue_tool.scan import (
     GITHUB_TOKEN_SETUP_HINT,
@@ -13,6 +15,7 @@ from tools.architecture_issue_tool.scan import (
     format_architecture_scan_report,
     format_github_issue_error,
     format_scan_workflow_header,
+    parse_task_indices,
     propose_github_issues_from_tasks,
     run_architecture_scan,
     run_architecture_scan_and_file_github_issues,
@@ -440,3 +443,8 @@ def test_missing_repo_root_returns_error(tmp_path: Path) -> None:
     missing = tmp_path / "missing"
     result = find_architecture_violations(repo_root=str(missing))
     assert "error" in result
+
+
+def test_parse_task_indices_rejects_non_integer() -> None:
+    with pytest.raises(ValueError, match="Invalid task index 'abc'"):
+        parse_task_indices("abc")

@@ -104,6 +104,13 @@ def _exit_for_issue_results(result: dict[str, Any]) -> None:
     raise SystemExit(SUCCESS)
 
 
+def _parse_task_indices_option(task_indices: str | None) -> list[int] | None:
+    try:
+        return parse_task_indices(task_indices)
+    except ValueError as exc:
+        raise click.BadParameter(str(exc), param_hint="'--task-indices'") from None
+
+
 @click.group(name="architecture-scan", invoke_without_command=True)
 @_scan_options
 @click.pass_context
@@ -146,7 +153,7 @@ def architecture_scan_propose_command(
     result = run_architecture_scan_and_propose_github_issues(
         owner=owner,
         repo=repo,
-        task_indices=parse_task_indices(task_indices),
+        task_indices=_parse_task_indices_option(task_indices),
         **_scan_kwargs(ctx),
     )
     _emit_text_or_json(result, formatter=format_propose_report_text)
@@ -177,7 +184,7 @@ def architecture_scan_file_issues_command(
     result = run_architecture_scan_and_file_github_issues(
         owner=owner,
         repo=repo,
-        task_indices=parse_task_indices(task_indices),
+        task_indices=_parse_task_indices_option(task_indices),
         **_scan_kwargs(ctx),
     )
     _emit_text_or_json(result, formatter=format_file_issues_report_text)

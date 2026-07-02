@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass
 from typing import Any
 from urllib import error, parse, request
 
 JsonPayload = dict[str, Any] | list[Any]
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -41,10 +44,14 @@ def resolve_github_token_from_integration_store() -> str:
                 if token:
                     return token
             except Exception:
-                pass
+                _logger.warning(
+                    "Ignoring invalid GitHub integration credentials in store",
+                    exc_info=True,
+                )
     try:
         env_config = github_mcp_config_from_env()
     except Exception:
+        _logger.warning("Ignoring invalid GitHub MCP env configuration", exc_info=True)
         return ""
     if env_config is None:
         return ""

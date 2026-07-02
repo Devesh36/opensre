@@ -330,7 +330,10 @@ def parse_task_indices(spec: str | None) -> list[int] | None:
         stripped = part.strip()
         if not stripped:
             continue
-        indices.append(int(stripped))
+        try:
+            indices.append(int(stripped))
+        except ValueError as exc:
+            raise ValueError(f"Invalid task index {stripped!r}: must be an integer.") from exc
     return indices
 
 

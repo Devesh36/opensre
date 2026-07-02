@@ -220,3 +220,23 @@ def test_architecture_scan_file_issues_without_token_exits_once(tmp_path, monkey
     assert result.output.count("GitHub token is required") == 1
     assert "integrations setup github" in result.output
     assert "GitHub issue results:" not in result.output
+
+
+def test_architecture_scan_invalid_task_indices(tmp_path) -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "architecture-scan",
+            "propose",
+            "Tracer-Cloud",
+            "opensre",
+            "--repo-root",
+            str(tmp_path),
+            "--task-indices",
+            "abc",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Invalid task index 'abc': must be an integer." in result.output
