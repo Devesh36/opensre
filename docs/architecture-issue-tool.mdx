@@ -1,0 +1,90 @@
+---
+title: "Architecture Issue Tool"
+description: "Detect layering violations, oversized modules, compatibility shims, and misplaced packages."
+---
+
+## Overview
+
+`find_architecture_violations` is a read-only static analysis tool for maintainers. It scans the local repository and returns architecture violations plus atomic refactor task proposals.
+
+The tool does **not** modify code, execute refactors, or create GitHub issues automatically.
+
+| Tool | What it does |
+| --- | --- |
+| `find_architecture_violations` | Scan repo for dependency, size, shim, and placement violations |
+
+## What it checks
+
+1. **Dependency direction** — reuses CI layering rules (`core → surfaces`, `integrations → tools`, etc.) plus core boundary checks (`cli`, `integrations.tracer`, `tools.investigation`, core-domain → integrations).
+2. **Oversized files** — flags Python files above a non-blank line threshold (default 500).
+3. **Compatibility shims** — detects forwarding-only modules that should be deleted after import migration.
+4. **Misplaced modules** — finds `@tool` / `BaseTool` definitions outside `tools/` or `integrations/*/tools/`, and client/verifier logic under `tools/`.
+
+## Parameters
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `repo_root` | string | checkout root | Optional absolute repository path |
+| `max_file_lines` | integer | `500` | Oversized-file threshold (non-blank lines) |
+| `include_baselines` | boolean | `false` | Include known baseline dependency debt tracked in CI |
+
+## Example
+
+```bash
+uv run python -c "
+from tools.architecture_issue_tool import find_architecture_violations
+import json
+result = find_architecture_violations(max_file_lines=500)
+print(json.dumps({'summary': result['summary'], 'sample_tasks': result['proposed_refactor_tasks'][:3]}, indent=2))
+"
+```
+
+Sample output shape:
+
+```json
+{
+  "violations": [
+    {
+      "type": "dependency_direction",
+      "file_path": "tools/interactive_shell/actions/investigation.py",
+      "description": "Module 'tools.interactive_shell.actions.investigation' imports 'surfaces.interactive_shell.runtime', violating the 'tools -> surfaces' dependency restriction.",
+      "details": {
+        "source_module": "tools.interactive_shell.actions.investigation",
+        "imported_module": "surfaces.interactive_shell.runtime",
+        "is_baseline_ignore": true
+      }
+    }
+  ],
+  "proposed_refactor_tasks": [
+    {
+      "title": "Fix dependency direction violation in tools/interactive_shell/actions/investigation.py",
+      "description": "...",
+      "target_file": "tools/interactive_shell/actions/investigation.py",
+      "violation_type": "dependency_direction",
+      "priority": "high",
+      "suggested_labels": ["refactor", "maintainability"]
+    }
+  ],
+  "summary": {"total": 1, "by_type": {"dependency_direction": 1}},
+  "github_issue_creation": "Use propose_github_issue_mutation_from_slack + execute_github_issue_mutation per task; the scanner does not create GitHub issues automatically."
+}
+```
+
+## Filing GitHub issues from scan results
+
+Issue creation is a **separate explicit step**. After reviewing `proposed_refactor_tasks`, use the GitHub workflow tools documented in [GitHub workflow tools](/github-workflow-tools):
+
+1. `propose_github_issue_mutation_from_slack` — build a create/update/close proposal
+2. `execute_github_issue_mutation` — execute an approved proposal
+
+Do not auto-file issues from scan output.
+
+## Related CI checks
+
+Local layering enforcement also runs via:
+
+```bash
+make check-imports
+```
+
+The scanner complements (but does not replace) those CI checks by producing maintainer-friendly refactor task proposals.

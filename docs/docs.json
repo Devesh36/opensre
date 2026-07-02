@@ -101,6 +101,7 @@
               "remote-runtime-investigation",
               "background-investigations",
               "masking",
+              "architecture-issue-tool",
               "interactive-shell-privacy",
               "sessions",
               "fleet",
