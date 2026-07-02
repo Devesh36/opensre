@@ -10,7 +10,7 @@ from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Literal, Protocol, cast
+from typing import Any, Literal, Protocol
 
 ViolationType = Literal[
     "dependency_direction",
@@ -162,37 +162,61 @@ def inherits_from(node: ast.ClassDef, base_names: set[str]) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# CI import-graph bridge
+# CI import-graph bridge (lazy-loaded; absent in pip-installed deployments)
 # ---------------------------------------------------------------------------
 
 _CI_DIR = Path(__file__).resolve().parents[2] / ".github" / "ci"
-if str(_CI_DIR) not in sys.path:
-    sys.path.insert(0, str(_CI_DIR))
 
-_check_direct_imports = importlib.import_module("check_direct_imports")
-_check_import_cycles = importlib.import_module("check_import_cycles")
 
-for symbol in ("_BASELINE_IGNORES", "DirectViolation", "find_direct_violations"):
-    if not hasattr(_check_direct_imports, symbol):
-        msg = f"check_direct_imports is missing required symbol {symbol!r}"
-        raise ImportError(msg)
+@dataclass(frozen=True)
+class _CiBridge:
+    baseline_ignores: frozenset[Any]
+    find_direct_violations: Any
+    top_level_imports: Any
 
-for symbol in ("_build_graph", "_top_level_imports"):
-    if not hasattr(_check_import_cycles, symbol):
-        msg = f"check_import_cycles is missing required symbol {symbol!r}"
-        raise ImportError(msg)
 
-_BASELINE_IGNORES = cast(Any, _check_direct_imports._BASELINE_IGNORES)
-find_direct_violations = cast(Any, _check_direct_imports.find_direct_violations)
-_top_level_imports = cast(Any, _check_import_cycles._top_level_imports)
+_CI_BRIDGE: _CiBridge | None = None
+_CI_BRIDGE_LOAD_ATTEMPTED = False
 
 
 class _DirectViolationLike(Protocol):
     source: str
     target: str
+    edge: str
+
+
+def _get_ci_bridge() -> _CiBridge | None:
+    """Load CI dependency scripts when running from a source checkout."""
+    global _CI_BRIDGE, _CI_BRIDGE_LOAD_ATTEMPTED
+    if _CI_BRIDGE_LOAD_ATTEMPTED:
+        return _CI_BRIDGE
+    _CI_BRIDGE_LOAD_ATTEMPTED = True
+    try:
+        if str(_CI_DIR) not in sys.path:
+            sys.path.insert(0, str(_CI_DIR))
+        check_direct = importlib.import_module("check_direct_imports")
+        check_cycles = importlib.import_module("check_import_cycles")
+        for symbol in ("_BASELINE_IGNORES", "find_direct_violations"):
+            if not hasattr(check_direct, symbol):
+                msg = f"check_direct_imports is missing required symbol {symbol!r}"
+                raise ImportError(msg)
+        if not hasattr(check_cycles, "_top_level_imports"):
+            msg = "check_import_cycles is missing required symbol '_top_level_imports'"
+            raise ImportError(msg)
+        _CI_BRIDGE = _CiBridge(
+            baseline_ignores=frozenset(check_direct._BASELINE_IGNORES),
+            find_direct_violations=check_direct.find_direct_violations,
+            top_level_imports=check_cycles._top_level_imports,
+        )
+    except ModuleNotFoundError:
+        _CI_BRIDGE = None
+    return _CI_BRIDGE
 
 
 def build_import_graph(root: Path, first_party_roots: tuple[str, ...]) -> dict[str, set[str]]:
+    bridge = _get_ci_bridge()
+    if bridge is None:
+        return {}
     roots = frozenset(first_party_roots)
     graph: dict[str, set[str]] = defaultdict(set)
     for pkg in first_party_roots:
@@ -207,7 +231,7 @@ def build_import_graph(root: Path, first_party_roots: tuple[str, ...]) -> dict[s
             source = read_source_safe(py)
             if source is None:
                 continue
-            graph[module].update(_top_level_imports(source, first_party_roots=roots))
+            graph[module].update(bridge.top_level_imports(source, first_party_roots=roots))
     return graph
 
 
@@ -390,18 +414,21 @@ def scan_dependency_violations(
     *,
     include_baselines: bool = False,
 ) -> list[ArchitectureViolation]:
+    violations = _scan_core_prefix_violations(repo_root)
+    bridge = _get_ci_bridge()
+    if bridge is None:
+        return violations
+
     roots = discover_first_party_roots_cached(str(repo_root))
     graph = build_import_graph(repo_root, roots)
 
-    baseline_ignores = frozenset() if include_baselines else _BASELINE_IGNORES
-    direct_violations = find_direct_violations(graph, baseline_ignores=baseline_ignores)
+    baseline_ignores = frozenset() if include_baselines else bridge.baseline_ignores
+    direct_violations = bridge.find_direct_violations(graph, baseline_ignores=baseline_ignores)
 
-    violations: list[ArchitectureViolation] = []
     for direct in direct_violations:
-        is_baseline = direct.edge in _BASELINE_IGNORES
+        is_baseline = direct.edge in bridge.baseline_ignores
         violations.append(_violation_from_direct(repo_root, direct, is_baseline_ignore=is_baseline))
 
-    violations.extend(_scan_core_prefix_violations(repo_root))
     return violations
 
 

@@ -448,3 +448,19 @@ def test_missing_repo_root_returns_error(tmp_path: Path) -> None:
 def test_parse_task_indices_rejects_non_integer() -> None:
     with pytest.raises(ValueError, match="Invalid task index 'abc'"):
         parse_task_indices("abc")
+
+
+def test_scan_dependency_violations_without_ci_bridge_still_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tools.architecture_issue_tool import scanners as scanners_module
+
+    monkeypatch.setattr(scanners_module, "_CI_BRIDGE", None)
+    monkeypatch.setattr(scanners_module, "_CI_BRIDGE_LOAD_ATTEMPTED", True)
+
+    core_dir = tmp_path / "core" / "domain"
+    core_dir.mkdir(parents=True)
+    (core_dir / "bad.py").write_text("import tools.investigation.lifecycle\n", encoding="utf-8")
+
+    violations = scan_dependency_violations(tmp_path)
+    assert any(v.type == "dependency_direction" for v in violations)
