@@ -52,6 +52,7 @@ def run_cli_command(
     session: ReplSession | None = None,
     subprocess_timeout: float | None = None,
     capture_output: bool = False,
+    require_success: bool = False,
 ) -> bool:
     """Helper to delegate complex or interactive Click commands to a child process.
 
@@ -71,6 +72,10 @@ def run_cli_command(
     Ctrl+C sends :exc:`KeyboardInterrupt`, which subclasses :exc:`BaseException`
     rather than :exc:`Exception`; it is handled here so the REPL survives and the
     child process exits on SIGINT alongside the interrupted ``run`` call.
+
+    ``require_success`` (default ``False``) returns ``False`` when the delegated
+    CLI subprocess exits non-zero or fails to run. Use this only when follow-up
+    behavior depends on the delegated command succeeding.
     """
     console.print()
     cmd = build_opensre_cli_argv(args)
@@ -118,6 +123,8 @@ def run_cli_command(
     console.print()
     if session is not None and not should_capture:
         session.set_turn_outcome_hint(format_wizard_cli_outcome(args, exit_code=exit_code))
+    if require_success:
+        return exit_code == 0
     return True
 
 
@@ -318,9 +325,15 @@ def _cmd_architecture_scan(session: ReplSession, console: Console, args: list[st
     if architecture_scan_github_subcommand(args) is not None:
         return run_cli_command(console, ["architecture-scan", *args], capture_output=True)
 
-    ran = run_cli_command(console, ["architecture-scan", *args], capture_output=True)
-    _offer_architecture_scan_github_follow_up(session, console, scan_args=args)
-    return ran
+    scan_succeeded = run_cli_command(
+        console,
+        ["architecture-scan", *args],
+        capture_output=True,
+        require_success=True,
+    )
+    if scan_succeeded:
+        _offer_architecture_scan_github_follow_up(session, console, scan_args=args)
+    return True
 
 
 def _prepare_repl_inline_menu_stdin() -> None:

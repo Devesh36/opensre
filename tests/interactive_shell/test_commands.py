@@ -444,6 +444,46 @@ class TestDispatchSlash:
         ]
         assert choose_calls == 0
 
+    def test_architecture_scan_failed_scan_skips_follow_up_menu(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from surfaces.interactive_shell.command_registry import cli_parity
+
+        calls: list[tuple[list[str], dict[str, object]]] = []
+        follow_up_calls = 0
+
+        def _fake_run_cli_command(_console: Console, args: list[str], **kwargs: object) -> bool:
+            calls.append((args, kwargs))
+            return False
+
+        def _fake_offer_follow_up(
+            _session: ReplSession,
+            _console: Console,
+            *,
+            scan_args: list[str],
+        ) -> None:
+            nonlocal follow_up_calls
+            follow_up_calls += 1
+
+        monkeypatch.setattr(cli_parity, "run_cli_command", _fake_run_cli_command)
+        monkeypatch.setattr(
+            cli_parity,
+            "_offer_architecture_scan_github_follow_up",
+            _fake_offer_follow_up,
+        )
+
+        session = ReplSession()
+        console, _ = _capture()
+
+        assert dispatch_slash("/architecture-scan --repo-root /missing", session, console) is True
+        assert calls == [
+            (
+                ["architecture-scan", "--repo-root", "/missing"],
+                {"capture_output": True, "require_success": True},
+            )
+        ]
+        assert follow_up_calls == 0
+
     def test_empty_input_is_noop(self) -> None:
         session = ReplSession()
         console, _ = _capture()
