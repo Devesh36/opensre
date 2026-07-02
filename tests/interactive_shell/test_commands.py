@@ -182,8 +182,8 @@ class TestDispatchSlash:
         assert "interactions" in output
         assert "reasoning effort" in output
         assert "trust mode" in output
+        assert "grounding cli cache" in output
         assert "grounding docs cache" in output
-        assert "grounding agents_md cache" in output
 
     def test_background_toggle_and_status(self) -> None:
         session = ReplSession()

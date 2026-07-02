@@ -39,12 +39,17 @@ def test_invalidate_clears_every_cache() -> None:
     assert ctx.agents_md.stats().misses == 0
 
 
-def test_shell_prompt_provider_cli_cache_is_isolated_per_instance() -> None:
-    provider_a = ShellPromptContextProvider(ReplSession())
-    provider_b = ShellPromptContextProvider(ReplSession())
+def test_shell_prompt_provider_cli_cache_is_session_scoped() -> None:
+    session_a = ReplSession()
+    session_b = ReplSession()
+    provider_a = ShellPromptContextProvider(session_a)
+    provider_b = ShellPromptContextProvider(session_a)
+    provider_c = ShellPromptContextProvider(session_b)
     provider_a.cli_reference()
-    assert provider_a._cli.stats().misses >= 1  # noqa: SLF001 - intentional cache isolation check
-    assert provider_b._cli.stats().misses == 0  # noqa: SLF001 - intentional cache isolation check
+    provider_b.cli_reference()
+    assert provider_b._cli.stats().hits >= 1  # noqa: SLF001 - same session shares cache
+    provider_c.cli_reference()
+    assert provider_c._cli.stats().misses >= 1  # noqa: SLF001 - different session is isolated
 
 
 def test_log_grounding_iterates_provided_sources(monkeypatch: object) -> None:

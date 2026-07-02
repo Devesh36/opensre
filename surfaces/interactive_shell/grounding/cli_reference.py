@@ -199,8 +199,8 @@ def _interactive_shell_slash_hints(provider: SlashCommandProvider | None = None)
 class CliReference:
     """Session-scoped cache for assembled CLI help reference text.
 
-    Holds its cache as instance state so each ``ShellPromptContextProvider``
-    (and thus each ``ReplSession``) owns an isolated cache with no module-level
+    Holds its cache as instance state so each REPL session (via
+    :func:`session_cli_reference`) owns an isolated cache with no module-level
     mutable globals.
     """
 
@@ -298,6 +298,26 @@ def _cli_command_group() -> click.Command | None:
     return cli
 
 
+_SESSION_CLI_REFERENCE_ATTR = "_shell_cli_reference"
+
+
+def session_cli_reference(session: Any) -> CliReference:
+    """Return the session-scoped CLI catalog cache, creating it on first use."""
+    cached = getattr(session, _SESSION_CLI_REFERENCE_ATTR, None)
+    if isinstance(cached, CliReference):
+        return cached
+    cli = CliReference()
+    cli.set_command_group_provider(_cli_command_group)
+    cli.set_slash_commands_provider(_slash_commands)
+    setattr(session, _SESSION_CLI_REFERENCE_ATTR, cli)
+    return cli
+
+
+def shell_prompt_context_provider(session: Any) -> ShellPromptContextProvider:
+    """Build a prompt provider that reuses the session's CLI catalog cache."""
+    return ShellPromptContextProvider(session)
+
+
 class ShellPromptContextProvider:
     """:class:`core.agent_harness.ports.PromptContextProvider` for the interactive shell.
 
@@ -308,9 +328,7 @@ class ShellPromptContextProvider:
 
     def __init__(self, session: Any) -> None:
         self._base = DefaultPromptContextProvider(session)
-        self._cli = CliReference()
-        self._cli.set_command_group_provider(_cli_command_group)
-        self._cli.set_slash_commands_provider(_slash_commands)
+        self._cli = session_cli_reference(session)
 
     def cli_reference(self) -> str:
         return self._cli.build_text()
@@ -337,4 +355,6 @@ __all__ = [
     "CommandGroupProvider",
     "ShellPromptContextProvider",
     "SlashCommandProvider",
+    "session_cli_reference",
+    "shell_prompt_context_provider",
 ]

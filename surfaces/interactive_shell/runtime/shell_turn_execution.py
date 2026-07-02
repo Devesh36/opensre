@@ -31,7 +31,7 @@ from core.agent_harness.session import ReplSession
 from core.execution import ToolExecutionHooks
 from surfaces.interactive_shell.command_registry import SLASH_COMMANDS
 from surfaces.interactive_shell.command_registry.suggestions import resolve_literal_slash_typo
-from surfaces.interactive_shell.grounding.cli_reference import ShellPromptContextProvider
+from surfaces.interactive_shell.grounding.cli_reference import shell_prompt_context_provider
 from surfaces.interactive_shell.runtime.agent_harness_adapters import ShellOutputSink
 from surfaces.interactive_shell.runtime.core.turn_accounting import ShellTurnAccounting
 from surfaces.interactive_shell.runtime.integration_tool_gathering import (
@@ -157,7 +157,7 @@ def answer_shell_question(
         message,
         session,
         _resolve_output_sink(console, output),
-        prompts=ShellPromptContextProvider(session),
+        prompts=shell_prompt_context_provider(session),
         reasoning=DefaultReasoningClientProvider(
             output=_resolve_output_sink(console, output),
             error_reporter=DefaultErrorReporter(),

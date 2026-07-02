@@ -14,7 +14,7 @@ from config.gateway_output_sink import GatewayOutputSink
 from core.agent import Agent
 from core.agent_harness.agent_builder import AgentConfig, build_agent
 from core.agent_harness.prompts.action_agent_system_prompt import _SYSTEM_PROMPT_BASE
-from core.agent_harness.providers.default_prompt_context import DefaultPromptContextProvider
+from surfaces.interactive_shell.grounding.cli_reference import shell_prompt_context_provider
 from core.agent_harness.providers.default_providers import (
     DefaultErrorReporter,
     DefaultReasoningClientProvider,
@@ -116,7 +116,7 @@ class GatewayManager:
                     precomputed_action_tools=tools,
                     tool_action_logger=logger,
                 ),
-                prompts=DefaultPromptContextProvider(session),
+                prompts=shell_prompt_context_provider(session),
                 reasoning=DefaultReasoningClientProvider(
                     output=sink,
                     error_reporter=error_reporter,
