@@ -9,7 +9,7 @@ import sys
 from collections import defaultdict
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 from tools.architecture_issue_tool.models import ArchitectureViolation
 
@@ -148,9 +148,13 @@ for symbol in ("_build_graph", "_top_level_imports"):
         raise ImportError(msg)
 
 _BASELINE_IGNORES = cast(Any, _check_direct_imports._BASELINE_IGNORES)
-DirectViolation = cast(Any, _check_direct_imports.DirectViolation)
 find_direct_violations = cast(Any, _check_direct_imports.find_direct_violations)
 _top_level_imports = cast(Any, _check_import_cycles._top_level_imports)
+
+
+class _DirectViolationLike(Protocol):
+    source: str
+    target: str
 
 
 def build_import_graph(root: Path, first_party_roots: tuple[str, ...]) -> dict[str, set[str]]:
@@ -248,7 +252,7 @@ def _imported_modules_with_lines(source: str) -> list[tuple[str, int]]:
 
 def _violation_from_direct(
     repo_root: Path,
-    violation: DirectViolation,
+    violation: _DirectViolationLike,
     *,
     is_baseline_ignore: bool,
 ) -> ArchitectureViolation:

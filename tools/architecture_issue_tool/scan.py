@@ -126,9 +126,9 @@ def format_architecture_scan_report(scan_result: dict[str, Any]) -> str:
     for violation in violations:
         if not isinstance(violation, dict):
             continue
-        violation_type = violation.get("type")
-        if isinstance(violation_type, str) and violation_type in grouped:
-            grouped[violation_type].append(violation)
+        item_type = violation.get("type")
+        if isinstance(item_type, str) and item_type in grouped:
+            grouped[item_type].append(violation)
 
     for violation_type in _VIOLATION_TYPE_ORDER:
         items = grouped[violation_type]
