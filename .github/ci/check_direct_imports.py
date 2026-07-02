@@ -40,10 +40,6 @@ _FORBIDDEN_DIRECT: dict[str, frozenset[str]] = {
 # Format: ``"source.module -> dest.module"`` (exact modules from the graph).
 _BASELINE_IGNORES: frozenset[str] = frozenset(
     {
-        # Gateway hosts the interactive_shell runtime — pre-existing reuse
-        # to be burned down by extracting shared runtime primitives out of
-        # ``surfaces/interactive_shell/`` and into a layer below ``surfaces``.
-        "gateway.storage.session.resolver -> surfaces.interactive_shell.runtime.context",
         # tools/interactive_shell action tools reach UP into surfaces/interactive_shell
         # for runtime / command_registry / UI primitives. Clears when the action
         # tools themselves are refactored to be UI-agnostic (e.g. return

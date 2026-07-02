@@ -7,48 +7,16 @@ from typing import Self
 
 import click
 from prompt_toolkit import PromptSession
-from pydantic import BaseModel, ConfigDict, Field, InstanceOf, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, InstanceOf, model_validator
 
+from core.agent_harness.session.bootstrap import ReplSessionBootstrapSpec
 from core.agent_harness.session.state import ReplSession
-from core.agent_harness.session.tasks import TaskRegistry
 from core.domain.alerts import inbox as _alert_inbox
 from surfaces.interactive_shell.runtime.core.state import (
     ReplState,
     SpinnerState,
     create_repl_mutable_state,
 )
-
-
-class ReplSessionBootstrapSpec(BaseModel):
-    """Pydantic-enforced inputs for preparing a REPL session."""
-
-    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
-
-    session: InstanceOf[ReplSession] = Field(default_factory=ReplSession)
-    pt_session: PromptSession[str] | None = None
-    active_theme_name: str | None = None
-    hydrate_integrations: bool = True
-    persistent_tasks: bool = True
-
-    @field_validator("active_theme_name")
-    @classmethod
-    def _active_theme_name_must_not_be_blank(cls, value: str | None) -> str | None:
-        if value is not None and not value.strip():
-            raise ValueError("active_theme_name must not be blank")
-        return value
-
-    @model_validator(mode="after")
-    def apply_to_session(self) -> Self:
-        """Apply the canonical startup mutations to the validated session."""
-        self.session.active_theme_name = self.active_theme_name or _current_theme_name()
-        _bind_shell_grounding(self.session)
-        if self.hydrate_integrations:
-            self.session.hydrate_configured_integrations()
-        if self.persistent_tasks:
-            self.session.task_registry = TaskRegistry.persistent()
-        if self.pt_session is not None:
-            self.session.prompt_history_backend = self.pt_session.history
-        return self
 
 
 class ReplRuntimeContext(BaseModel):
@@ -113,6 +81,12 @@ def _bind_shell_grounding(session: ReplSession) -> None:
     session.grounding.set_command_group_provider(_cli_command_group)
 
 
+def _validate_active_theme_name(active_theme_name: str | None) -> str | None:
+    if active_theme_name is not None and not active_theme_name.strip():
+        raise ValueError("active_theme_name must not be blank")
+    return active_theme_name
+
+
 def prepare_repl_session(
     session: ReplSession | None = None,
     *,
@@ -122,14 +96,17 @@ def prepare_repl_session(
     persistent_tasks: bool = True,
 ) -> ReplSession:
     """Return a session with the same defaults used by REPL boot."""
-    spec = ReplSessionBootstrapSpec(
+    validated_theme_name = _validate_active_theme_name(active_theme_name)
+    prepared = ReplSessionBootstrapSpec(
         session=session or ReplSession(),
-        pt_session=pt_session,
-        active_theme_name=active_theme_name,
         hydrate_integrations=hydrate_integrations,
         persistent_tasks=persistent_tasks,
-    )
-    return spec.session
+    ).session
+    prepared.active_theme_name = validated_theme_name or _current_theme_name()
+    _bind_shell_grounding(prepared)
+    if pt_session is not None:
+        prepared.prompt_history_backend = pt_session.history
+    return prepared
 
 
 def create_repl_runtime_context(
@@ -163,7 +140,6 @@ def create_repl_runtime_context(
 
 __all__ = [
     "ReplRuntimeContext",
-    "ReplSessionBootstrapSpec",
     "create_repl_runtime_context",
     "prepare_repl_session",
 ]

@@ -15,6 +15,10 @@ singletons provide the production JSONL backends used by agent surfaces.
 
 from __future__ import annotations
 
+from core.agent_harness.session.bootstrap import (
+    ReplSessionBootstrapSpec,
+    bootstrap_repl_session,
+)
 from core.agent_harness.session.repo import JsonlSessionRepo
 from core.agent_harness.session.state import (
     SUGGESTED_PROMPT_AFTER_FAILED_SYNTHETIC_TEST,
@@ -58,6 +62,8 @@ __all__ = [
     "JsonlSessionRepo",
     "JsonlSessionStorage",
     "ReplSession",
+    "ReplSessionBootstrapSpec",
+    "bootstrap_repl_session",
     "SUGGESTED_PROMPT_AFTER_FAILED_SYNTHETIC_TEST",
     "SessionPersistenceSource",
     "SessionRepo",

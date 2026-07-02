@@ -5,10 +5,14 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from core.agent_harness.session import DEFAULT_SESSION_REPO, DEFAULT_SESSION_STORAGE, ReplSession
+from core.agent_harness.session import (
+    DEFAULT_SESSION_REPO,
+    DEFAULT_SESSION_STORAGE,
+    ReplSession,
+    ReplSessionBootstrapSpec,
+)
 from gateway.session.gateway_chat_context import inject_gateway_chat_context
 from gateway.storage.session.bindings import SessionBindingStore
-from surfaces.interactive_shell.runtime.context import ReplSessionBootstrapSpec
 
 logger = logging.getLogger(__name__)
 

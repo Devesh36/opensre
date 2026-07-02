@@ -15,7 +15,6 @@ from core.agent_harness.session.tasks import TaskRegistry
 from surfaces.interactive_shell.controller import InteractiveShellController
 from surfaces.interactive_shell.runtime.context import (
     ReplRuntimeContext,
-    ReplSessionBootstrapSpec,
     create_repl_runtime_context,
 )
 from surfaces.interactive_shell.runtime.core.state import (
@@ -121,8 +120,8 @@ def test_context_rejects_invalid_state_contracts() -> None:
     with pytest.raises(ValidationError):
         ReplRuntimeContext(session=object())  # type: ignore[arg-type]
 
-    with pytest.raises(ValidationError):
-        ReplSessionBootstrapSpec(active_theme_name=" ")
+    with pytest.raises(ValueError, match="active_theme_name must not be blank"):
+        create_repl_runtime_context(active_theme_name=" ")
 
 
 def test_context_assignment_validates_inbox_type() -> None:
