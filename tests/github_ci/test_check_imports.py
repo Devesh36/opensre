@@ -7,10 +7,23 @@ from pathlib import Path
 from unittest.mock import patch
 
 _CI_DIR = Path(__file__).resolve().parents[2] / ".github" / "ci"
+_REPO_ROOT = _CI_DIR.parents[1]
 if str(_CI_DIR) not in sys.path:
     sys.path.insert(0, str(_CI_DIR))
 
 from check_imports import import_checks, main
+
+
+def test_importlinter_strict_config_exists() -> None:
+    strict_config = _REPO_ROOT / ".importlinter.strict"
+    assert strict_config.is_file(), "make check-layers-strict requires .importlinter.strict"
+
+
+def test_import_checks_strict_uses_strict_config() -> None:
+    strict_config = _REPO_ROOT / ".importlinter.strict"
+    with patch("check_imports._run_importlinter", return_value=0) as mock_linter:
+        import_checks(strict_layers=True)[1].run()
+    mock_linter.assert_called_once_with(config=strict_config)
 
 
 def test_import_checks_runs_three_stages() -> None:
@@ -36,3 +49,7 @@ def test_main_passes_when_all_stages_pass() -> None:
         patch("check_imports.check_direct_imports", return_value=0),
     ):
         assert main([]) == 0
+
+
+def test_main_strict_passes_with_real_config() -> None:
+    assert main(["--strict"]) == 0
