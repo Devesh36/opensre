@@ -101,6 +101,7 @@ _NESTED_BASELINE_IGNORES: frozenset[str] = frozenset(
         "tools.interactive_shell.actions.sample_alert -> surfaces.cli.investigation",
         "tools.interactive_shell.actions.sample_alert -> surfaces.interactive_shell.runtime.background.runner",
         "tools.interactive_shell.actions.llm_provider -> surfaces.cli.wizard.config",
+        # Nested only: runner.py also has a module-level ui import (see _BASELINE_IGNORES).
         "tools.interactive_shell.shell.runner -> surfaces.interactive_shell.ui",
     }
 )

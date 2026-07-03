@@ -192,6 +192,12 @@ def _nested_imports(source: str, *, first_party_roots: frozenset[str]) -> list[t
                 _walk_nested(node.finalbody, nested=nested)
             elif isinstance(node, ast.With | ast.AsyncWith):
                 _walk_nested(node.body, nested=nested)
+            elif isinstance(node, ast.For | ast.AsyncFor | ast.While):
+                _walk_nested(node.body, nested=nested)
+                _walk_nested(node.orelse, nested=nested)
+            elif isinstance(node, ast.Match):
+                for case in node.cases:
+                    _walk_nested(case.body, nested=nested)
 
     _walk_nested(tree.body, nested=False)
     return results

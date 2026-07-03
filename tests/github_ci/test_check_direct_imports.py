@@ -67,6 +67,26 @@ def test_nested_imports_flags_function_and_class_bodies() -> None:
     assert ("surfaces.interactive_shell.ui", 5) in nested
 
 
+def test_nested_imports_flags_imports_inside_for_while_and_match() -> None:
+    source = (
+        "def f():\n"
+        "    for _ in [1]:\n"
+        "        from surfaces.cli import doctor\n"
+        "    while False:\n"
+        "        from surfaces.cli.wizard import store\n"
+        "    match 0:\n"
+        "        case _:\n"
+        "            from surfaces.interactive_shell.ui import DIM\n"
+    )
+    nested = _nested_imports(
+        source,
+        first_party_roots=frozenset({"surfaces", "tools"}),
+    )
+    assert ("surfaces.cli", 3) in nested
+    assert ("surfaces.cli.wizard", 5) in nested
+    assert ("surfaces.interactive_shell.ui", 8) in nested
+
+
 def test_find_nested_direct_violations_flags_new_edge(tmp_path: Path) -> None:
     module_dir = tmp_path / "tools" / "fleet_monitoring"
     module_dir.mkdir(parents=True)
