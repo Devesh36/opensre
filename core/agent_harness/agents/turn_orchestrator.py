@@ -110,6 +110,7 @@ def answer_cli_agent(
     is_tty: bool | None = None,
     tool_observation: str | None = None,
     tool_observation_on_screen: bool = True,
+    handoff_contents: tuple[str, ...] = (),
     turn_ctx: TurnContext | None = None,
 ) -> Any | None:
     """Run one turn of the conversational assistant (guidance only).
@@ -131,6 +132,7 @@ def answer_cli_agent(
         prompts=prompts,
         tool_observation=tool_observation,
         tool_observation_on_screen=tool_observation_on_screen,
+        handoff_contents=handoff_contents,
         turn_ctx=ctx,
     )
 
@@ -212,6 +214,7 @@ def _gather_and_answer(
     gather: EvidenceGatherer,
     confirm_fn: ConfirmFn | None,
     is_tty: bool | None,
+    handoff_contents: tuple[str, ...],
     turn_ctx: TurnContext,
 ) -> Any | None:
     gathered = gather(text, is_tty=is_tty)
@@ -226,6 +229,7 @@ def _gather_and_answer(
         confirm_fn=confirm_fn,
         is_tty=is_tty,
         tool_observation=gathered or None,
+        handoff_contents=handoff_contents,
         turn_ctx=turn_ctx,
         **on_screen,
     )
@@ -279,6 +283,7 @@ def run_turn(
     )
     accounting.record_action_result(action_result)
 
+    handoff_contents = action_result.handoff_contents
     observation = session.last_command_observation
     route = _route_turn(_routing_input_from_result(action_result, observation), user_text=text)
 
@@ -289,6 +294,7 @@ def run_turn(
                 confirm_fn=confirm_fn,
                 is_tty=is_tty,
                 tool_observation=observation,
+                handoff_contents=handoff_contents,
                 turn_ctx=turn_ctx,
             )
         result = ShellTurnResult(
@@ -312,6 +318,7 @@ def run_turn(
                 gather=gather,
                 confirm_fn=confirm_fn,
                 is_tty=is_tty,
+                handoff_contents=handoff_contents,
                 turn_ctx=turn_ctx,
             )
         result = ShellTurnResult(

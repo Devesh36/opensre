@@ -14,6 +14,7 @@ from core.agent_harness.prompts.assistant_agent_prompt import (
     _build_observation_block,
     _build_system_prompt,
     build_environment_block,
+    build_handoff_guidance_block,
 )
 from core.agent_harness.prompts.conversation_memory import (
     format_prior_action_facts,
@@ -183,6 +184,22 @@ def _load_synthetic_observation_text(
     return raw
 
 
+def _assistant_context_blocks(
+    *,
+    turn_ctx: TurnContext,
+    handoff_contents: tuple[str, ...],
+    tool_observation: str | None,
+    tool_observation_on_screen: bool,
+    suggested_prompt: str = SUGGESTED_PROMPT_AFTER_FAILED_SYNTHETIC_TEST,
+) -> str:
+    return (
+        f"{_build_integration_guard(turn_ctx)}"
+        f"{build_handoff_guidance_block(handoff_contents)}"
+        f"{build_observation_block(tool_observation, on_screen=tool_observation_on_screen)}"
+        f"{_build_synthetic_failure_block(turn_ctx, suggested_prompt=suggested_prompt)}"
+    )
+
+
 def _build_integration_guard(ctx: TurnContext) -> str:
     """Render the no-integrations guidance block from the turn snapshot."""
     if not (ctx.configured_integrations_known and not ctx.configured_integrations):
@@ -232,6 +249,7 @@ def build_cli_agent_prompt_envelope(
     session: ShellPromptSession,
     tool_observation: str | None,
     tool_observation_on_screen: bool,
+    handoff_contents: tuple[str, ...] = (),
     turn_ctx: TurnContext,
 ) -> PromptEnvelope:
     """Read shell grounding sources once and return a render-compatible envelope."""
@@ -251,9 +269,7 @@ def build_cli_agent_prompt_envelope(
 
     prompt = (
         f"{system}\n"
-        f"{_build_integration_guard(turn_ctx)}"
-        f"{build_observation_block(tool_observation, on_screen=tool_observation_on_screen)}"
-        f"{_build_synthetic_failure_block(turn_ctx)}"
+        f"{_assistant_context_blocks(turn_ctx=turn_ctx, handoff_contents=handoff_contents, tool_observation=tool_observation, tool_observation_on_screen=tool_observation_on_screen)}"
         f"--- User message ---\n{message}"
     )
     return PromptEnvelope.from_text(
@@ -270,6 +286,7 @@ def build_cli_agent_prompt_from_provider(
     prompts: AssistantPromptContextProvider,
     tool_observation: str | None,
     tool_observation_on_screen: bool,
+    handoff_contents: tuple[str, ...] = (),
     turn_ctx: TurnContext,
 ) -> str:
     """Render an assistant prompt from the core prompt-provider port."""
@@ -287,9 +304,7 @@ def build_cli_agent_prompt_from_provider(
     )
     return (
         f"{system}\n"
-        f"{_build_integration_guard(turn_ctx)}"
-        f"{build_observation_block(tool_observation, on_screen=tool_observation_on_screen)}"
-        f"{_build_synthetic_failure_block(turn_ctx, suggested_prompt=prompts.suggested_synthetic_prompt())}"
+        f"{_assistant_context_blocks(turn_ctx=turn_ctx, handoff_contents=handoff_contents, tool_observation=tool_observation, tool_observation_on_screen=tool_observation_on_screen, suggested_prompt=prompts.suggested_synthetic_prompt())}"
         f"--- User message ---\n{message}"
     )
 
@@ -300,6 +315,7 @@ def build_cli_agent_prompt(
     session: ShellPromptSession,
     tool_observation: str | None,
     tool_observation_on_screen: bool,
+    handoff_contents: tuple[str, ...] = (),
     turn_ctx: TurnContext,
 ) -> str:
     """Read shell grounding sources once and render the assistant prompt string."""
@@ -308,6 +324,7 @@ def build_cli_agent_prompt(
         session=session,
         tool_observation=tool_observation,
         tool_observation_on_screen=tool_observation_on_screen,
+        handoff_contents=handoff_contents,
         turn_ctx=turn_ctx,
     ).render()
 
