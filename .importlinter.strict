@@ -27,6 +27,8 @@ type = layers
 layers =
     surfaces | gateway
     tools | integrations
+    # ``:`` = siblings may cross-import (import-linter multi-item layers).
+    # ``|`` would forbid core <-> platform, but both packages depend on each other.
     core : platform
     config
 ignore_imports =
