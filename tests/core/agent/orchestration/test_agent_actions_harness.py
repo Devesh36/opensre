@@ -256,6 +256,30 @@ def test_local_llama_handoff_populates_handoff_contents() -> None:
     assert result.handoff_contents == ("provider:local_llama_connect",)
 
 
+def test_route_handoff_skips_handled_without_llm() -> None:
+    from core.agent_harness.agents.turn_orchestrator import TurnRoutingInput, _route_turn
+
+    routing = TurnRoutingInput(
+        action_handled=True,
+        executed_success_count=1,
+        has_observation=False,
+    )
+    route = _route_turn(routing, handoff_contents=("provider:local_llama_connect",))
+    assert route.intent == "gather_and_answer"
+
+
+def test_route_handled_without_handoff_stays_action_only() -> None:
+    from core.agent_harness.agents.turn_orchestrator import TurnRoutingInput, _route_turn
+
+    routing = TurnRoutingInput(
+        action_handled=True,
+        executed_success_count=1,
+        has_observation=False,
+    )
+    route = _route_turn(routing)
+    assert route.intent == "handled_without_llm"
+
+
 def test_run_turn_passes_handoff_contents_to_assistant() -> None:
     captured: list[tuple[str, ...]] = []
 

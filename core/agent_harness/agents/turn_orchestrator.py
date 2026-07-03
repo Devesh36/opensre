@@ -183,7 +183,12 @@ def _is_literal_slash_command(text: str) -> bool:
     return text.strip().startswith("/")
 
 
-def _route_turn(routing: TurnRoutingInput, *, user_text: str = "") -> TurnRoute:
+def _route_turn(
+    routing: TurnRoutingInput,
+    *,
+    user_text: str = "",
+    handoff_contents: tuple[str, ...] = (),
+) -> TurnRoute:
     """Decide the turn path from routing facts (pure)."""
     if (
         routing.action_handled
@@ -192,7 +197,7 @@ def _route_turn(routing: TurnRoutingInput, *, user_text: str = "") -> TurnRoute:
         and not _is_literal_slash_command(user_text)
     ):
         return TurnRoute(intent="summarize_observation")
-    if routing.action_handled:
+    if routing.action_handled and not handoff_contents:
         return TurnRoute(intent="handled_without_llm")
     return TurnRoute(intent="gather_and_answer")
 
@@ -285,7 +290,11 @@ def run_turn(
 
     handoff_contents = action_result.handoff_contents
     observation = session.last_command_observation
-    route = _route_turn(_routing_input_from_result(action_result, observation), user_text=text)
+    route = _route_turn(
+        _routing_input_from_result(action_result, observation),
+        user_text=text,
+        handoff_contents=handoff_contents,
+    )
 
     if route.intent == "summarize_observation":
         with apply_reasoning_effort(turn_ctx.reasoning_effort):

@@ -40,15 +40,8 @@ _SETUP_GUIDANCE_RULE = (
     "<server>` for MCP servers. Do not emit JSON or claim you changed runtime state."
 )
 
-_LOCAL_LLAMA_CONNECT_HANDOFF = "provider:local_llama_connect"
-
-
-def build_handoff_guidance_block(handoff_contents: tuple[str, ...]) -> str:
-    """Render topic-specific assistant guidance from action-planner handoff tags."""
-    if _LOCAL_LLAMA_CONNECT_HANDOFF not in handoff_contents:
-        return ""
-
-    return (
+_HANDOFF_GUIDANCE: dict[str, str] = {
+    "provider:local_llama_connect": (
         "The action planner handed off a vague local-model connection request. "
         "\"Local llama\" is not an exact provider name. Answer with setup guidance:\n"
         "- For first-time setup, recommend `opensre onboard local_llm` or "
@@ -57,7 +50,14 @@ def build_handoff_guidance_block(handoff_contents: tuple[str, ...]) -> str:
         "active provider.\n"
         "- Do NOT suggest `/integrations setup llama`, `/remote`, or claim you "
         "switched providers.\n\n"
-    )
+    ),
+}
+
+
+def build_handoff_guidance_block(handoff_contents: tuple[str, ...]) -> str:
+    """Render topic-specific assistant guidance from action-planner handoff tags."""
+    blocks = [_HANDOFF_GUIDANCE[tag] for tag in handoff_contents if tag in _HANDOFF_GUIDANCE]
+    return "".join(blocks)
 
 
 def build_environment_block(
