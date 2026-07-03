@@ -43,7 +43,7 @@ _SETUP_GUIDANCE_RULE = (
 _HANDOFF_GUIDANCE: dict[str, str] = {
     "provider:local_llama_connect": (
         "The action planner handed off a vague local-model connection request. "
-        "\"Local llama\" is not an exact provider name. Answer with setup guidance:\n"
+        '"Local llama" is not an exact provider name. Answer with setup guidance:\n'
         "- For first-time setup, recommend `opensre onboard local_llm` or "
         "`/onboard local_llm` (installs and configures Ollama locally).\n"
         "- After Ollama is installed, mention `/model set ollama` to switch the "
