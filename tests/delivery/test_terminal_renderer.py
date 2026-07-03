@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Generator
+
 import pytest
 
 from platform.terminal.theme import DEFAULT_THEME_NAME, set_active_theme
@@ -12,7 +14,7 @@ from tools.investigation.reporting.renderers.terminal import (
 
 
 @pytest.fixture
-def restore_active_theme() -> None:
+def restore_active_theme() -> Generator[None]:
     """Restore the default active theme after tests mutate the global palette."""
     yield
     set_active_theme(DEFAULT_THEME_NAME)
