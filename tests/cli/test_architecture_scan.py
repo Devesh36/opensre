@@ -10,9 +10,7 @@ _GITHUB_REPO = "https://github.com/Tracer-Cloud/opensre"
 
 def test_architecture_scan_github_subcommand_skips_leading_flags() -> None:
     assert (
-        architecture_scan_github_subcommand(
-            ["--include-baselines", "propose", _GITHUB_REPO]
-        )
+        architecture_scan_github_subcommand(["--include-baselines", "propose", _GITHUB_REPO])
         == "propose"
     )
     assert architecture_scan_github_subcommand(["--repo-root", "/tmp", "file-issues"]) == (
@@ -180,7 +178,7 @@ def test_architecture_scan_file_issues_subcommand(tmp_path, monkeypatch) -> None
 
 
 def test_architecture_scan_file_issues_uses_integration_store_token(tmp_path, monkeypatch) -> None:
-    from integrations import github_mcp as github_mcp_module
+    from integrations.github import mcp as github_mcp_module
 
     integrations_dir = tmp_path / "integrations"
     integrations_dir.mkdir()

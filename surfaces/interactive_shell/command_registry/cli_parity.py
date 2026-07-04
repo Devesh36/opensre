@@ -82,6 +82,10 @@ def run_cli_command(
     should_capture = capture_output or subprocess_timeout is not None
     child_env = os.environ.copy()
     child_env[_PARENT_INTERACTIVE_SHELL_ENV] = "1"
+    if should_capture:
+        # Captured child stdout isn't a TTY, so force Rich colour there and parse
+        # it back in print_command_output — otherwise its styling would be lost.
+        child_env["FORCE_COLOR"] = "1"
     exit_code: int | None = 0
     try:
         if should_capture:
@@ -293,8 +297,10 @@ def _cmd_config(session: Session, console: Console, args: list[str]) -> bool:  #
     return run_cli_command(console, ["config", *args], capture_output=True)
 
 
-def _cmd_messaging(session: Session, console: Console, args: list[str]) -> bool:  # noqa: ARG001
-    return run_cli_command(console, ["messaging", *args])
+def _cmd_messaging(session: Session, console: Console, args: list[str]) -> bool:
+    # Non-interactive subcommands: capture so output renders through the REPL
+    # (inherited stdout gets clipped by prompt_toolkit's screen management).
+    return run_cli_command(console, ["messaging", *args], capture_output=True, session=session)
 
 
 def _cmd_hermes(session: Session, console: Console, args: list[str]) -> bool:  # noqa: ARG001
@@ -369,6 +375,33 @@ def _architecture_scan_repo_root(scan_args: list[str]) -> Path | None:
     return None
 
 
+def _architecture_scan_follow_up_cli_args(
+    choice: str,
+    repo_url: str,
+    scan_args: list[str],
+) -> list[str]:
+    """Build follow-up CLI args, preserving scan flags from the original scan."""
+    follow_up = ["architecture-scan", choice, repo_url]
+    index = 0
+    while index < len(scan_args):
+        arg = scan_args[index]
+        if arg in {"--repo-root", "--max-file-lines"}:
+            if index + 1 < len(scan_args):
+                follow_up.extend([arg, scan_args[index + 1]])
+            index += 2
+            continue
+        if arg == "--include-baselines":
+            follow_up.append(arg)
+            index += 1
+            continue
+        if arg.startswith("--repo-root=") or arg.startswith("--max-file-lines="):
+            follow_up.append(arg)
+            index += 1
+            continue
+        index += 1
+    return follow_up
+
+
 def _offer_architecture_scan_github_follow_up(
     session: Session,
     console: Console,
@@ -434,13 +467,9 @@ def _offer_architecture_scan_github_follow_up(
             return
 
     repl_section_break(console)
-    follow_up_args = ["architecture-scan", choice, repo_url]
-    repo_root = _architecture_scan_repo_root(scan_args)
-    if repo_root is not None:
-        follow_up_args.extend(["--repo-root", str(repo_root)])
     run_cli_command(
         console,
-        follow_up_args,
+        _architecture_scan_follow_up_cli_args(choice, repo_url, scan_args),
         capture_output=True,
     )
 

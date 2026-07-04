@@ -49,13 +49,31 @@ def _scan_options(func: Any) -> Any:
     return decorated
 
 
-def _subcommand_repo_root_option(func: Any) -> Any:
-    return click.option(
-        "--repo-root",
-        default=None,
-        type=click.Path(exists=False, file_okay=False, dir_okay=True, resolve_path=True),
-        help="Repository root to scan (default: current checkout).",
-    )(func)
+def _subcommand_scan_options(func: Any) -> Any:
+    options = (
+        click.option(
+            "--repo-root",
+            default=None,
+            type=click.Path(exists=False, file_okay=False, dir_okay=True, resolve_path=True),
+            help="Repository root to scan (default: current checkout).",
+        ),
+        click.option(
+            "--max-file-lines",
+            default=500,
+            show_default=True,
+            type=int,
+            help="Non-blank line limit for oversized-file detection.",
+        ),
+        click.option(
+            "--include-baselines",
+            is_flag=True,
+            help="Include known baseline dependency debt tracked in CI.",
+        ),
+    )
+    decorated = func
+    for option in reversed(options):
+        decorated = option(decorated)
+    return decorated
 
 
 ARCHITECTURE_SCAN_GITHUB_SUBCOMMANDS = frozenset({"propose", "file-issues"})
@@ -181,7 +199,7 @@ def architecture_scan_group(
 
 
 @architecture_scan_group.command(name="propose")
-@_subcommand_repo_root_option
+@_subcommand_scan_options
 @click.argument("github_repo")
 @click.option(
     "--task-indices",
@@ -190,6 +208,8 @@ def architecture_scan_group(
 )
 def architecture_scan_propose_command(
     repo_root: str | None,
+    max_file_lines: int,
+    include_baselines: bool,
     github_repo: str,
     task_indices: str | None,
 ) -> None:
@@ -199,6 +219,8 @@ def architecture_scan_propose_command(
         owner=owner,
         repo=repo,
         repo_root=repo_root,
+        max_file_lines=max_file_lines,
+        include_baselines=include_baselines,
         task_indices=_parse_task_indices_option(task_indices),
     )
     _emit_text_or_json(result, formatter=format_propose_report_text)
@@ -206,7 +228,7 @@ def architecture_scan_propose_command(
 
 
 @architecture_scan_group.command(name="file-issues")
-@_subcommand_repo_root_option
+@_subcommand_scan_options
 @click.argument("github_repo")
 @click.option(
     "--task-indices",
@@ -215,6 +237,8 @@ def architecture_scan_propose_command(
 )
 def architecture_scan_file_issues_command(
     repo_root: str | None,
+    max_file_lines: int,
+    include_baselines: bool,
     github_repo: str,
     task_indices: str | None,
 ) -> None:
@@ -224,6 +248,8 @@ def architecture_scan_file_issues_command(
         owner=owner,
         repo=repo,
         repo_root=repo_root,
+        max_file_lines=max_file_lines,
+        include_baselines=include_baselines,
         task_indices=_parse_task_indices_option(task_indices),
     )
     _emit_text_or_json(result, formatter=format_file_issues_report_text)

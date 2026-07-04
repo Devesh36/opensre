@@ -32,7 +32,7 @@ class GitHubApiError(RuntimeError):
 
 def resolve_github_token_from_integration_store() -> str:
     """Load a GitHub REST token saved by ``opensre integrations setup github``."""
-    from integrations.github_mcp import build_github_mcp_config, github_mcp_config_from_env
+    from integrations.github.mcp import build_github_mcp_config, github_mcp_config_from_env
     from integrations.store import get_integration
 
     record = get_integration("github")

@@ -70,7 +70,7 @@ def test_resolve_github_token_falls_back_to_integration_store(
 def test_resolve_github_token_from_integration_store_reads_saved_credentials(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from integrations import github_mcp as github_mcp_module
+    from integrations.github import mcp as github_mcp_module
 
     monkeypatch.setattr(
         "integrations.store.get_integration",
@@ -112,8 +112,8 @@ def test_resolve_github_token_from_integration_store_ignores_invalid_store(
     def _raise(_credentials: dict[str, object]) -> None:
         raise ValueError("invalid credentials")
 
-    monkeypatch.setattr("integrations.github_mcp.build_github_mcp_config", _raise)
-    monkeypatch.setattr("integrations.github_mcp.github_mcp_config_from_env", lambda: None)
+    monkeypatch.setattr("integrations.github.mcp.build_github_mcp_config", _raise)
+    monkeypatch.setattr("integrations.github.mcp.github_mcp_config_from_env", lambda: None)
 
     assert resolve_github_token_from_integration_store() == ""
 
