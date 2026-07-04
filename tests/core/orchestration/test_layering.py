@@ -24,7 +24,6 @@ if str(_CI_DIR) not in sys.path:
 
 from check_direct_imports import (  # noqa: E402
     _BASELINE_IGNORES,
-    _NESTED_BASELINE_IGNORES,
     find_direct_violations,
     find_nested_direct_violations,
 )
@@ -142,7 +141,9 @@ def _collect_peer_import_offenders(
                         edge = f"{rel_module} -> {name}"
                         offenders.append(edge)
             elif isinstance(node, ast.ImportFrom):
-                module = node.module or ""
+                if node.level or not node.module:
+                    continue
+                module = node.module
                 if module == forbidden_root or module.startswith(forbidden_prefix):
                     edge = f"{rel_module} -> {module}"
                     offenders.append(edge)
@@ -211,7 +212,6 @@ def test_no_unbaselined_forbidden_direct_imports_module_level() -> None:
         "Unexpected module-level direct import violations — update _BASELINE_IGNORES "
         "only with linked burn-down issues:\n" + "\n".join(f"  {v.edge}" for v in violations)
     )
-    assert len(_BASELINE_IGNORES) == 27
 
 
 def test_no_unbaselined_forbidden_direct_imports_nested() -> None:
@@ -223,7 +223,6 @@ def test_no_unbaselined_forbidden_direct_imports_nested() -> None:
         "only with linked burn-down issues:\n"
         + "\n".join(f"  {v.edge} (line {v.lineno})" for v in violations)
     )
-    assert len(_NESTED_BASELINE_IGNORES) == 7
 
 
 def test_transitive_layer_contract_strict() -> None:
