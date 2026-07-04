@@ -4,8 +4,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+from config.synthetic_paths import REPO_ROOT
 from surfaces.cli.tests.catalog import TestCatalogItem
-from surfaces.cli.tests.discover import REPO_ROOT, load_test_catalog
+from surfaces.cli.tests.discover import load_test_catalog
 
 
 def format_command(item: TestCatalogItem) -> str:

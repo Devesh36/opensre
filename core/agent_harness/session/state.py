@@ -355,7 +355,7 @@ class Session:
             return
         # ``config`` is the shared layer both ``core`` and ``surfaces`` can
         # depend on; the constant used to live in ``surfaces.cli.tests.discover``
-        # but that direct edge is a T-4 layering violation (issue #3352).
+        # but that direct edge is a layering violation (T-06, issue #3539).
         try:
             from config.synthetic_paths import SYNTHETIC_SCENARIOS_DIR
         except Exception:
