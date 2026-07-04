@@ -114,6 +114,26 @@ def _scan_kwargs(ctx: click.Context) -> dict[str, Any]:
     }
 
 
+def _merged_scan_kwargs(
+    ctx: click.Context,
+    repo_root: str | None,
+    max_file_lines: int,
+    include_baselines: bool,
+) -> dict[str, Any]:
+    """Merge group-level scan flags with subcommand overrides."""
+    parent_ctx = ctx.parent
+    group_kwargs = _scan_kwargs(parent_ctx) if parent_ctx is not None else _scan_kwargs(ctx)
+    merged = dict(group_kwargs)
+    for name, value in (
+        ("repo_root", repo_root),
+        ("max_file_lines", max_file_lines),
+        ("include_baselines", include_baselines),
+    ):
+        if ctx.get_parameter_source(name) == ParameterSource.COMMANDLINE:
+            merged[name] = value
+    return merged
+
+
 def _store_scan_options(
     ctx: click.Context,
     repo_root: str | None,
@@ -206,7 +226,9 @@ def architecture_scan_group(
     default=None,
     help="Comma-separated 0-based proposed_refactor_tasks indices (default: all).",
 )
+@click.pass_context
 def architecture_scan_propose_command(
+    ctx: click.Context,
     repo_root: str | None,
     max_file_lines: int,
     include_baselines: bool,
@@ -218,10 +240,8 @@ def architecture_scan_propose_command(
     result = run_architecture_scan_and_propose_github_issues(
         owner=owner,
         repo=repo,
-        repo_root=repo_root,
-        max_file_lines=max_file_lines,
-        include_baselines=include_baselines,
         task_indices=_parse_task_indices_option(task_indices),
+        **_merged_scan_kwargs(ctx, repo_root, max_file_lines, include_baselines),
     )
     _emit_text_or_json(result, formatter=format_propose_report_text)
     _exit_for_scan_error(result)
@@ -235,7 +255,9 @@ def architecture_scan_propose_command(
     default=None,
     help="Comma-separated 0-based proposed_refactor_tasks indices (default: all).",
 )
+@click.pass_context
 def architecture_scan_file_issues_command(
+    ctx: click.Context,
     repo_root: str | None,
     max_file_lines: int,
     include_baselines: bool,
@@ -247,10 +269,8 @@ def architecture_scan_file_issues_command(
     result = run_architecture_scan_and_file_github_issues(
         owner=owner,
         repo=repo,
-        repo_root=repo_root,
-        max_file_lines=max_file_lines,
-        include_baselines=include_baselines,
         task_indices=_parse_task_indices_option(task_indices),
+        **_merged_scan_kwargs(ctx, repo_root, max_file_lines, include_baselines),
     )
     _emit_text_or_json(result, formatter=format_file_issues_report_text)
     _exit_for_issue_results(result)

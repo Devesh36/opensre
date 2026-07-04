@@ -114,6 +114,67 @@ def test_architecture_scan_propose_accepts_owner_repo_slug(tmp_path) -> None:
     assert "GitHub issue proposals: 1" in result.output
 
 
+def test_architecture_scan_subcommand_inherits_group_scan_options(tmp_path) -> None:
+    integrations_dir = tmp_path / "integrations"
+    integrations_dir.mkdir()
+    (integrations_dir / "shim.py").write_text(
+        'from core.module import foo\n__all__ = ["foo"]\n',
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "architecture-scan",
+            "--repo-root",
+            str(tmp_path),
+            "--max-file-lines",
+            "50",
+            "propose",
+            _GITHUB_REPO,
+            "--task-indices",
+            "0",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Architecture violation scan: 1 total" in result.output
+    assert "GitHub issue proposals: 1" in result.output
+
+
+def test_architecture_scan_subcommand_prefers_explicit_scan_option_over_group(
+    tmp_path,
+) -> None:
+    integrations_dir = tmp_path / "integrations"
+    integrations_dir.mkdir()
+    (integrations_dir / "shim.py").write_text(
+        'from core.module import foo\n__all__ = ["foo"]\n',
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "architecture-scan",
+            "--max-file-lines",
+            "5000",
+            "propose",
+            _GITHUB_REPO,
+            "--repo-root",
+            str(tmp_path),
+            "--max-file-lines",
+            "50",
+            "--task-indices",
+            "0",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Architecture violation scan: 1 total" in result.output
+
+
 def test_architecture_scan_propose_rejects_invalid_github_repo(tmp_path) -> None:
     runner = CliRunner()
     result = runner.invoke(
