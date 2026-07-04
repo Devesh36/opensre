@@ -14,7 +14,7 @@ from core.agent_harness.models.turn_results import ToolCallingTurnResult
 from core.agent_harness.providers.default_providers import DefaultTurnAccounting
 from core.agent_harness.session import Session
 from core.tool_framework.registered_tool import RegisteredTool
-from surfaces.interactive_shell.runtime.shell_turn_execution import run_action_tool_turn
+from surfaces.interactive_shell.runtime.action_turn import run_action_tool_turn
 from tests.core.agent.orchestration.action_execution_test_harness import (
     ActionExecutionHarness,
     FakeActionLLM,

@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from core.agent_mixins import AgentEventEmitter, AgentToolFilter
 from core.context_budget import (
     context_budget_ceiling_for_model,
     enforce_context_budget,
@@ -20,7 +21,6 @@ from core.events import (
     MessageUpdateEvent,
     ProviderRequestEndEvent,
     ProviderRequestStartEvent,
-    RuntimeEvent,
     RuntimeEventCallback,
     ToolExecutionEndEvent,
     ToolExecutionStartEvent,
@@ -28,8 +28,6 @@ from core.events import (
     TupleEventCallback,
     TurnEndEvent,
     TurnStartEvent,
-    runtime_event_from_tuple,
-    tuple_payload_from_event,
 )
 from core.execution import (
     ToolExecutionHooks,
@@ -67,9 +65,6 @@ if TYPE_CHECKING:
         TurnAccounting,
     )
 
-# Public alias for the ``(kind, data)`` tuple callback surfaces provide.
-LoopEventCallback = TupleEventCallback
-
 
 @dataclass
 class AgentRunResult:
@@ -87,24 +82,16 @@ class AgentRunResult:
     terminated_by_tool: bool = False
     hit_iteration_cap: bool = False
     final_system_prompt: str = ""
-    """The system prompt actually sent to the LLM on the last provider request.
-
-    Recorded so debugging can answer "what was influencing the agent when it made
-    this decision?" without re-deriving the prompt by hand. Captured after the
-    ``_before_provider_request`` hook, so it reflects any per-turn edits.
-    """
+    """System prompt sent to the LLM on the last request (post-hook), for debugging."""
 
 
-# Backward-compat alias — callers that still reference ToolLoopResult compile unchanged.
-ToolLoopResult = AgentRunResult
-
-
-class Agent[RuntimeToolT: RuntimeTool]:
-    """Stateful, configurable ReAct agent.
+class Agent[RuntimeToolT: RuntimeTool](AgentEventEmitter, AgentToolFilter):
+    """Stateful, configurable ReAct agent — the tool-calling agent shape.
 
     Owns the think → call-tools → observe loop and exposes hook methods so
     subclasses can customise stopping logic and tool filtering without
-    re-implementing the loop.
+    re-implementing the loop. For the direct-answer shape (no tools), see
+    ``core/agent_harness/AGENTS.md``.
     """
 
     @staticmethod
@@ -151,6 +138,26 @@ class Agent[RuntimeToolT: RuntimeTool]:
         )
         return result
 
+    @staticmethod
+    def resolve_integrations(session: SessionStore) -> dict[str, Any]:
+        """Resolve integration configs for ``session``, using the session cache."""
+        # importlib keeps the core -> agent_harness reach dynamic (no static cycle).
+        resolution = importlib.import_module("core.agent_harness.integrations.resolution")
+        cache = importlib.import_module("core.agent_harness.session.integrations_cache")
+
+        cached = session.resolved_integrations_cache
+        if cached is not None and (
+            cache.has_resolved_integrations(cached) or not cache.has_only_runtime_metadata(cached)
+        ):
+            return dict(cached)
+
+        resolved = resolution.resolve_integrations()
+        if resolved:
+            session.resolved_integrations_cache = cache.merge_resolved_integrations(
+                cached, resolved
+            )
+        return dict(session.resolved_integrations_cache or {})
+
     def __init__(
         self,
         *,
@@ -159,7 +166,7 @@ class Agent[RuntimeToolT: RuntimeTool]:
         tools: Sequence[RuntimeToolT] | None = None,
         resolved_integrations: dict[str, Any] | None = None,
         max_iterations: int | None = None,
-        on_event: LoopEventCallback | None = None,
+        on_event: TupleEventCallback | None = None,
         on_runtime_event: RuntimeEventCallback | None = None,
         tool_hooks: ToolExecutionHooks | None = None,
         tool_resources: dict[str, Any] | None = None,
@@ -439,10 +446,6 @@ class Agent[RuntimeToolT: RuntimeTool]:
         """
         return True, None
 
-    def _filter_tools(self, tools: list[RuntimeToolT]) -> list[RuntimeToolT]:
-        """Hook: narrow the tool list the agent will see."""
-        return tools
-
     def _drain_steering_messages(self, messages: list[RuntimeMessage]) -> None:
         while self._steering_messages:
             messages.append(UserRuntimeMessage(content=self._steering_messages.popleft()))
@@ -451,34 +454,6 @@ class Agent[RuntimeToolT: RuntimeTool]:
         if not self._follow_up_messages:
             return None
         return self._follow_up_messages.popleft()
-
-    def _emit(self, kind: str, data: dict[str, Any]) -> None:
-        event = runtime_event_from_tuple(kind, data)
-        if event is not None:
-            self._emit_runtime(event)
-            return
-        self._emit_tuple(kind, data)
-
-    def _emit_runtime(self, event: RuntimeEvent) -> None:
-        if self._on_runtime_event is not None:
-            try:
-                self._on_runtime_event(event)
-            except Exception:  # noqa: BLE001 - event rendering must never break the loop
-                logger.debug(
-                    "[runtime] on_runtime_event(%s) raised; ignoring",
-                    event.type,
-                    exc_info=True,
-                )
-        payload = tuple_payload_from_event(event)
-        if payload is not None:
-            self._emit_tuple(*payload)
-
-    def _emit_tuple(self, kind: str, data: dict[str, Any]) -> None:
-        if self._on_tuple_event is not None:
-            try:
-                self._on_tuple_event(kind, data)
-            except Exception:  # noqa: BLE001 - event rendering must never break the loop
-                logger.debug("[runtime] on_event(%s) raised; ignoring", kind, exc_info=True)
 
     def _emit_tool_update(
         self,

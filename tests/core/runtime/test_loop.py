@@ -193,8 +193,6 @@ def test_immediate_final_answer_executes_no_tools() -> None:
 
 
 def test_run_records_final_system_prompt() -> None:
-    # The assembled system prompt is captured on the result so debugging can see
-    # what was influencing the agent, without re-deriving it by hand (issue #3434).
     llm = FakeLLM(iter([_text_response("done")]))
 
     result = _agent(llm, _tools(FakeTool("query_logs"))).run([{"role": "user", "content": "hello"}])
@@ -203,8 +201,6 @@ def test_run_records_final_system_prompt() -> None:
 
 
 def test_run_records_system_prompt_edited_by_before_provider_request_hook() -> None:
-    # Capture happens after the _before_provider_request hook, so per-turn edits
-    # to the prompt are what gets recorded (not the pre-hook value).
     class EditingAgent(Agent):
         def _before_provider_request(self, request: Any) -> Any:
             return replace(request, system=request.system + " [edited]")
@@ -386,7 +382,7 @@ def test_on_event_failure_is_logged_and_swallowed(caplog: pytest.LogCaptureFixtu
     def on_event(_kind: str, _data: dict[str, Any]) -> None:
         raise RuntimeError("broken renderer")
 
-    with caplog.at_level(logging.DEBUG, logger="core.agent"):
+    with caplog.at_level(logging.DEBUG, logger="core.agent_mixins"):
         result = _agent(llm, _tools(FakeTool("query_logs")), on_event=on_event).run(
             [{"role": "user", "content": "hello"}]
         )

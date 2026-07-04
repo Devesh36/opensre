@@ -64,11 +64,39 @@ class EvidenceAgentFactory(Protocol):
     ) -> Agent[Any]: ...
 
 
-def _resolve_session_integrations(session: SessionStore) -> dict[str, Any]:
-    """Resolve integration configs once per session and cache the result."""
-    from core.agent_harness.integrations.resolution import resolve_and_cache_integrations
+class AgentExecutionError(RuntimeError):
+    """Base class for failures swallowed to preserve the conversational turn."""
 
-    return resolve_and_cache_integrations(session)
+    def __init__(self, message: str, *, cause: BaseException) -> None:
+        super().__init__(message)
+        self.cause = cause
+
+
+class GatherLlmLoadError(AgentExecutionError):
+    """Evidence gather LLM loading failed, so the turn falls back gracefully."""
+
+
+class GatherEvidenceExecutionError(AgentExecutionError):
+    """Bounded evidence gathering failed, so the turn falls back gracefully."""
+
+
+def _safe_execute[T](
+    operation: Callable[[], T],
+    *,
+    error_reporter: ErrorReporter | None,
+    context: str,
+    wrap_error: Callable[[BaseException], AgentExecutionError],
+    expected: bool = False,
+) -> T | None:
+    """Run ``operation`` through the one allowed broad-catch fallback boundary."""
+
+    try:
+        return operation()
+    except Exception as exc:  # noqa: BLE001 - centralized turn-safe fallback boundary
+        wrapped = wrap_error(exc)
+        if error_reporter is not None:
+            error_reporter.report(wrapped.cause, context=context, expected=expected)
+        return None
 
 
 def _truncate(text: str, limit: int) -> str:
@@ -91,7 +119,7 @@ def _format_observation(executed: list[tuple[Any, Any]]) -> str:
 
 def _resolve_gather_integrations(session: SessionStore, message: str) -> dict[str, Any]:
     """Resolve integrations for one gather turn, enriching GitHub repo scope when inferred."""
-    base = _resolve_session_integrations(session)
+    base = Agent.resolve_integrations(session)
     scope = infer_github_repo_scope(
         message=message,
         conversation_messages=session.cli_agent_messages,
@@ -133,16 +161,16 @@ def _load_gather_llm_or_none(error_reporter: ErrorReporter | None) -> Any | None
     """
     from core.llm.agent_llm_client import get_agent_llm
 
-    try:
-        return get_agent_llm()
-    except Exception as exc:  # noqa: BLE001 — deliberate wide catch for fall-back
-        if error_reporter is not None:
-            error_reporter.report(
-                exc,
-                context="core.agent_harness.agents.evidence_agent.client",
-                expected=True,
-            )
-        return None
+    return _safe_execute(
+        get_agent_llm,
+        error_reporter=error_reporter,
+        context="core.agent_harness.agents.evidence_agent.client",
+        wrap_error=lambda exc: GatherLlmLoadError(
+            "Failed to load the evidence-gather LLM client.",
+            cause=exc,
+        ),
+        expected=True,
+    )
 
 
 def _build_evidence_agent(
@@ -182,10 +210,12 @@ def gather_tool_evidence(
     Any failure is reported and swallowed (returns ``None``) — gathering must
     never break the conversational turn.
     """
-    try:
+
+    def _run_gather_turn() -> Any | None:
         # Tool discovery + integration resolution + LLM load happen inside the
-        # try so a raise from tool-registry import, credential resolution, or
-        # LLM client init is swallowed rather than breaking the turn.
+        # helper so a raise from tool-registry import, credential resolution, or
+        # LLM client init is swallowed by ``_safe_execute`` rather than breaking
+        # the turn.
         from tools.investigation.stages.gather_evidence.tools import get_available_tools
 
         resolved = _resolve_gather_integrations(session, message)
@@ -211,13 +241,24 @@ def gather_tool_evidence(
             phase="gather_agent",
             system_prompt=result.final_system_prompt,
         )
+        return result
+
+    try:
+        result = _safe_execute(
+            _run_gather_turn,
+            error_reporter=error_reporter,
+            context="core.agent_harness.agents.evidence_agent",
+            wrap_error=lambda exc: GatherEvidenceExecutionError(
+                "Failed to gather evidence for the current conversational turn.",
+                cause=exc,
+            ),
+        )
     except KeyboardInterrupt:
         if on_progress is not None:
             on_progress("gather_cancelled", {})
         return None
-    except Exception as exc:  # noqa: BLE001 — gathering must not break the turn
-        if error_reporter is not None:
-            error_reporter.report(exc, context="core.agent_harness.agents.evidence_agent")
+
+    if result is None:
         return None
 
     if not result.executed:
