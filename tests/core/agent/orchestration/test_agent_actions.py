@@ -623,10 +623,10 @@ def test_nitro_prompt_executes_remote_then_investigation(monkeypatch: object) ->
         return {"root_cause": "hello world handled"}
 
     monkeypatch.setattr(slash_tool, "dispatch_slash", _fake_dispatch)
-    import surfaces.cli.investigation as investigation_module
+    import surfaces.interactive_shell.runtime.investigation_adapter as investigation_adapter
 
     monkeypatch.setattr(
-        investigation_module,
+        investigation_adapter,
         "run_investigation_for_session",
         _fake_run_investigation_for_session,
     )
@@ -696,10 +696,10 @@ def test_execute_cli_actions_runs_sample_alert(monkeypatch: object) -> None:
             "is_noise": False,
         }
 
-    import surfaces.cli.investigation as investigation_module
+    import surfaces.interactive_shell.runtime.investigation_adapter as investigation_adapter
 
     monkeypatch.setattr(
-        investigation_module,
+        investigation_adapter,
         "run_sample_alert_for_session",
         _fake_run_sample_alert_for_session,
     )
@@ -742,9 +742,9 @@ def test_execute_cli_actions_sample_alert_opensre_error_marks_task_failed(
     ) -> dict[str, object]:
         raise OpenSREError("sample pipeline blocked")
 
-    import surfaces.cli.investigation as investigation_module
+    import surfaces.interactive_shell.runtime.investigation_adapter as investigation_adapter
 
-    monkeypatch.setattr(investigation_module, "run_sample_alert_for_session", _raise)
+    monkeypatch.setattr(investigation_adapter, "run_sample_alert_for_session", _raise)
 
     session = Session()
     console, _ = _capture()
