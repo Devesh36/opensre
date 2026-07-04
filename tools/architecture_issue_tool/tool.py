@@ -101,10 +101,10 @@ def find_architecture_violations(
                 ),
                 "items": {"type": "object"},
             },
-            "task_indices": {
+            "issue_numbers": {
                 "type": "array",
                 "description": (
-                    "Optional 0-based indices into proposed_refactor_tasks. "
+                    "Optional issue numbers from the scan (0-based). "
                     "Omit to propose issues for every task."
                 ),
                 "items": {"type": "integer"},
@@ -117,12 +117,12 @@ def propose_github_issues_from_architecture_tasks(
     owner: str,
     repo: str,
     proposed_refactor_tasks: list[dict[str, Any]],
-    task_indices: list[int] | None = None,
+    issue_numbers: list[int] | None = None,
 ) -> dict[str, Any]:
     """Build GitHub issue mutation proposals for architecture refactor tasks."""
     return propose_github_issues_from_tasks(
         owner=owner,
         repo=repo,
         proposed_refactor_tasks=proposed_refactor_tasks,
-        task_indices=task_indices,
+        issue_numbers=issue_numbers,
     )

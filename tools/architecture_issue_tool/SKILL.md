@@ -21,8 +21,8 @@ When presenting results to the user:
 For guaranteed identical output across CLI and REPL without summarization:
 
 - `opensre architecture-scan` or `/architecture-scan` (report only)
-- `opensre architecture-scan propose https://github.com/OWNER/REPO` or `/architecture-scan propose https://github.com/OWNER/REPO`
-- `opensre architecture-scan file-issues https://github.com/OWNER/REPO` or `/architecture-scan file-issues https://github.com/OWNER/REPO`
+- `opensre architecture-scan propose` or `/architecture-scan propose` (defaults to Tracer-Cloud/opensre in this repo)
+- `opensre architecture-scan file-issues` or `/architecture-scan file-issues`
 
 Do not route natural-language requests to those commands unless the user explicitly asks to run them.
 
@@ -30,8 +30,10 @@ Do not route natural-language requests to those commands unless the user explici
 
 Prefer explicit slash/CLI subcommands over chat-tool chaining:
 
-1. `/architecture-scan propose https://github.com/Tracer-Cloud/opensre --task-indices 0` — scan + proposals (read-only)
-2. `/architecture-scan file-issues https://github.com/Tracer-Cloud/opensre --task-indices 0` — scan + create issues
+1. `/architecture-scan propose` — scan + proposals (read-only); or pick **Propose issues** from the menu
+2. `/architecture-scan file-issues` — scan + create issues; or pick **Create issues** from the menu
+
+After either command, the REPL offers **Run … --issue-numbers** so you can target specific proposal numbers without retyping the full command.
 
 Agent tools `propose_github_issues_from_architecture_tasks` and `execute_github_issue_mutation`
 remain available for programmatic use, but the REPL gather loop only runs investigation-surface

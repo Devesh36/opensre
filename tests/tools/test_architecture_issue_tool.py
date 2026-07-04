@@ -17,7 +17,7 @@ from tools.architecture_issue_tool.scan import (
     format_github_repo_url,
     format_scan_workflow_header,
     parse_github_repo_argument,
-    parse_task_indices,
+    parse_issue_numbers,
     propose_github_issues_from_tasks,
     run_architecture_scan,
     run_architecture_scan_and_file_github_issues,
@@ -138,7 +138,31 @@ def test_build_github_issue_guidance_includes_repo_scope() -> None:
 
 def test_build_github_issue_guidance_generic_without_scope() -> None:
     guidance = build_github_issue_guidance()
-    assert "https://github.com/OWNER/REPO" in guidance
+    assert "/architecture-scan propose" in guidance
+    assert "Tracer-Cloud/opensre" in guidance
+
+
+def test_resolve_architecture_scan_github_repo_scope_maps_opensre_fork(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tools.architecture_issue_tool import scan as scan_module
+
+    monkeypatch.setattr(
+        scan_module,
+        "_detect_git_remote_repo_scope_for_remote",
+        lambda _remote, cwd=None: None,  # noqa: ARG005
+    )
+    monkeypatch.setattr(
+        scan_module,
+        "detect_git_remote_repo_scope",
+        lambda cwd=None: ("Devesh36", "opensre"),  # noqa: ARG005
+    )
+    monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+
+    assert scan_module.resolve_architecture_scan_github_repo_scope() == (
+        "Tracer-Cloud",
+        "opensre",
+    )
 
 
 def test_parse_github_repo_argument_accepts_url_and_slug() -> None:
@@ -286,7 +310,7 @@ def test_propose_github_issues_from_architecture_tasks() -> None:
     assert proposal["payload"]["labels"] == ["refactor", "maintainability"]
 
 
-def test_propose_github_issues_respects_task_indices() -> None:
+def test_propose_github_issues_respects_issue_numbers() -> None:
     tasks = [
         {
             "title": "Task A",
@@ -309,7 +333,7 @@ def test_propose_github_issues_respects_task_indices() -> None:
         owner="o",
         repo="r",
         proposed_refactor_tasks=tasks,
-        task_indices=[1, 99],
+        issue_numbers=[1, 99],
     )
     assert result["count"] == 1
     assert result["proposals"][0]["payload"]["title"] == "Task B"
@@ -346,7 +370,7 @@ def test_file_github_issues_requires_token(tmp_path: Path, monkeypatch) -> None:
         owner="o",
         repo="r",
         repo_root=str(tmp_path),
-        task_indices=[0],
+        issue_numbers=[0],
     )
     assert result["error"] == GITHUB_TOKEN_SETUP_HINT
     assert result["issue_results"] == []
@@ -467,9 +491,9 @@ def test_missing_repo_root_returns_error(tmp_path: Path) -> None:
     assert "error" in result
 
 
-def test_parse_task_indices_rejects_non_integer() -> None:
-    with pytest.raises(ValueError, match="Invalid task index 'abc'"):
-        parse_task_indices("abc")
+def test_parse_issue_numbers_rejects_non_integer() -> None:
+    with pytest.raises(ValueError, match="Invalid issue number 'abc'"):
+        parse_issue_numbers("abc")
 
 
 def test_scan_dependency_violations_without_ci_bridge_still_runs(

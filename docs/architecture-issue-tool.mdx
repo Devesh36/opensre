@@ -52,31 +52,31 @@ Both print the same `report` text. Add `--json` (CLI) for the full structured pa
 ### Propose GitHub issues (read-only)
 
 ```bash
-opensre architecture-scan propose https://github.com/Tracer-Cloud/opensre --task-indices 0
+opensre architecture-scan propose
 ```
 
 REPL:
 
 ```text
-/architecture-scan propose https://github.com/Tracer-Cloud/opensre --task-indices 0
+/architecture-scan propose
 ```
 
-This runs the scan and prints GitHub create-issue **proposals** — nothing is filed yet.
+Or pick **Propose issues** from the `/architecture-scan` menu. Issues are created for every refactor task by default.
 
 ### File GitHub issues (mutating)
 
 ```bash
-opensre architecture-scan file-issues https://github.com/Tracer-Cloud/opensre --task-indices 0
+opensre architecture-scan file-issues
 ```
 
 REPL:
 
 ```text
-/architecture-scan file-issues https://github.com/Tracer-Cloud/opensre --task-indices 0
+/architecture-scan file-issues
 ```
 
-This runs scan → propose → `execute_github_issue_mutation` for each selected task.
-Requires GitHub to be configured. Omit `--task-indices` to file an issue for every task.
+Or pick **Create issues** from the `/architecture-scan` menu. This runs scan → propose → `execute_github_issue_mutation` for each refactor task.
+Requires GitHub to be configured. After propose or file-issues, the REPL menu offers **Run … --issue-numbers** to target specific proposals. Use `--issue-numbers 0,1` on the CLI to limit which tasks become issues without the menu. These are scan proposal numbers, not GitHub issue IDs.
 
 ### Tool / Python API
 

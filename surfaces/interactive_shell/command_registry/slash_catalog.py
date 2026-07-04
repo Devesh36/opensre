@@ -59,11 +59,12 @@ _MCP_BY_COMMAND: dict[str, _SlashMcpFields] = {
         anti_examples=("User wants to investigate an alert body (use investigation_start)",),
     ),
     "/architecture-scan": _mcp(
-        "Scan the local repository for architecture violations and print a deterministic "
-        "report. Subcommands: propose GITHUB_URL [--task-indices 0,1], "
-        "file-issues GITHUB_URL [--task-indices 0,1]. GITHUB_URL accepts "
-        "https://github.com/OWNER/REPO or OWNER/REPO. Scan flags (--include-baselines) "
-        "apply only to the plain scan, not subcommands.",
+        "Scan the local repository for architecture violations. In the REPL, "
+        "/architecture-scan opens a menu for propose, file-issues, or scan-only. "
+        "Subcommands: propose [GITHUB_URL], file-issues [GITHUB_URL] — URL defaults to "
+        "Tracer-Cloud/opensre when scanning this repo. All refactor tasks become issues "
+        "by default (no --issue-numbers needed). Scan flags (--include-baselines) apply "
+        "to scan-only or can prefix subcommands.",
         "User explicitly asks to run an architecture scan, propose GitHub issues from scan "
         "tasks, or file GitHub issues from scan tasks",
         anti_examples=(

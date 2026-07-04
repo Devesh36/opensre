@@ -77,7 +77,7 @@ def test_architecture_scan_propose_subcommand(tmp_path) -> None:
             _GITHUB_REPO,
             "--repo-root",
             str(tmp_path),
-            "--task-indices",
+            "--issue-numbers",
             "0",
         ],
     )
@@ -105,7 +105,7 @@ def test_architecture_scan_propose_accepts_owner_repo_slug(tmp_path) -> None:
             "Tracer-Cloud/opensre",
             "--repo-root",
             str(tmp_path),
-            "--task-indices",
+            "--issue-numbers",
             "0",
         ],
     )
@@ -133,7 +133,7 @@ def test_architecture_scan_subcommand_inherits_group_scan_options(tmp_path) -> N
             "50",
             "propose",
             _GITHUB_REPO,
-            "--task-indices",
+            "--issue-numbers",
             "0",
         ],
     )
@@ -166,13 +166,38 @@ def test_architecture_scan_subcommand_prefers_explicit_scan_option_over_group(
             str(tmp_path),
             "--max-file-lines",
             "50",
-            "--task-indices",
+            "--issue-numbers",
             "0",
         ],
     )
 
     assert result.exit_code == 0
     assert "Architecture violation scan: 1 total" in result.output
+
+
+def test_architecture_scan_propose_without_github_url(tmp_path) -> None:
+    integrations_dir = tmp_path / "integrations"
+    integrations_dir.mkdir()
+    (integrations_dir / "shim.py").write_text(
+        'from core.module import foo\n__all__ = ["foo"]\n',
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "architecture-scan",
+            "propose",
+            "--repo-root",
+            str(tmp_path),
+            "--issue-numbers",
+            "0",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "GitHub issue proposals: 1" in result.output
 
 
 def test_architecture_scan_propose_rejects_invalid_github_repo(tmp_path) -> None:
@@ -228,7 +253,7 @@ def test_architecture_scan_file_issues_subcommand(tmp_path, monkeypatch) -> None
             _GITHUB_REPO,
             "--repo-root",
             str(tmp_path),
-            "--task-indices",
+            "--issue-numbers",
             "0",
         ],
     )
@@ -295,7 +320,7 @@ def test_architecture_scan_file_issues_uses_integration_store_token(tmp_path, mo
             _GITHUB_REPO,
             "--repo-root",
             str(tmp_path),
-            "--task-indices",
+            "--issue-numbers",
             "0",
         ],
     )
@@ -325,7 +350,7 @@ def test_architecture_scan_file_issues_without_token_exits_once(tmp_path, monkey
             _GITHUB_REPO,
             "--repo-root",
             str(tmp_path),
-            "--task-indices",
+            "--issue-numbers",
             "0",
         ],
     )
@@ -336,7 +361,7 @@ def test_architecture_scan_file_issues_without_token_exits_once(tmp_path, monkey
     assert "GitHub issue results:" not in result.output
 
 
-def test_architecture_scan_invalid_task_indices(tmp_path) -> None:
+def test_architecture_scan_invalid_issue_numbers(tmp_path) -> None:
     runner = CliRunner()
     result = runner.invoke(
         cli,
@@ -346,13 +371,13 @@ def test_architecture_scan_invalid_task_indices(tmp_path) -> None:
             _GITHUB_REPO,
             "--repo-root",
             str(tmp_path),
-            "--task-indices",
+            "--issue-numbers",
             "abc",
         ],
     )
 
     assert result.exit_code != 0
-    assert "Invalid task index 'abc': must be an integer." in result.output
+    assert "Invalid issue number 'abc': must be an integer." in result.output
 
 
 def test_architecture_scan_propose_succeeds_with_no_violations(tmp_path) -> None:

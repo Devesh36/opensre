@@ -12,10 +12,12 @@ from click.core import ParameterSource
 from platform.common.exit_codes import ERROR, SUCCESS
 from platform.common.runtime_flags import is_json_output
 from tools.architecture_issue_tool.scan import (
+    CANONICAL_OPENSRE_GITHUB_REPO,
     format_file_issues_report_text,
     format_propose_report_text,
     parse_github_repo_argument,
-    parse_task_indices,
+    parse_issue_numbers,
+    resolve_architecture_scan_github_repo_scope,
     run_architecture_scan,
     run_architecture_scan_and_file_github_issues,
     run_architecture_scan_and_propose_github_issues,
@@ -77,7 +79,7 @@ def _subcommand_scan_options(func: Any) -> Any:
 
 
 ARCHITECTURE_SCAN_GITHUB_SUBCOMMANDS = frozenset({"propose", "file-issues"})
-_SCAN_OPTION_FLAGS = frozenset({"--repo-root", "--max-file-lines", "--task-indices"})
+_SCAN_OPTION_FLAGS = frozenset({"--repo-root", "--max-file-lines", "--issue-numbers"})
 _SCAN_FLAG_ONLY = frozenset({"--include-baselines"})
 
 
@@ -186,11 +188,11 @@ def _exit_for_issue_results(result: dict[str, Any]) -> None:
     raise SystemExit(SUCCESS)
 
 
-def _parse_task_indices_option(task_indices: str | None) -> list[int] | None:
+def _parse_issue_numbers_option(issue_numbers: str | None) -> list[int] | None:
     try:
-        return parse_task_indices(task_indices)
+        return parse_issue_numbers(issue_numbers)
     except ValueError as exc:
-        raise click.BadParameter(str(exc), param_hint="'--task-indices'") from None
+        raise click.BadParameter(str(exc), param_hint="'--issue-numbers'") from None
 
 
 def _parse_github_repo_option(value: str) -> tuple[str, str]:
@@ -198,6 +200,18 @@ def _parse_github_repo_option(value: str) -> tuple[str, str]:
         return parse_github_repo_argument(value)
     except ValueError as exc:
         raise click.BadParameter(str(exc), param_hint="'GITHUB_REPO'") from None
+
+
+def _resolve_github_repo_for_subcommand(
+    github_repo: str | None,
+    repo_root: str | None,
+) -> tuple[str, str]:
+    if github_repo and github_repo.strip():
+        return _parse_github_repo_option(github_repo.strip())
+    scope = resolve_architecture_scan_github_repo_scope(repo_root)
+    if scope:
+        return scope
+    return CANONICAL_OPENSRE_GITHUB_REPO
 
 
 @click.group(name="architecture-scan", invoke_without_command=True)
@@ -220,11 +234,13 @@ def architecture_scan_group(
 
 @architecture_scan_group.command(name="propose")
 @_subcommand_scan_options
-@click.argument("github_repo")
+@click.argument("github_repo", required=False, default=None)
 @click.option(
-    "--task-indices",
+    "--issue-numbers",
     default=None,
-    help="Comma-separated 0-based proposed_refactor_tasks indices (default: all).",
+    help=(
+        "Comma-separated issue numbers from the scan (0-based, default: all). Not GitHub issue IDs."
+    ),
 )
 @click.pass_context
 def architecture_scan_propose_command(
@@ -232,15 +248,15 @@ def architecture_scan_propose_command(
     repo_root: str | None,
     max_file_lines: int,
     include_baselines: bool,
-    github_repo: str,
-    task_indices: str | None,
+    github_repo: str | None,
+    issue_numbers: str | None,
 ) -> None:
     """Scan, then build read-only GitHub create-issue proposals."""
-    owner, repo = _parse_github_repo_option(github_repo)
+    owner, repo = _resolve_github_repo_for_subcommand(github_repo, repo_root)
     result = run_architecture_scan_and_propose_github_issues(
         owner=owner,
         repo=repo,
-        task_indices=_parse_task_indices_option(task_indices),
+        issue_numbers=_parse_issue_numbers_option(issue_numbers),
         **_merged_scan_kwargs(ctx, repo_root, max_file_lines, include_baselines),
     )
     _emit_text_or_json(result, formatter=format_propose_report_text)
@@ -249,11 +265,13 @@ def architecture_scan_propose_command(
 
 @architecture_scan_group.command(name="file-issues")
 @_subcommand_scan_options
-@click.argument("github_repo")
+@click.argument("github_repo", required=False, default=None)
 @click.option(
-    "--task-indices",
+    "--issue-numbers",
     default=None,
-    help="Comma-separated 0-based proposed_refactor_tasks indices (default: all).",
+    help=(
+        "Comma-separated issue numbers from the scan (0-based, default: all). Not GitHub issue IDs."
+    ),
 )
 @click.pass_context
 def architecture_scan_file_issues_command(
@@ -261,15 +279,15 @@ def architecture_scan_file_issues_command(
     repo_root: str | None,
     max_file_lines: int,
     include_baselines: bool,
-    github_repo: str,
-    task_indices: str | None,
+    github_repo: str | None,
+    issue_numbers: str | None,
 ) -> None:
     """Scan, propose GitHub issues, and create them on GitHub."""
-    owner, repo = _parse_github_repo_option(github_repo)
+    owner, repo = _resolve_github_repo_for_subcommand(github_repo, repo_root)
     result = run_architecture_scan_and_file_github_issues(
         owner=owner,
         repo=repo,
-        task_indices=_parse_task_indices_option(task_indices),
+        issue_numbers=_parse_issue_numbers_option(issue_numbers),
         **_merged_scan_kwargs(ctx, repo_root, max_file_lines, include_baselines),
     )
     _emit_text_or_json(result, formatter=format_file_issues_report_text)

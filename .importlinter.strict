@@ -35,6 +35,7 @@ ignore_imports =
     # config upward imports (T-4 debt — refactor into lower layers)
     config.config -> core.llm.azure_openai
     config.gateway_output_sink -> gateway.polling.telegram_poller.client
+    config.gateway_output_sink -> integrations.telegram.formatting
     config.gateway_output_sink -> platform.common.truncation
     config.llm_auth.credentials -> integrations.llm_cli.registry
     config.llm_keyring -> platform
@@ -60,6 +61,7 @@ ignore_imports =
     platform.observability.sentry_sdk -> integrations.llm_cli.errors
     platform.scheduler.credentials -> integrations.catalog
     platform.scheduler.executor -> integrations.discord.delivery
+    platform.scheduler.executor -> integrations.slack.delivery
     platform.scheduler.executor -> integrations.telegram.delivery
     # integrations -> tools (hermes investigation bridge)
     integrations.hermes.investigation -> tools.investigation.capability
@@ -103,6 +105,10 @@ ignore_imports =
     tools.interactive_shell.synthetic.runner -> surfaces.interactive_shell.ui.execution_confirm
     tools.interactive_shell.synthetic.runner -> surfaces.interactive_shell.utils.error_handling.exception_reporting
     # tools -> integrations (T-4 debt — vendor tools / reporting)
+    tools.architecture_issue_tool.scan -> integrations.github.client
+    tools.architecture_issue_tool.scan -> integrations.github.repo_scope
+    tools.architecture_issue_tool.scan -> integrations.github.tools.workflow.models
+    tools.architecture_issue_tool.scan -> integrations.github.tools.work_status
     tools.community_followup_tool -> integrations.github.client
     tools.community_followup_tool -> integrations.github.helpers
     tools.community_followup_tool -> integrations.github.tools.workflow

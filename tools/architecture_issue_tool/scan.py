@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 from typing import Any
 
 from integrations.github.client import resolve_github_token
@@ -25,11 +26,68 @@ from tools.architecture_issue_tool.scanners import (
 )
 
 _GITHUB_ISSUE_GUIDANCE_GENERIC = (
-    "Run `opensre architecture-scan propose https://github.com/OWNER/REPO` or "
-    "`/architecture-scan propose https://github.com/OWNER/REPO` to build create-issue "
-    "proposals. Run `... file-issues https://github.com/OWNER/REPO` to create issues "
-    "after review. The scanner does not create GitHub issues automatically."
+    "Run `opensre architecture-scan propose` or `/architecture-scan propose` to build "
+    "create-issue proposals. Run `... file-issues` to create issues after review. "
+    "GitHub repo defaults from git remote upstream (Tracer-Cloud/opensre for this checkout). "
+    "The scanner does not create GitHub issues automatically."
 )
+
+
+CANONICAL_OPENSRE_GITHUB_REPO = ("Tracer-Cloud", "opensre")
+
+
+def _detect_git_remote_repo_scope_for_remote(
+    remote_name: str,
+    cwd: str | Path | None = None,
+) -> tuple[str, str] | None:
+    """Return owner/repo from ``git remote get-url <remote_name>`` when available."""
+    import os
+    import subprocess
+
+    work_dir = Path(cwd or os.getcwd())
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", remote_name],
+            cwd=work_dir,
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    from integrations.github.repo_scope import _parse_git_remote_url
+
+    return _parse_git_remote_url(result.stdout)
+
+
+def resolve_architecture_scan_github_repo_scope(
+    cwd: str | Path | None = None,
+) -> tuple[str, str] | None:
+    """Resolve the GitHub repo for architecture-scan issue filing.
+
+    Prefers ``upstream`` (canonical fork parent), then ``GITHUB_REPOSITORY``, then maps
+    local ``opensre`` checkouts to ``Tracer-Cloud/opensre`` instead of a personal fork
+    ``origin``, and finally falls back to ``origin``.
+    """
+    import os
+
+    upstream = _detect_git_remote_repo_scope_for_remote("upstream", cwd=cwd)
+    if upstream:
+        return upstream
+
+    env_repo = os.getenv("GITHUB_REPOSITORY", "").strip()
+    if env_repo:
+        owner, repo = split_repo_full_name(env_repo)
+        if owner and repo:
+            return owner, repo
+
+    origin = detect_git_remote_repo_scope(cwd)
+    if origin is not None and origin[1].lower() == "opensre":
+        return CANONICAL_OPENSRE_GITHUB_REPO
+    return origin
 
 
 def format_github_repo_url(owner: str, repo: str) -> str:
@@ -66,7 +124,7 @@ def build_github_issue_guidance(
             f"  /architecture-scan propose {repo_url}\n"
             f"  opensre architecture-scan file-issues {repo_url}\n"
             f"  /architecture-scan file-issues {repo_url}\n"
-            "Add `--task-indices 0,1` to limit which refactor tasks become issues. "
+            "Omitting `--issue-numbers` files issues for every refactor task. "
             "The scanner does not create GitHub issues automatically."
         )
     return _GITHUB_ISSUE_GUIDANCE_GENERIC
@@ -300,7 +358,7 @@ def propose_github_issues_from_tasks(
     owner: str,
     repo: str,
     proposed_refactor_tasks: list[dict[str, Any]],
-    task_indices: list[int] | None = None,
+    issue_numbers: list[int] | None = None,
 ) -> dict[str, Any]:
     """Build read-only GitHub issue proposals for architecture refactor tasks."""
     if not proposed_refactor_tasks:
@@ -312,8 +370,8 @@ def propose_github_issues_from_tasks(
 
     selected_indices = (
         list(range(len(proposed_refactor_tasks)))
-        if task_indices is None
-        else sorted({index for index in task_indices if isinstance(index, int)})
+        if issue_numbers is None
+        else sorted({index for index in issue_numbers if isinstance(index, int)})
     )
     proposals: list[dict[str, Any]] = []
     skipped_indices: list[int] = []
@@ -346,8 +404,8 @@ def propose_github_issues_from_tasks(
     }
 
 
-def parse_task_indices(spec: str | None) -> list[int] | None:
-    """Parse a comma-separated list of 0-based task indices."""
+def parse_issue_numbers(spec: str | None) -> list[int] | None:
+    """Parse a comma-separated list of 0-based issue numbers from the scan."""
     if spec is None or not spec.strip():
         return None
     indices: list[int] = []
@@ -358,7 +416,7 @@ def parse_task_indices(spec: str | None) -> list[int] | None:
         try:
             indices.append(int(stripped))
         except ValueError as exc:
-            raise ValueError(f"Invalid task index {stripped!r}: must be an integer.") from exc
+            raise ValueError(f"Invalid issue number {stripped!r}: must be an integer.") from exc
     return indices
 
 
@@ -369,7 +427,7 @@ def run_architecture_scan_and_propose_github_issues(
     repo_root: str | None = None,
     max_file_lines: int = 500,
     include_baselines: bool = False,
-    task_indices: list[int] | None = None,
+    issue_numbers: list[int] | None = None,
 ) -> dict[str, Any]:
     """Scan the repository and build GitHub create-issue proposals."""
     scan = run_architecture_scan(
@@ -395,7 +453,7 @@ def run_architecture_scan_and_propose_github_issues(
         owner=owner,
         repo=repo,
         proposed_refactor_tasks=tasks,
-        task_indices=task_indices,
+        issue_numbers=issue_numbers,
     )
     return {
         "scan": _scan_context_from_result(scan),
@@ -410,7 +468,7 @@ def run_architecture_scan_and_file_github_issues(
     repo_root: str | None = None,
     max_file_lines: int = 500,
     include_baselines: bool = False,
-    task_indices: list[int] | None = None,
+    issue_numbers: list[int] | None = None,
 ) -> dict[str, Any]:
     """Scan, propose GitHub issues, and execute create-issue mutations."""
     from integrations.github.tools.work_status import execute_github_issue_mutation
@@ -421,7 +479,7 @@ def run_architecture_scan_and_file_github_issues(
         repo_root=repo_root,
         max_file_lines=max_file_lines,
         include_baselines=include_baselines,
-        task_indices=task_indices,
+        issue_numbers=issue_numbers,
     )
     if isinstance(payload.get("error"), str) and payload["error"]:
         return {**payload, "issue_results": []}
@@ -464,7 +522,7 @@ def run_architecture_scan(
     violations.extend(scan_misplaced_modules(root))
 
     tasks = build_refactor_tasks(violations)
-    repo_scope = detect_git_remote_repo_scope(root)
+    repo_scope = resolve_architecture_scan_github_repo_scope(root)
     owner, repo_name = repo_scope if repo_scope else (None, None)
     payload = {
         "violations": [v.to_dict() for v in violations],

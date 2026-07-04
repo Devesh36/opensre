@@ -21,9 +21,8 @@ from surfaces.interactive_shell.runtime.subprocess_runner import (
     build_opensre_cli_argv,
     start_background_cli_task,
 )
-from surfaces.interactive_shell.ui import DIM, ERROR, print_command_output
+from surfaces.interactive_shell.ui import DIM, ERROR, HIGHLIGHT, print_command_output
 from surfaces.interactive_shell.ui.components.choice_menu import (
-    print_valid_choice_list,
     repl_choose_one,
     repl_section_break,
     repl_tty_interactive,
@@ -328,18 +327,45 @@ def _cmd_misses(session: Session, console: Console, args: list[str]) -> bool:  #
 def _cmd_architecture_scan(session: Session, console: Console, args: list[str]) -> bool:
     from surfaces.cli.commands.architecture_scan import architecture_scan_github_subcommand
 
-    if architecture_scan_github_subcommand(args) is not None:
-        return run_cli_command(console, ["architecture-scan", *args], capture_output=True)
+    subcommand = architecture_scan_github_subcommand(args)
+    if subcommand is not None:
+        ran = run_cli_command(console, ["architecture-scan", *args], capture_output=True)
+        if (
+            ran
+            and subcommand in {"propose", "file-issues"}
+            and repl_tty_interactive()
+            and getattr(session, "exclusive_stdin_active", False)
+            and not _architecture_scan_args_include_issue_numbers(args)
+        ):
+            _architecture_scan_offer_issue_numbers_follow_up(
+                console,
+                choice=subcommand,
+                scan_args=args,
+            )
+        return ran
 
-    scan_succeeded = run_cli_command(
+    if repl_tty_interactive() and getattr(session, "exclusive_stdin_active", False):
+        choice = _architecture_scan_initial_choice(session, console, scan_args=args)
+        if choice is None or choice == "done":
+            return True
+        if choice in {"propose", "file-issues"}:
+            return _run_architecture_scan_github_subcommand(
+                session,
+                console,
+                choice=choice,
+                scan_args=args,
+            )
+        return run_cli_command(
+            console,
+            ["architecture-scan", *args],
+            capture_output=True,
+        )
+
+    return run_cli_command(
         console,
         ["architecture-scan", *args],
         capture_output=True,
-        require_success=True,
     )
-    if scan_succeeded:
-        _offer_architecture_scan_github_follow_up(session, console, scan_args=args)
-    return True
 
 
 def _prepare_repl_inline_menu_stdin() -> None:
@@ -356,6 +382,163 @@ def _prepare_repl_inline_menu_stdin() -> None:
     time.sleep(0.05)
     flush_stdin_unix()
     drain_stale_cpr_bytes()
+
+
+def _architecture_scan_repo_scope(scan_args: list[str]) -> tuple[str, str]:
+    from tools.architecture_issue_tool.scan import (
+        CANONICAL_OPENSRE_GITHUB_REPO,
+        resolve_architecture_scan_github_repo_scope,
+    )
+
+    scope = resolve_architecture_scan_github_repo_scope(cwd=_architecture_scan_repo_root(scan_args))
+    return scope or CANONICAL_OPENSRE_GITHUB_REPO
+
+
+def _architecture_scan_initial_choice(
+    session: Session,
+    _console: Console,
+    *,
+    scan_args: list[str],
+) -> str | None:
+    """Offer propose/file-issues/scan before running a plain architecture scan."""
+    _ = session
+    scope = _architecture_scan_repo_scope(scan_args)
+    owner, repo = scope
+    _prepare_repl_inline_menu_stdin()
+    return repl_choose_one(
+        title="Architecture scan",
+        breadcrumb="/architecture-scan",
+        choices=[
+            ("propose", f"Propose issues for {owner}/{repo}"),
+            ("file-issues", f"Create issues on {owner}/{repo}"),
+            ("scan", "Scan only (report)"),
+            ("done", "Cancel"),
+        ],
+    )
+
+
+def _run_architecture_scan_github_subcommand(
+    session: Session,
+    console: Console,
+    *,
+    choice: str,
+    scan_args: list[str],
+) -> bool:
+    from integrations.github.client import resolve_github_token
+    from tools.architecture_issue_tool.scan import (
+        GITHUB_TOKEN_SETUP_HINT,
+        format_github_repo_url,
+    )
+
+    _ = session
+    scope = _architecture_scan_repo_scope(scan_args)
+    if choice == "file-issues":
+        if not resolve_github_token():
+            console.print()
+            console.print(f"[{ERROR}]{GITHUB_TOKEN_SETUP_HINT}[/]")
+            return True
+        confirmed = repl_choose_one(
+            title="Create GitHub issues?",
+            breadcrumb="/architecture-scan › file-issues",
+            choices=[
+                ("yes", "Yes, create issues for all refactor tasks"),
+                ("no", "Cancel"),
+            ],
+        )
+        if confirmed != "yes":
+            return True
+
+    owner, repo = scope
+    repo_url = format_github_repo_url(owner, repo)
+    repl_section_break(console)
+    run_cli_command(
+        console,
+        _architecture_scan_follow_up_cli_args(choice, repo_url, scan_args),
+        capture_output=True,
+    )
+    _architecture_scan_offer_issue_numbers_follow_up(
+        console,
+        choice=choice,
+        scan_args=scan_args,
+    )
+    return True
+
+
+def _architecture_scan_args_include_issue_numbers(scan_args: list[str]) -> bool:
+    return any(arg == "--issue-numbers" or arg.startswith("--issue-numbers=") for arg in scan_args)
+
+
+def _architecture_scan_offer_issue_numbers_follow_up(
+    console: Console,
+    *,
+    choice: str,
+    scan_args: list[str],
+) -> None:
+    """After propose/file-issues, offer to rerun with ``--issue-numbers``."""
+    from integrations.github.client import resolve_github_token
+    from tools.architecture_issue_tool.scan import (
+        GITHUB_TOKEN_SETUP_HINT,
+        format_github_repo_url,
+        parse_issue_numbers,
+    )
+
+    if not repl_tty_interactive() or choice not in {"propose", "file-issues"}:
+        return
+
+    subcommand_label = "Propose issues" if choice == "propose" else "Create issues"
+    breadcrumb = f"/architecture-scan › {choice} › --issue-numbers"
+    while True:
+        _prepare_repl_inline_menu_stdin()
+        follow = repl_choose_one(
+            title=f"{subcommand_label} for specific numbers?",
+            breadcrumb=breadcrumb,
+            choices=[
+                ("issue-numbers", f"Run /architecture-scan {choice} --issue-numbers …"),
+                ("done", "Done"),
+            ],
+        )
+        if follow != "issue-numbers":
+            return
+
+        repl_section_break(console)
+        raw = console.input(
+            f"[{HIGHLIGHT}]Issue numbers from scan (0-based, comma-separated, e.g. 0 or 0,2)> [/]"
+        ).strip()
+        try:
+            indices = parse_issue_numbers(raw)
+        except ValueError as exc:
+            console.print()
+            console.print(f"[{ERROR}]{exc}[/]")
+            continue
+        if not indices:
+            console.print()
+            console.print(f"[{ERROR}]Enter at least one issue number (e.g. 0 or 0,2).[/]")
+            continue
+
+        if choice == "file-issues" and not resolve_github_token():
+            console.print()
+            console.print(f"[{ERROR}]{GITHUB_TOKEN_SETUP_HINT}[/]")
+            return
+
+        if choice == "file-issues":
+            _prepare_repl_inline_menu_stdin()
+            confirmed = repl_choose_one(
+                title="Create GitHub issues?",
+                breadcrumb="/architecture-scan › file-issues › --issue-numbers",
+                choices=[
+                    ("yes", f"Yes, create issues for numbers {','.join(str(i) for i in indices)}"),
+                    ("no", "Cancel"),
+                ],
+            )
+            if confirmed != "yes":
+                continue
+
+        owner, repo = _architecture_scan_repo_scope(scan_args)
+        repo_url = format_github_repo_url(owner, repo)
+        cli_args = _architecture_scan_follow_up_cli_args(choice, repo_url, scan_args)
+        cli_args.extend(["--issue-numbers", ",".join(str(index) for index in indices)])
+        repl_section_break(console)
+        run_cli_command(console, cli_args, capture_output=True)
 
 
 def _architecture_scan_repo_root(scan_args: list[str]) -> Path | None:
@@ -402,88 +585,16 @@ def _architecture_scan_follow_up_cli_args(
     return follow_up
 
 
-def _offer_architecture_scan_github_follow_up(
-    session: Session,
-    console: Console,
-    *,
-    scan_args: list[str],
-) -> None:
-    """After a plain scan report, offer deterministic GitHub follow-up slash commands."""
-    if not repl_tty_interactive():
-        return
-    if not getattr(session, "exclusive_stdin_active", False):
-        return
-
-    from integrations.github.repo_scope import detect_git_remote_repo_scope
-
-    _prepare_repl_inline_menu_stdin()
-
-    scope = detect_git_remote_repo_scope(cwd=_architecture_scan_repo_root(scan_args))
-    if not scope:
-        console.print()
-        print_valid_choice_list(
-            console,
-            title="GitHub issue next steps (set repository URL):",
-            choices=[
-                "/architecture-scan propose https://github.com/OWNER/REPO",
-                "/architecture-scan file-issues https://github.com/OWNER/REPO",
-            ],
-        )
-        return
-
-    owner, repo = scope
-    from tools.architecture_issue_tool.scan import format_github_repo_url
-
-    repo_url = format_github_repo_url(owner, repo)
-    choice = repl_choose_one(
-        title="GitHub issues",
-        breadcrumb="/architecture-scan",
-        choices=[
-            ("propose", f"Propose issues for {owner}/{repo}"),
-            ("file-issues", f"Create issues on {owner}/{repo}"),
-            ("done", "Done"),
-        ],
-    )
-    if choice is None or choice == "done":
-        return
-
-    if choice == "file-issues":
-        from integrations.github.client import resolve_github_token
-        from tools.architecture_issue_tool.scan import GITHUB_TOKEN_SETUP_HINT
-
-        if not resolve_github_token():
-            console.print()
-            console.print(f"[{ERROR}]{GITHUB_TOKEN_SETUP_HINT}[/]")
-            return
-        confirmed = repl_choose_one(
-            title="Create GitHub issues?",
-            breadcrumb="/architecture-scan › file-issues",
-            choices=[
-                ("yes", "Yes, create issues for all refactor tasks"),
-                ("no", "Cancel"),
-            ],
-        )
-        if confirmed != "yes":
-            return
-
-    repl_section_break(console)
-    run_cli_command(
-        console,
-        _architecture_scan_follow_up_cli_args(choice, repo_url, scan_args),
-        capture_output=True,
-    )
-
-
 COMMANDS: list[SlashCommand] = [
     SlashCommand(
         "/architecture-scan",
-        "Scan the repository for architecture violations (layering, shims, size, placement).",
+        "Scan the repository for architecture violations: layering, shims, size, and placement.",
         _cmd_architecture_scan,
         usage=(
+            "/architecture-scan propose",
+            "/architecture-scan file-issues",
             "/architecture-scan",
             "/architecture-scan --include-baselines",
-            "/architecture-scan propose https://github.com/OWNER/REPO",
-            "/architecture-scan file-issues https://github.com/OWNER/REPO --task-indices 0",
         ),
     ),
     SlashCommand(
