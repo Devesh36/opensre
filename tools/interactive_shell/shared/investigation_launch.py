@@ -16,6 +16,7 @@ from typing import Literal, Protocol, runtime_checkable
 from rich.console import Console
 from rich.markup import escape
 
+from core.agent_harness.session import Session
 from platform.common.task_types import TaskRecord
 from tools.interactive_shell.shared.execution_policy import (
     ExecutionPolicyResult,
@@ -33,15 +34,6 @@ class ForegroundInvestigationResult:
 
 
 @runtime_checkable
-class InvestigationLaunchSession(Protocol):
-    """Session surface required by investigation launch orchestration."""
-
-    background_mode_enabled: bool
-
-    def record(self, channel: str, value: str, *, ok: bool = True) -> None: ...
-
-
-@runtime_checkable
 class InvestigationLaunchPorts(Protocol):
     """Surface-specific hooks for gating and foreground investigation UX."""
 
@@ -49,29 +41,31 @@ class InvestigationLaunchPorts(Protocol):
         self,
         *,
         policy: ExecutionPolicyResult,
-        session: InvestigationLaunchSession,
+        session: Session,
         console: Console,
         action_summary: str,
         confirm_fn: Callable[[str], str] | None,
         is_tty: bool | None,
         action_already_listed: bool,
-    ) -> bool: ...
+    ) -> bool:
+        raise NotImplementedError
 
     def run_foreground_investigation(
         self,
         *,
-        session: InvestigationLaunchSession,
+        session: Session,
         console: Console,
         task_command: str,
         run: Callable[[TaskRecord], dict[str, object]],
         exception_context: str,
         target: str,
-    ) -> ForegroundInvestigationResult: ...
+    ) -> ForegroundInvestigationResult:
+        raise NotImplementedError
 
 
 def launch_investigation(
     *,
-    session: InvestigationLaunchSession,
+    session: Session,
     console: Console,
     ports: InvestigationLaunchPorts,
     tool_type: str,
@@ -131,6 +125,6 @@ def launch_investigation(
 __all__ = [
     "ForegroundInvestigationResult",
     "InvestigationLaunchPorts",
-    "InvestigationLaunchSession",
+    "Session",
     "launch_investigation",
 ]

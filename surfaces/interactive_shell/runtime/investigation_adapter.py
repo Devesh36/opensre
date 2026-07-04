@@ -8,6 +8,7 @@ from typing import Any
 
 from rich.console import Console
 
+from core.agent_harness.session import Session
 from core.domain.stream import StreamEvent
 from platform.common.task_types import TaskRecord
 from surfaces.interactive_shell.ui.execution_confirm import execution_allowed
@@ -16,7 +17,6 @@ from tools.interactive_shell.shared.execution_policy import ExecutionPolicyResul
 from tools.interactive_shell.shared.investigation_launch import (
     ForegroundInvestigationResult,
     InvestigationLaunchPorts,
-    InvestigationLaunchSession,
 )
 from tools.investigation import session_runner
 
@@ -115,7 +115,7 @@ class ReplInvestigationLaunchPorts:
         self,
         *,
         policy: ExecutionPolicyResult,
-        session: InvestigationLaunchSession,
+        session: Session,
         console: Console,
         action_summary: str,
         confirm_fn: Callable[[str], str] | None,
@@ -124,7 +124,7 @@ class ReplInvestigationLaunchPorts:
     ) -> bool:
         return execution_allowed(
             policy,
-            session=session,  # type: ignore[arg-type]
+            session=session,
             console=console,
             action_summary=action_summary,
             confirm_fn=confirm_fn,
@@ -135,7 +135,7 @@ class ReplInvestigationLaunchPorts:
     def run_foreground_investigation(
         self,
         *,
-        session: InvestigationLaunchSession,
+        session: Session,
         console: Console,
         task_command: str,
         run: Callable[[TaskRecord], dict[str, object]],
@@ -143,7 +143,7 @@ class ReplInvestigationLaunchPorts:
         target: str,
     ) -> ForegroundInvestigationResult:
         outcome = run_foreground_investigation(
-            session=session,  # type: ignore[arg-type]
+            session=session,
             console=console,
             task_command=task_command,
             run=run,

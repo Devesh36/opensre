@@ -83,6 +83,21 @@ def reraise_investigation_failure(exc: BaseException) -> NoReturn:
     raise exc
 
 
+def _alert_payload_with_context(
+    raw_alert: dict[str, Any],
+    context_overrides: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if not context_overrides:
+        return raw_alert
+    return {
+        **raw_alert,
+        "annotations": {
+            **raw_alert.get("annotations", {}),
+            **context_overrides,
+        },
+    }
+
+
 def run_session_alert_payload(
     *,
     raw_alert: dict[str, Any],
@@ -94,8 +109,7 @@ def run_session_alert_payload(
     from tools.investigation.capability import astream_investigation
 
     check_llm_settings()
-    if context_overrides:
-        raw_alert.setdefault("annotations", {}).update(context_overrides)
+    alert_payload = _alert_payload_with_context(raw_alert, context_overrides)
 
     event_queue: queue.Queue[StreamEvent | BaseException | None] = queue.Queue()
     loop_ref: dict[str, asyncio.AbstractEventLoop] = {}
@@ -108,7 +122,7 @@ def run_session_alert_payload(
 
             async def _pump() -> None:
                 async for evt in astream_investigation(
-                    raw_alert=raw_alert,
+                    raw_alert=alert_payload,
                 ):
                     event_queue.put(evt)
 

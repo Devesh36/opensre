@@ -140,3 +140,33 @@ def test_run_investigation_for_session_background_uses_renderer(
     )
 
     assert result["status"] == "silent"
+
+
+def test_run_session_alert_payload_does_not_mutate_raw_alert(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "tools.investigation.session_runner.check_llm_settings",
+        lambda: None,
+    )
+
+    async def _empty_gen():
+        if False:
+            yield StreamEvent(event_type="end")
+
+    monkeypatch.setattr(
+        "tools.investigation.capability.astream_investigation",
+        lambda **_kwargs: _empty_gen(),
+    )
+
+    shared: dict[str, Any] = {"alert_name": "test", "annotations": {"keep": "yes"}}
+    original = dict(shared)
+    original["annotations"] = dict(shared["annotations"])
+
+    session_runner.run_session_alert_payload(
+        raw_alert=shared,
+        context_overrides={"add": "value"},
+        render_stream=_collecting_renderer(),
+    )
+
+    assert shared == original

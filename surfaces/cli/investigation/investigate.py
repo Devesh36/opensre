@@ -21,13 +21,10 @@ _SESSION_EVENT_POLL_S = 0.25
 
 def _reraise_cli_investigation_failure(exc: BaseException) -> NoReturn:
     """Map investigation runtime failures to structured CLI errors."""
-    from platform.common.errors import OpenSREError
+    from tools.investigation.session_runner import reraise_investigation_failure
 
     if isinstance(exc, InvestigationPumpCancelled):
-        raise OpenSREError(
-            "Investigation streaming stopped before completion.",
-            suggestion="The run was cancelled or closed early. Retry if you still need results.",
-        ) from exc
+        reraise_investigation_failure(exc)
     reraise_cli_runtime_error(exc)
 
 
