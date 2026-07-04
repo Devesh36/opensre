@@ -8,7 +8,12 @@ from typing import Any
 from rich.console import Console
 
 import tools.interactive_shell.actions.slash as slash_tool
-from core.agent_harness.agents.action_agent import ToolCallingDeps, run_action_agent_turn
+from core.agent_harness.agents.action_agent import (
+    ActionTurnPlan,
+    ToolCallingDeps,
+    _build_action_agent,
+    run_action_agent_turn,
+)
 from core.agent_harness.agents.turn_orchestrator import run_turn
 from core.agent_harness.models.turn_results import ToolCallingTurnResult
 from core.agent_harness.providers.default_providers import DefaultTurnAccounting
@@ -325,3 +330,24 @@ def test_execute_with_harness_handles_llm_unavailable() -> None:
     assert result.has_unhandled_clause is True
     assert result.planned_count == 0
     assert session.cli_agent_messages[-1] == ("assistant", "action agent unavailable")
+
+
+def test_build_action_agent_returns_action_turn_plan() -> None:
+    llm = FakeActionLLM([no_tool_response()])
+    deps = ToolCallingDeps(llm_factory=lambda: llm)
+    session = Session()
+
+    plan = _build_action_agent(
+        message="test message",
+        session=session,
+        agent_tools=[],
+        turn_ctx=None,
+        deps=deps,
+        tool_hooks=None,
+        tool_resources={},
+        observer=lambda *_args, **_kwargs: None,
+    )
+
+    assert isinstance(plan, ActionTurnPlan)
+    assert "test message" in plan.user_message
+    assert plan.agent is not None

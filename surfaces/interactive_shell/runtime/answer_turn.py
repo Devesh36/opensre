@@ -15,13 +15,13 @@ from core.agent_harness.agents.turn_orchestrator import (
 )
 from core.agent_harness.models.turn_context import TurnContext
 from core.agent_harness.ports import OutputSink
-from core.agent_harness.providers.default_prompt_context import DefaultPromptContextProvider
 from core.agent_harness.providers.default_providers import (
     DefaultErrorReporter,
     DefaultReasoningClientProvider,
     DefaultRunRecordFactory,
 )
 from core.agent_harness.session import Session
+from surfaces.interactive_shell.grounding.cli_reference import shell_prompt_context_provider
 from surfaces.interactive_shell.runtime.agent_harness_adapters import resolve_output_sink
 from surfaces.interactive_shell.utils.telemetry import LlmRunInfo
 
@@ -45,7 +45,7 @@ def answer_shell_question(
         message,
         session,
         resolved_output,
-        prompts=DefaultPromptContextProvider(session),
+        prompts=shell_prompt_context_provider(session),
         reasoning=DefaultReasoningClientProvider(
             output=resolved_output,
             error_reporter=DefaultErrorReporter(),
