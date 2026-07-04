@@ -20,6 +20,7 @@ from typing import Any
 
 from core.agent import Agent
 from core.agent_harness.agent_builder import AgentConfig, build_agent
+from core.agent_harness.debug.prompt_trace import persist_turn_system_prompt
 from core.agent_harness.models.turn_context import TurnContext
 from core.agent_harness.models.turn_results import ToolCallingTurnResult
 from core.agent_harness.ports import (
@@ -212,8 +213,7 @@ def _resolved_integrations_for_turn(
 ) -> dict[str, Any]:
     if turn_ctx is not None and turn_ctx.resolved_integrations:
         return dict(turn_ctx.resolved_integrations)
-    cached = getattr(session, "resolved_integrations_cache", None)
-    return dict(cached or {})
+    return dict(Agent.resolve_integrations(session))
 
 
 def _persist_tool_calling_error(session: SessionStore, user_text: str, error_text: str) -> None:
@@ -388,6 +388,11 @@ def run_action_agent_turn(
             observer=observer,
         )
         result = agent.run([{"role": "user", "content": user_message}])
+        persist_turn_system_prompt(
+            session,
+            phase="action_agent",
+            system_prompt=result.final_system_prompt,
+        )
     except Exception as exc:
         if is_context_length_overflow(str(exc)):
             log.debug("shell action prompt overflow; falling through to assistant", exc_info=True)

@@ -1,4 +1,8 @@
-"""Shared mutable agent state and immutable turn-request snapshots."""
+"""Shared mutable agent state and immutable turn-request snapshots.
+
+Production uses ``messages``, ``last_observation``, and ``clear()`` on
+``session.agent`` only. Other APIs exist for tests and future wiring.
+"""
 
 from __future__ import annotations
 
