@@ -7,7 +7,11 @@ import json
 from typing import Any
 
 from integrations.github.client import resolve_github_token
-from integrations.github.repo_scope import detect_git_remote_repo_scope
+from integrations.github.repo_scope import (
+    detect_git_remote_repo_scope,
+    parse_github_repository_reference,
+    split_repo_full_name,
+)
 from integrations.github.tools.workflow.models import GitHubIssueMutationProposal
 from tools.architecture_issue_tool.scanners import (
     ArchitectureViolation,
@@ -21,11 +25,31 @@ from tools.architecture_issue_tool.scanners import (
 )
 
 _GITHUB_ISSUE_GUIDANCE_GENERIC = (
-    "Run `opensre architecture-scan propose OWNER REPO` or "
-    "`/architecture-scan propose OWNER REPO` to build create-issue proposals. "
-    "Run `... file-issues OWNER REPO` to create issues after review. "
-    "The scanner does not create GitHub issues automatically."
+    "Run `opensre architecture-scan propose https://github.com/OWNER/REPO` or "
+    "`/architecture-scan propose https://github.com/OWNER/REPO` to build create-issue "
+    "proposals. Run `... file-issues https://github.com/OWNER/REPO` to create issues "
+    "after review. The scanner does not create GitHub issues automatically."
 )
+
+
+def format_github_repo_url(owner: str, repo: str) -> str:
+    """Render a canonical GitHub repository URL for CLI/REPL examples."""
+    return f"https://github.com/{owner}/{repo}"
+
+
+def parse_github_repo_argument(value: str) -> tuple[str, str]:
+    """Parse ``https://github.com/OWNER/REPO`` or ``OWNER/REPO`` into owner/repo."""
+    parsed = parse_github_repository_reference(value)
+    if not parsed:
+        owner, repo = split_repo_full_name(value)
+        if owner and repo:
+            parsed = (owner, repo)
+    if not parsed or not parsed[0] or not parsed[1]:
+        msg = (
+            f"Invalid GitHub repository {value!r}. Use https://github.com/OWNER/REPO or OWNER/REPO."
+        )
+        raise ValueError(msg)
+    return parsed
 
 
 def build_github_issue_guidance(
@@ -35,12 +59,13 @@ def build_github_issue_guidance(
 ) -> str:
     """Render next-step GitHub issue commands, filling owner/repo when known."""
     if owner and repo:
+        repo_url = format_github_repo_url(owner, repo)
         return (
             f"Next steps for {owner}/{repo}:\n"
-            f"  opensre architecture-scan propose {owner} {repo}\n"
-            f"  /architecture-scan propose {owner} {repo}\n"
-            f"  opensre architecture-scan file-issues {owner} {repo}\n"
-            f"  /architecture-scan file-issues {owner} {repo}\n"
+            f"  opensre architecture-scan propose {repo_url}\n"
+            f"  /architecture-scan propose {repo_url}\n"
+            f"  opensre architecture-scan file-issues {repo_url}\n"
+            f"  /architecture-scan file-issues {repo_url}\n"
             "Add `--task-indices 0,1` to limit which refactor tasks become issues. "
             "The scanner does not create GitHub issues automatically."
         )

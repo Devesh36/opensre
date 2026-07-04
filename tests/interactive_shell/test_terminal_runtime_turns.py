@@ -175,21 +175,21 @@ def test_turn_needs_exclusive_stdin_for_architecture_scan(
     )
     assert (
         loop_input_policy.turn_needs_exclusive_stdin(
-            "/architecture-scan propose Tracer-Cloud opensre",
+            "/architecture-scan propose https://github.com/Tracer-Cloud/opensre",
             session,
         )
         is False
     )
     assert (
         loop_input_policy.turn_needs_exclusive_stdin(
-            "/architecture-scan file-issues Tracer-Cloud opensre",
+            "/architecture-scan file-issues https://github.com/Tracer-Cloud/opensre",
             session,
         )
         is False
     )
     assert (
         loop_input_policy.turn_needs_exclusive_stdin(
-            "/architecture-scan --include-baselines propose Tracer-Cloud opensre",
+            "/architecture-scan --include-baselines propose https://github.com/Tracer-Cloud/opensre",
             session,
         )
         is False

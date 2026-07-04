@@ -60,8 +60,10 @@ _MCP_BY_COMMAND: dict[str, _SlashMcpFields] = {
     ),
     "/architecture-scan": _mcp(
         "Scan the local repository for architecture violations and print a deterministic "
-        "report. Subcommands: propose OWNER REPO [--task-indices 0,1], "
-        "file-issues OWNER REPO [--task-indices 0,1]. Flags: --include-baselines.",
+        "report. Subcommands: propose GITHUB_URL [--task-indices 0,1], "
+        "file-issues GITHUB_URL [--task-indices 0,1]. GITHUB_URL accepts "
+        "https://github.com/OWNER/REPO or OWNER/REPO. Scan flags (--include-baselines) "
+        "apply only to the plain scan, not subcommands.",
         "User explicitly asks to run an architecture scan, propose GitHub issues from scan "
         "tasks, or file GitHub issues from scan tasks",
         anti_examples=(

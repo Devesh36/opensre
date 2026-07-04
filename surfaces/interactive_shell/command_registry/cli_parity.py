@@ -390,15 +390,18 @@ def _offer_architecture_scan_github_follow_up(
         console.print()
         print_valid_choice_list(
             console,
-            title="GitHub issue next steps (set OWNER/REPO):",
+            title="GitHub issue next steps (set repository URL):",
             choices=[
-                "/architecture-scan propose OWNER REPO",
-                "/architecture-scan file-issues OWNER REPO",
+                "/architecture-scan propose https://github.com/OWNER/REPO",
+                "/architecture-scan file-issues https://github.com/OWNER/REPO",
             ],
         )
         return
 
     owner, repo = scope
+    from tools.architecture_issue_tool.scan import format_github_repo_url
+
+    repo_url = format_github_repo_url(owner, repo)
     choice = repl_choose_one(
         title="GitHub issues",
         breadcrumb="/architecture-scan",
@@ -431,9 +434,13 @@ def _offer_architecture_scan_github_follow_up(
             return
 
     repl_section_break(console)
+    follow_up_args = ["architecture-scan", choice, repo_url]
+    repo_root = _architecture_scan_repo_root(scan_args)
+    if repo_root is not None:
+        follow_up_args.extend(["--repo-root", str(repo_root)])
     run_cli_command(
         console,
-        ["architecture-scan", choice, owner, repo, *scan_args],
+        follow_up_args,
         capture_output=True,
     )
 
@@ -446,8 +453,8 @@ COMMANDS: list[SlashCommand] = [
         usage=(
             "/architecture-scan",
             "/architecture-scan --include-baselines",
-            "/architecture-scan propose Tracer-Cloud opensre --task-indices 0",
-            "/architecture-scan file-issues Tracer-Cloud opensre --task-indices 0",
+            "/architecture-scan propose https://github.com/OWNER/REPO",
+            "/architecture-scan file-issues https://github.com/OWNER/REPO --task-indices 0",
         ),
     ),
     SlashCommand(

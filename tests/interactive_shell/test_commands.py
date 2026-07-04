@@ -315,7 +315,11 @@ class TestDispatchSlash:
         assert dispatch_slash("/architecture-scan", session, console) is True
         assert calls == [
             ["architecture-scan"],
-            ["architecture-scan", "propose", "Tracer-Cloud", "opensre"],
+            [
+                "architecture-scan",
+                "propose",
+                "https://github.com/Tracer-Cloud/opensre",
+            ],
         ]
 
     def test_architecture_scan_follow_up_uses_repo_root_scope(
@@ -361,7 +365,13 @@ class TestDispatchSlash:
         assert detected_cwds == [repo_root]
         assert calls == [
             ["architecture-scan", "--repo-root", repo_root],
-            ["architecture-scan", "propose", "Tracer-Cloud", "opensre", "--repo-root", repo_root],
+            [
+                "architecture-scan",
+                "propose",
+                "https://github.com/Tracer-Cloud/opensre",
+                "--repo-root",
+                repo_root,
+            ],
         ]
 
     def test_architecture_scan_subcommand_skips_follow_up_menu(
@@ -390,14 +400,18 @@ class TestDispatchSlash:
 
         assert (
             dispatch_slash(
-                "/architecture-scan propose Tracer-Cloud opensre",
+                "/architecture-scan propose https://github.com/Tracer-Cloud/opensre",
                 session,
                 console,
             )
             is True
         )
         assert calls == [
-            ["architecture-scan", "propose", "Tracer-Cloud", "opensre"],
+            [
+                "architecture-scan",
+                "propose",
+                "https://github.com/Tracer-Cloud/opensre",
+            ],
         ]
         assert choose_calls == 0
 
@@ -427,7 +441,7 @@ class TestDispatchSlash:
 
         assert (
             dispatch_slash(
-                "/architecture-scan --include-baselines propose Tracer-Cloud opensre",
+                "/architecture-scan --include-baselines propose https://github.com/Tracer-Cloud/opensre",
                 session,
                 console,
             )
@@ -438,8 +452,7 @@ class TestDispatchSlash:
                 "architecture-scan",
                 "--include-baselines",
                 "propose",
-                "Tracer-Cloud",
-                "opensre",
+                "https://github.com/Tracer-Cloud/opensre",
             ],
         ]
         assert choose_calls == 0

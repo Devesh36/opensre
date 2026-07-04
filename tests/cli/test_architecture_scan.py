@@ -5,11 +5,13 @@ from click.testing import CliRunner
 from surfaces.cli.__main__ import cli
 from surfaces.cli.commands.architecture_scan import architecture_scan_github_subcommand
 
+_GITHUB_REPO = "https://github.com/Tracer-Cloud/opensre"
+
 
 def test_architecture_scan_github_subcommand_skips_leading_flags() -> None:
     assert (
         architecture_scan_github_subcommand(
-            ["--include-baselines", "propose", "Tracer-Cloud", "opensre"]
+            ["--include-baselines", "propose", _GITHUB_REPO]
         )
         == "propose"
     )
@@ -74,8 +76,7 @@ def test_architecture_scan_propose_subcommand(tmp_path) -> None:
         [
             "architecture-scan",
             "propose",
-            "Tracer-Cloud",
-            "opensre",
+            _GITHUB_REPO,
             "--repo-root",
             str(tmp_path),
             "--task-indices",
@@ -89,7 +90,7 @@ def test_architecture_scan_propose_subcommand(tmp_path) -> None:
     assert "Remove compatibility forwarding module" in result.output
 
 
-def test_architecture_scan_subcommand_inherits_group_scan_options(tmp_path) -> None:
+def test_architecture_scan_propose_accepts_owner_repo_slug(tmp_path) -> None:
     integrations_dir = tmp_path / "integrations"
     integrations_dir.mkdir()
     (integrations_dir / "shim.py").write_text(
@@ -102,19 +103,34 @@ def test_architecture_scan_subcommand_inherits_group_scan_options(tmp_path) -> N
         cli,
         [
             "architecture-scan",
+            "propose",
+            "Tracer-Cloud/opensre",
             "--repo-root",
             str(tmp_path),
-            "propose",
-            "Tracer-Cloud",
-            "opensre",
             "--task-indices",
             "0",
         ],
     )
 
     assert result.exit_code == 0
-    assert "Architecture violation scan: 1 total" in result.output
     assert "GitHub issue proposals: 1" in result.output
+
+
+def test_architecture_scan_propose_rejects_invalid_github_repo(tmp_path) -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "architecture-scan",
+            "propose",
+            "not-a-valid-repo",
+            "--repo-root",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Invalid GitHub repository" in result.output
 
 
 def test_architecture_scan_file_issues_subcommand(tmp_path, monkeypatch) -> None:
@@ -150,8 +166,7 @@ def test_architecture_scan_file_issues_subcommand(tmp_path, monkeypatch) -> None
         [
             "architecture-scan",
             "file-issues",
-            "Tracer-Cloud",
-            "opensre",
+            _GITHUB_REPO,
             "--repo-root",
             str(tmp_path),
             "--task-indices",
@@ -218,8 +233,7 @@ def test_architecture_scan_file_issues_uses_integration_store_token(tmp_path, mo
         [
             "architecture-scan",
             "file-issues",
-            "Tracer-Cloud",
-            "opensre",
+            _GITHUB_REPO,
             "--repo-root",
             str(tmp_path),
             "--task-indices",
@@ -249,8 +263,7 @@ def test_architecture_scan_file_issues_without_token_exits_once(tmp_path, monkey
         [
             "architecture-scan",
             "file-issues",
-            "Tracer-Cloud",
-            "opensre",
+            _GITHUB_REPO,
             "--repo-root",
             str(tmp_path),
             "--task-indices",
@@ -271,8 +284,7 @@ def test_architecture_scan_invalid_task_indices(tmp_path) -> None:
         [
             "architecture-scan",
             "propose",
-            "Tracer-Cloud",
-            "opensre",
+            _GITHUB_REPO,
             "--repo-root",
             str(tmp_path),
             "--task-indices",
@@ -291,8 +303,7 @@ def test_architecture_scan_propose_succeeds_with_no_violations(tmp_path) -> None
         [
             "architecture-scan",
             "propose",
-            "Tracer-Cloud",
-            "opensre",
+            _GITHUB_REPO,
             "--repo-root",
             str(tmp_path),
         ],
@@ -313,8 +324,7 @@ def test_architecture_scan_file_issues_succeeds_with_no_violations(tmp_path, mon
         [
             "architecture-scan",
             "file-issues",
-            "Tracer-Cloud",
-            "opensre",
+            _GITHUB_REPO,
             "--repo-root",
             str(tmp_path),
         ],
@@ -338,8 +348,7 @@ def test_architecture_scan_file_issues_no_violations_without_token(tmp_path, mon
         [
             "architecture-scan",
             "file-issues",
-            "Tracer-Cloud",
-            "opensre",
+            _GITHUB_REPO,
             "--repo-root",
             str(tmp_path),
         ],

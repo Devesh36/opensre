@@ -14,7 +14,9 @@ from tools.architecture_issue_tool.scan import (
     build_github_issue_proposal_for_task,
     format_architecture_scan_report,
     format_github_issue_error,
+    format_github_repo_url,
     format_scan_workflow_header,
+    parse_github_repo_argument,
     parse_task_indices,
     propose_github_issues_from_tasks,
     run_architecture_scan,
@@ -130,13 +132,32 @@ def test_format_architecture_scan_report_error() -> None:
 def test_build_github_issue_guidance_includes_repo_scope() -> None:
     guidance = build_github_issue_guidance(owner="Tracer-Cloud", repo="opensre")
     assert "Tracer-Cloud/opensre" in guidance
-    assert "/architecture-scan propose Tracer-Cloud opensre" in guidance
-    assert "/architecture-scan file-issues Tracer-Cloud opensre" in guidance
+    assert "/architecture-scan propose https://github.com/Tracer-Cloud/opensre" in guidance
+    assert "/architecture-scan file-issues https://github.com/Tracer-Cloud/opensre" in guidance
 
 
 def test_build_github_issue_guidance_generic_without_scope() -> None:
     guidance = build_github_issue_guidance()
-    assert "OWNER REPO" in guidance
+    assert "https://github.com/OWNER/REPO" in guidance
+
+
+def test_parse_github_repo_argument_accepts_url_and_slug() -> None:
+    assert parse_github_repo_argument("https://github.com/Tracer-Cloud/opensre") == (
+        "Tracer-Cloud",
+        "opensre",
+    )
+    assert parse_github_repo_argument("Tracer-Cloud/opensre") == ("Tracer-Cloud", "opensre")
+
+
+def test_parse_github_repo_argument_rejects_invalid() -> None:
+    with pytest.raises(ValueError, match="Invalid GitHub repository"):
+        parse_github_repo_argument("not-a-repo")
+
+
+def test_format_github_repo_url() -> None:
+    assert format_github_repo_url("Tracer-Cloud", "opensre") == (
+        "https://github.com/Tracer-Cloud/opensre"
+    )
 
 
 def test_format_scan_workflow_header_summarizes_counts() -> None:

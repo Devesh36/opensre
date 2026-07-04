@@ -14,6 +14,7 @@ from platform.common.runtime_flags import is_json_output
 from tools.architecture_issue_tool.scan import (
     format_file_issues_report_text,
     format_propose_report_text,
+    parse_github_repo_argument,
     parse_task_indices,
     run_architecture_scan,
     run_architecture_scan_and_file_github_issues,
@@ -48,13 +49,22 @@ def _scan_options(func: Any) -> Any:
     return decorated
 
 
+def _subcommand_repo_root_option(func: Any) -> Any:
+    return click.option(
+        "--repo-root",
+        default=None,
+        type=click.Path(exists=False, file_okay=False, dir_okay=True, resolve_path=True),
+        help="Repository root to scan (default: current checkout).",
+    )(func)
+
+
 ARCHITECTURE_SCAN_GITHUB_SUBCOMMANDS = frozenset({"propose", "file-issues"})
 _SCAN_OPTION_FLAGS = frozenset({"--repo-root", "--max-file-lines", "--task-indices"})
 _SCAN_FLAG_ONLY = frozenset({"--include-baselines"})
 
 
 def architecture_scan_github_subcommand(args: list[str]) -> str | None:
-    """Return ``propose``/``file-issues`` when present, skipping scan flags and values."""
+    """Return ``propose``/``file-issues`` when present, skipping scan-only flags."""
     i = 0
     while i < len(args):
         token = args[i]
@@ -145,6 +155,13 @@ def _parse_task_indices_option(task_indices: str | None) -> list[int] | None:
         raise click.BadParameter(str(exc), param_hint="'--task-indices'") from None
 
 
+def _parse_github_repo_option(value: str) -> tuple[str, str]:
+    try:
+        return parse_github_repo_argument(value)
+    except ValueError as exc:
+        raise click.BadParameter(str(exc), param_hint="'GITHUB_REPO'") from None
+
+
 @click.group(name="architecture-scan", invoke_without_command=True)
 @_scan_options
 @click.pass_context
@@ -164,62 +181,50 @@ def architecture_scan_group(
 
 
 @architecture_scan_group.command(name="propose")
-@_scan_options
-@click.argument("owner")
-@click.argument("repo")
+@_subcommand_repo_root_option
+@click.argument("github_repo")
 @click.option(
     "--task-indices",
     default=None,
     help="Comma-separated 0-based proposed_refactor_tasks indices (default: all).",
 )
-@click.pass_context
 def architecture_scan_propose_command(
-    ctx: click.Context,
     repo_root: str | None,
-    max_file_lines: int,
-    include_baselines: bool,
-    owner: str,
-    repo: str,
+    github_repo: str,
     task_indices: str | None,
 ) -> None:
     """Scan, then build read-only GitHub create-issue proposals."""
-    _store_scan_options(ctx, repo_root, max_file_lines, include_baselines)
+    owner, repo = _parse_github_repo_option(github_repo)
     result = run_architecture_scan_and_propose_github_issues(
         owner=owner,
         repo=repo,
+        repo_root=repo_root,
         task_indices=_parse_task_indices_option(task_indices),
-        **_scan_kwargs(ctx),
     )
     _emit_text_or_json(result, formatter=format_propose_report_text)
     _exit_for_scan_error(result)
 
 
 @architecture_scan_group.command(name="file-issues")
-@_scan_options
-@click.argument("owner")
-@click.argument("repo")
+@_subcommand_repo_root_option
+@click.argument("github_repo")
 @click.option(
     "--task-indices",
     default=None,
     help="Comma-separated 0-based proposed_refactor_tasks indices (default: all).",
 )
-@click.pass_context
 def architecture_scan_file_issues_command(
-    ctx: click.Context,
     repo_root: str | None,
-    max_file_lines: int,
-    include_baselines: bool,
-    owner: str,
-    repo: str,
+    github_repo: str,
     task_indices: str | None,
 ) -> None:
     """Scan, propose GitHub issues, and create them on GitHub."""
-    _store_scan_options(ctx, repo_root, max_file_lines, include_baselines)
+    owner, repo = _parse_github_repo_option(github_repo)
     result = run_architecture_scan_and_file_github_issues(
         owner=owner,
         repo=repo,
+        repo_root=repo_root,
         task_indices=_parse_task_indices_option(task_indices),
-        **_scan_kwargs(ctx),
     )
     _emit_text_or_json(result, formatter=format_file_issues_report_text)
     _exit_for_issue_results(result)
