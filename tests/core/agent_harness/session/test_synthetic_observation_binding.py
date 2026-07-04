@@ -40,7 +40,10 @@ def test_suggest_synthetic_failure_follow_up_missing_observation_clears_path(
     scenarios_root.mkdir()
 
     session = Session()
-    with unittest.mock.patch("config.synthetic_paths.SYNTHETIC_SCENARIOS_DIR", scenarios_root):
+    with (
+        unittest.mock.patch("config.synthetic_paths.SYNTHETIC_SCENARIOS_DIR", scenarios_root),
+        unittest.mock.patch("core.agent_harness.session.state.time.sleep"),
+    ):
         session.suggest_synthetic_failure_follow_up(
             label="opensre tests synthetic --scenario 001-replication-lag",
         )
