@@ -9,6 +9,7 @@ from typing import Any, cast
 import pytest
 
 from core.agent import Agent, AgentRunResult
+from core.agent_harness.turns.headless_dispatch import dispatch_message_to_headless_agent
 from core.events import (
     MessageUpdateEvent,
     RuntimeEvent,
@@ -135,16 +136,16 @@ def test_agent_exposes_headless_dispatch_entrypoint(monkeypatch: pytest.MonkeyPa
             yield "hello from headless"
 
     monkeypatch.setattr(
-        "core.agent_harness.agents.action_agent._default_llm_factory",
+        "core.agent_harness.turns.action_driver.default_llm_factory",
         lambda: FakeLLM(iter([AgentLLMResponse(content="", tool_calls=[], raw_content=None)])),
     )
 
-    from core.agent_harness.agents.headless_agent import (
+    from core.agent_harness.turns.headless_dispatch import (
         NullToolProvider,
         StaticReasoningClientProvider,
     )
 
-    result = Agent.dispatch_message_to_headless_agent(
+    result = dispatch_message_to_headless_agent(
         "hello",
         tools=NullToolProvider(),
         reasoning=StaticReasoningClientProvider(client=EchoReasoningClient()),
@@ -388,7 +389,7 @@ def test_on_event_failure_is_logged_and_swallowed(caplog: pytest.LogCaptureFixtu
     def on_event(_kind: str, _data: dict[str, Any]) -> None:
         raise RuntimeError("broken renderer")
 
-    with caplog.at_level(logging.DEBUG, logger="core.agent_mixins"):
+    with caplog.at_level(logging.DEBUG, logger="core.agent.mixins"):
         result = _agent(llm, _tools(FakeTool("query_logs")), on_event=on_event).run(
             [{"role": "user", "content": "hello"}]
         )

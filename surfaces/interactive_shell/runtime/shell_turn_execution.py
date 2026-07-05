@@ -14,11 +14,11 @@ from typing import Unpack
 
 from rich.console import Console
 
-from core.agent_harness.agents.turn_orchestrator import run_turn
-from core.agent_harness.models.turn_context import TurnContext
 from core.agent_harness.models.turn_results import ShellTurnResult, ToolCallingTurnResult
+from core.agent_harness.models.turn_snapshot import TurnSnapshot
 from core.agent_harness.ports import OutputSink
 from core.agent_harness.session import Session
+from core.agent_harness.turns.orchestrator import run_turn
 from core.execution import ToolExecutionHooks
 from surfaces.interactive_shell.runtime.action_turn import run_action_tool_turn
 from surfaces.interactive_shell.runtime.agent_harness_adapters import resolve_output_sink
@@ -57,7 +57,7 @@ def execute_shell_turn(
     shell adapters but are overridable via ``execute_actions`` / ``gather_evidence``
     / ``answer_agent`` (the test injection seams, typed in ``turn_seams``). They are
     bound to the live ``session``/``console`` here and handed to
-    :func:`core.agent_harness.agents.turn_orchestrator.run_turn`, which performs
+    :func:`core.agent_harness.turns.orchestrator.run_turn`, which performs
     the pure path routing.
     """
     _execute = execute_actions or run_action_tool_turn
@@ -71,7 +71,7 @@ def execute_shell_turn(
         *,
         confirm_fn: Callable[[str], str] | None = None,
         is_tty: bool | None = None,
-        turn_ctx: TurnContext | None = None,
+        turn_snapshot: TurnSnapshot | None = None,
     ) -> ToolCallingTurnResult:
         return _execute(
             t,
@@ -80,7 +80,7 @@ def execute_shell_turn(
             confirm_fn=confirm_fn,
             is_tty=is_tty,
             request_exit=request_exit,
-            turn_ctx=turn_ctx,
+            turn_snapshot=turn_snapshot,
             output=resolved_output,
             tool_hooks=tool_hooks,
         )

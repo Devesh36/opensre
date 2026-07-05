@@ -7,13 +7,13 @@ from collections.abc import Iterable
 from rich.console import Console
 
 import tools.interactive_shell.actions.slash as slash_tool
-from core.agent_harness.agents.action_agent import (
+from core.agent_harness.session import Session
+from core.agent_harness.turns.action_driver import (
     ActionTurnPlan,
     ToolCallingDeps,
     _build_action_agent,
     run_action_agent_turn,
 )
-from core.agent_harness.session import Session
 from core.tool_framework.registered_tool import RegisteredTool
 from surfaces.interactive_shell.runtime.action_turn import run_action_tool_turn
 from tests.core.agent.orchestration.action_execution_test_harness import (
@@ -265,7 +265,7 @@ def test_build_action_agent_returns_action_turn_plan() -> None:
         message="test message",
         session=session,
         agent_tools=[],
-        turn_ctx=None,
+        turn_snapshot=None,
         deps=deps,
         tool_hooks=None,
         tool_resources={},

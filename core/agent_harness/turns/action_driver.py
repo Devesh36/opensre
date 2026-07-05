@@ -21,8 +21,9 @@ from typing import Any
 from core.agent import Agent
 from core.agent_harness.agent_builder import AgentConfig, build_agent
 from core.agent_harness.debug.prompt_trace import persist_turn_system_prompt
-from core.agent_harness.models.turn_context import TurnContext
+from core.agent_harness.integrations.resolution import resolve_and_cache_integrations
 from core.agent_harness.models.turn_results import ToolCallingTurnResult
+from core.agent_harness.models.turn_snapshot import TurnSnapshot
 from core.agent_harness.ports import (
     ConfirmFn,
     ErrorReporter,
@@ -32,6 +33,7 @@ from core.agent_harness.ports import (
 )
 from core.agent_harness.prompts import build_action_system_prompt, build_action_user_message
 from core.agent_harness.prompts.conversation_memory import MAX_CONVERSATION_MESSAGES
+from core.agent_harness.providers.provider_models import default_llm_factory
 from core.events import runtime_event_callback_from_observer
 from core.execution import ToolExecutionHooks, public_tool_input
 from core.llm.types import AgentLLMResponse, ToolCall
@@ -215,11 +217,11 @@ def _generic_tool_result_counts(result: Any) -> tuple[int, int]:
 
 def _resolved_integrations_for_turn(
     session: SessionStore,
-    turn_ctx: TurnContext | None,
+    turn_snapshot: TurnSnapshot | None,
 ) -> dict[str, Any]:
-    if turn_ctx is not None and turn_ctx.resolved_integrations:
-        return dict(turn_ctx.resolved_integrations)
-    return dict(Agent.resolve_integrations(session))
+    if turn_snapshot is not None and turn_snapshot.resolved_integrations:
+        return dict(turn_snapshot.resolved_integrations)
+    return dict(resolve_and_cache_integrations(session))
 
 
 def _persist_tool_calling_error(session: SessionStore, user_text: str, error_text: str) -> None:
@@ -279,18 +281,12 @@ def _literal_slash_tool_call(message: str, agent_tools: list[Any]) -> ToolCall |
     )
 
 
-def _default_llm_factory() -> Any:
-    from core.llm import agent_llm_client
-
-    return agent_llm_client.get_agent_llm()
-
-
 def _build_action_agent(
     *,
     message: str,
     session: SessionStore,
     agent_tools: list[Any],
-    turn_ctx: TurnContext | None,
+    turn_snapshot: TurnSnapshot | None,
     deps: ToolCallingDeps | None,
     tool_hooks: ToolExecutionHooks | None,
     tool_resources: dict[str, Any],
@@ -309,9 +305,7 @@ def _build_action_agent(
     )
 
     if bang_command is not None:
-        # Explicit `!` shell escape — dispatches input the user typed verbatim
-        # as a shell command. Not a deterministic-command fast path or
-        # regex/keyword intent matcher.
+        # Explicit `!` shell escape: dispatch the verbatim text as a shell_run call.
         llm: Any = _StaticToolCallLLM(
             [
                 ToolCall(
@@ -331,18 +325,18 @@ def _build_action_agent(
         system = "Execute the explicit slash_invoke tool call."
         user_message = message
     else:
-        factory = (
-            deps.llm_factory if deps is not None and deps.llm_factory else _default_llm_factory
-        )
+        factory = deps.llm_factory if deps is not None and deps.llm_factory else default_llm_factory
         llm = factory()
-        system = build_action_system_prompt(turn_ctx or TurnContext.from_session(message, session))
+        system = build_action_system_prompt(
+            turn_snapshot or TurnSnapshot.from_session(message, session)
+        )
         user_message = build_action_user_message(message)
 
     config = AgentConfig(
         llm=llm,
         system=system,
         tools=tuple(agent_tools),
-        resolved_integrations=_resolved_integrations_for_turn(session, turn_ctx),
+        resolved_integrations=_resolved_integrations_for_turn(session, turn_snapshot),
         max_iterations=_MAX_TOOL_CALLING_ITERATIONS,
         tool_resources=tool_resources,
         tool_hooks=tool_hooks,
@@ -360,13 +354,13 @@ def run_action_agent_turn(
     confirm_fn: ConfirmFn | None = None,
     is_tty: bool | None = None,
     deps: ToolCallingDeps | None = None,
-    turn_ctx: TurnContext | None = None,
+    turn_snapshot: TurnSnapshot | None = None,
     error_reporter: ErrorReporter | None = None,
     tool_hooks: ToolExecutionHooks | None = None,
 ) -> ToolCallingTurnResult:
     """Run one action tool-calling turn through the shared agent harness.
 
-    ``turn_ctx`` is the immutable per-turn snapshot assembled at turn start.
+    ``turn_snapshot`` is the immutable per-turn snapshot assembled at turn start.
     When present it is used to build the action-agent system prompt so the
     prompt reflects turn-start state rather than the live (potentially
     mid-mutation) session.
@@ -387,7 +381,7 @@ def run_action_agent_turn(
             message=message,
             session=session,
             agent_tools=agent_tools,
-            turn_ctx=turn_ctx,
+            turn_snapshot=turn_snapshot,
             deps=deps,
             tool_hooks=tool_hooks,
             tool_resources=tool_resources,

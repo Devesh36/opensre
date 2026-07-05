@@ -22,6 +22,7 @@ from typing import Any, Protocol
 from core.agent import Agent
 from core.agent_harness.agent_builder import AgentConfig, build_agent
 from core.agent_harness.debug.prompt_trace import persist_turn_system_prompt
+from core.agent_harness.integrations.resolution import resolve_and_cache_integrations
 from core.agent_harness.ports import ErrorReporter, SessionStore, ToolEventObserver
 from core.agent_harness.prompts.conversation_memory import (
     NO_HISTORY_PLACEHOLDER,
@@ -119,7 +120,7 @@ def _format_observation(executed: list[tuple[Any, Any]]) -> str:
 
 def _resolve_gather_integrations(session: SessionStore, message: str) -> dict[str, Any]:
     """Resolve integrations for one gather turn, enriching GitHub repo scope when inferred."""
-    base = Agent.resolve_integrations(session)
+    base = resolve_and_cache_integrations(session)
     scope = infer_github_repo_scope(
         message=message,
         conversation_messages=session.cli_agent_messages,
@@ -164,7 +165,7 @@ def _load_gather_llm_or_none(error_reporter: ErrorReporter | None) -> Any | None
     return _safe_execute(
         get_agent_llm,
         error_reporter=error_reporter,
-        context="core.agent_harness.agents.evidence_agent.client",
+        context="core.agent_harness.turns.evidence_driver.client",
         wrap_error=lambda exc: GatherLlmLoadError(
             "Failed to load the evidence-gather LLM client.",
             cause=exc,
@@ -212,10 +213,8 @@ def gather_tool_evidence(
     """
 
     def _run_gather_turn() -> Any | None:
-        # Tool discovery + integration resolution + LLM load happen inside the
-        # helper so a raise from tool-registry import, credential resolution, or
-        # LLM client init is swallowed by ``_safe_execute`` rather than breaking
-        # the turn.
+        # Tool discovery, integration resolution, and LLM load run inside this
+        # helper, within the ``_safe_execute`` fallback boundary.
         from tools.investigation.stages.gather_evidence.tools import get_available_tools
 
         resolved = _resolve_gather_integrations(session, message)
@@ -247,7 +246,7 @@ def gather_tool_evidence(
         result = _safe_execute(
             _run_gather_turn,
             error_reporter=error_reporter,
-            context="core.agent_harness.agents.evidence_agent",
+            context="core.agent_harness.turns.evidence_driver",
             wrap_error=lambda exc: GatherEvidenceExecutionError(
                 "Failed to gather evidence for the current conversational turn.",
                 cause=exc,

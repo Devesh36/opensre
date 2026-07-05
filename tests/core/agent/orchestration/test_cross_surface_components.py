@@ -9,11 +9,10 @@ from unittest.mock import MagicMock
 import pytest
 from rich.console import Console
 
-from core.agent import Agent
-from core.agent_harness.agents.turn_orchestrator import run_turn
 from core.agent_harness.models.turn_results import ShellTurnResult, ToolCallingTurnResult
 from core.agent_harness.providers.default_providers import DefaultToolProvider
 from core.agent_harness.session import InMemorySessionStorage, Session
+from core.agent_harness.turns.orchestrator import run_turn
 from gateway.turn_handler import build_gateway_turn_handler
 
 
@@ -35,7 +34,7 @@ def test_gateway_turn_handler_delegates_to_agent_dispatch(monkeypatch: pytest.Mo
             assistant_response_text="gateway-ok",
         )
 
-    monkeypatch.setattr("gateway.turn_handler.Agent.dispatch_message_to_headless_agent", _spy)
+    monkeypatch.setattr("gateway.turn_handler.dispatch_message_to_headless_agent", _spy)
 
     session = Session(storage=InMemorySessionStorage())
     sink = MagicMock()
@@ -57,7 +56,7 @@ def test_gateway_turn_handler_does_not_finalize_answered_turn(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "gateway.turn_handler.Agent.dispatch_message_to_headless_agent",
+        "gateway.turn_handler.dispatch_message_to_headless_agent",
         lambda *_args, **_kwargs: ShellTurnResult(
             final_intent="cli_agent_fallback",
             action_result=ToolCallingTurnResult(0, 0, 0, False, False),
@@ -110,29 +109,45 @@ def test_run_turn_routes_unhandled_action_to_answer_callback() -> None:
     assert result.answered is True
 
 
-def test_agent_static_dispatch_forwards_to_headless_with_kwargs(
+def test_run_turn_populates_resolved_integrations_on_turn_snapshot(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """``Agent.dispatch_message_to_headless_agent`` forwards message and kwargs."""
-    captured: dict[str, Any] = {}
-
-    def _fake(message: str, **kwargs: object) -> ShellTurnResult:
-        captured["message"] = message
-        captured.update(kwargs)
-        return ShellTurnResult(
-            final_intent="cli_agent_handled",
-            action_result=ToolCallingTurnResult(0, 0, 0, False, True),
-        )
-
+    """run_turn resolves integrations once and hands them to the action path on turn_snapshot."""
+    resolved = {"github": {"configured": True}}
     monkeypatch.setattr(
-        "core.agent_harness.agents.headless_agent.dispatch_message_to_headless_agent",
-        _fake,
+        "core.agent_harness.turns.orchestrator.resolve_and_cache_integrations",
+        lambda _session: resolved,
+    )
+    captured: list[Any] = []
+
+    def execute_actions(
+        _text: str, *, turn_snapshot: Any = None, **_kwargs: object
+    ) -> ToolCallingTurnResult:
+        captured.append(turn_snapshot)
+        return ToolCallingTurnResult(0, 0, 0, False, False)
+
+    def answer(_text: str, **_kwargs: object) -> object:
+        return type("Run", (), {"response_text": "answered"})()
+
+    def gather(_text: str, **_kwargs: object) -> None:
+        return None
+
+    class _Accounting:
+        def record_action_result(self, _result: ToolCallingTurnResult) -> None:
+            return None
+
+        def finalize(self, result: ShellTurnResult) -> ShellTurnResult:
+            return result
+
+    session = Session(storage=InMemorySessionStorage())
+    run_turn(
+        "hi",
+        session,
+        execute_actions=execute_actions,
+        answer=answer,
+        gather=gather,
+        accounting=_Accounting(),
     )
 
-    from core.agent_harness.agents.headless_agent import NullToolProvider
-
-    tools = NullToolProvider()
-    Agent.dispatch_message_to_headless_agent("ping", tools=tools, gather_enabled=True)
-    assert captured["message"] == "ping"
-    assert captured["tools"] is tools
-    assert captured["gather_enabled"] is True
+    assert captured, "execute_actions was never called"
+    assert captured[0].resolved_integrations == resolved

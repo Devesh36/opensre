@@ -1,10 +1,11 @@
-"""Provider-hook delegate: applies :class:`~core.provider.ProviderHooks` with
-fail-open error handling so a broken hook never breaks the agent loop.
+"""Applies the optional :class:`~core.provider.ProviderHooks` around each LLM
+call, and swallows a hook's error instead of letting it break the loop.
 
-``Agent`` owns one :class:`AgentProviderHookDelegate` per run and the loop
-(``core.agent_loop.run_react_loop``) calls it at each of the four seams
-(context transform, provider request, provider response, LLM conversion)
-instead of talking to ``ProviderHooks`` directly.
+``Agent`` owns one :class:`ProviderHookDelegate` per run. The loop
+(``core.agent.react_loop.run_react_loop``) calls it at four points around each
+request — transform the messages, convert them to the provider format, adjust
+the outgoing request, adjust the incoming response — instead of touching
+``ProviderHooks`` directly.
 """
 
 from __future__ import annotations
@@ -24,17 +25,17 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class AgentProviderHookDelegate:
+class ProviderHookDelegate:
     """Wraps :class:`ProviderHooks`; swallows hook exceptions and logs instead."""
 
     hooks: ProviderHooks
 
-    def transform_context(self, messages: Sequence[RuntimeMessage]) -> list[RuntimeMessage]:
+    def transform_messages(self, messages: Sequence[RuntimeMessage]) -> list[RuntimeMessage]:
         try:
-            return self.hooks.apply_transform_context(messages)
+            return self.hooks.apply_transform_messages(messages)
         except Exception:  # noqa: BLE001 - fall back to the unmodified transcript
             logger.debug(
-                "[runtime] transform_context raised; using original messages", exc_info=True
+                "[runtime] transform_messages raised; using original messages", exc_info=True
             )
             return list(messages)
 
@@ -60,4 +61,4 @@ class AgentProviderHookDelegate:
             return response
 
 
-__all__ = ["AgentProviderHookDelegate"]
+__all__ = ["ProviderHookDelegate"]

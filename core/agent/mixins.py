@@ -1,10 +1,10 @@
-"""Reusable agent behavior mixins: event dispatch, tool filtering, steering.
+"""The reusable behaviors ``Agent`` (and any custom loop) is built from.
 
-``AgentEventEmitter`` forwards ``(kind, data)`` tuple events and typed runtime
-events to optional callbacks. ``AgentToolFilter`` exposes the tool-narrowing
-hook. ``AgentSteering`` is the stop/continue/redirect control-plane: queued
-user messages injected into (steer) or appended after (follow_up) a run.
-``Agent`` and any custom tool-calling loop compose these mixins.
+``EventEmitterMixin`` forwards ``(kind, data)`` and typed runtime events to
+optional listener callbacks. ``ToolFilterMixin`` is the hook for narrowing which
+tools a run sees. ``SteeringMixin`` lets you nudge a run already in progress:
+``steer`` injects a user message before the next LLM turn, ``follow_up`` queues
+one for after the run would otherwise stop.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class AgentEventEmitter:
+class EventEmitterMixin:
     """Dispatch ``(kind, data)`` tuple events and typed runtime events to callbacks.
 
     Both callbacks default to ``None`` (no listener). Set ``_on_tuple_event`` /
@@ -69,14 +69,14 @@ class AgentEventEmitter:
                 logger.debug("[runtime] on_event(%s) raised; ignoring", kind, exc_info=True)
 
 
-class AgentToolFilter[RuntimeToolT: RuntimeTool]:
+class ToolFilterMixin[RuntimeToolT: RuntimeTool]:
     """Hook to narrow the tool list the agent will see (identity by default)."""
 
     def _filter_tools(self, tools: list[RuntimeToolT]) -> list[RuntimeToolT]:
         return tools
 
 
-class AgentSteering:
+class SteeringMixin:
     """Stop/continue/redirect control-plane for the agent loop.
 
     ``steer`` queues a message injected before the *next* LLM turn; ``follow_up``
@@ -108,4 +108,4 @@ class AgentSteering:
         return self._follow_up_messages.popleft()
 
 
-__all__ = ["AgentEventEmitter", "AgentSteering", "AgentToolFilter"]
+__all__ = ["EventEmitterMixin", "SteeringMixin", "ToolFilterMixin"]
