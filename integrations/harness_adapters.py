@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+
 
 def register_harness_adapters() -> None:
     from integrations.catalog import (
@@ -30,11 +33,12 @@ def register_harness_adapters() -> None:
 
     def _infer(
         message: str,
-        conversation_messages,
-        env,
-        cwd,
-        cached,
-    ):
+        conversation_messages: Sequence[tuple[str, str]] | None,
+        env: Mapping[str, str] | None,
+        cwd: str | Path | None,
+        cached: tuple[str, str] | None,
+    ) -> tuple[str, str] | None:
+        # Port uses positional args; integrations API is keyword-only.
         return infer_github_repo_scope(
             message=message,
             conversation_messages=conversation_messages,
