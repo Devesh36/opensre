@@ -5,19 +5,21 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
+import pytest
 from rich.console import Console
 
 import tools.interactive_shell.actions.slash as slash_tool
-from core.agent_harness.agents.action_agent import (
-    ActionTurnPlan,
-    ToolCallingDeps,
-    _build_action_agent,
-    run_action_agent_turn,
-)
-from core.agent_harness.agents.turn_orchestrator import run_turn
 from core.agent_harness.models.turn_results import ToolCallingTurnResult
 from core.agent_harness.providers.default_providers import DefaultTurnAccounting
 from core.agent_harness.session import Session
+from core.agent_harness.turns.action_driver import (
+    ActionTurnPlan,
+    ToolCallingDeps,
+    _build_action_agent,
+    _turn_resolved_integrations,
+    run_action_agent_turn,
+)
+from core.agent_harness.turns.orchestrator import run_turn
 from core.tool_framework.registered_tool import RegisteredTool
 from surfaces.interactive_shell.runtime.action_turn import run_action_tool_turn
 from tests.core.agent.orchestration.action_execution_test_harness import (
@@ -262,7 +264,7 @@ def test_local_llama_handoff_populates_handoff_contents() -> None:
 
 
 def test_route_handoff_skips_handled_without_llm() -> None:
-    from core.agent_harness.agents.turn_orchestrator import TurnRoutingInput, _route_turn
+    from core.agent_harness.turns.orchestrator import TurnRoutingInput, _route_turn
 
     routing = TurnRoutingInput(
         action_handled=True,
@@ -274,7 +276,7 @@ def test_route_handoff_skips_handled_without_llm() -> None:
 
 
 def test_route_handled_without_handoff_stays_action_only() -> None:
-    from core.agent_harness.agents.turn_orchestrator import TurnRoutingInput, _route_turn
+    from core.agent_harness.turns.orchestrator import TurnRoutingInput, _route_turn
 
     routing = TurnRoutingInput(
         action_handled=True,
@@ -314,6 +316,38 @@ def test_run_turn_passes_handoff_contents_to_assistant() -> None:
     assert captured == [("provider:local_llama_connect",)]
 
 
+def test_run_turn_mixed_action_and_handoff_routes_to_assistant() -> None:
+    """Handled action plus handoff tags must not take the handled_without_llm path."""
+    captured: list[tuple[str, ...]] = []
+
+    def _execute(*_args: object, **_kwargs: object) -> ToolCallingTurnResult:
+        return ToolCallingTurnResult(
+            planned_count=1,
+            executed_count=1,
+            executed_success_count=1,
+            has_unhandled_clause=False,
+            handled=True,
+            response_text="ran /health",
+            handoff_contents=("provider:local_llama_connect",),
+        )
+
+    def _answer(*_args: Any, handoff_contents: tuple[str, ...] = (), **_kwargs: Any) -> None:
+        captured.append(handoff_contents)
+        return None
+
+    result = run_turn(
+        "check health and connect local llama",
+        Session(),
+        execute_actions=_execute,
+        gather=lambda *_args, **_kwargs: None,
+        answer=_answer,
+        accounting=DefaultTurnAccounting(Session(), "check health and connect local llama"),
+    )
+
+    assert captured == [("provider:local_llama_connect",)]
+    assert result.final_intent == "cli_agent_fallback"
+
+
 def test_execute_with_harness_handles_llm_unavailable() -> None:
     def _raise() -> object:
         raise RuntimeError("action agent unavailable")
@@ -341,7 +375,8 @@ def test_build_action_agent_returns_action_turn_plan() -> None:
         message="test message",
         session=session,
         agent_tools=[],
-        turn_ctx=None,
+        turn_snapshot=None,
+        resolved_integrations={},
         deps=deps,
         tool_hooks=None,
         tool_resources={},
@@ -351,3 +386,28 @@ def test_build_action_agent_returns_action_turn_plan() -> None:
     assert isinstance(plan, ActionTurnPlan)
     assert "test message" in plan.user_message
     assert plan.agent is not None
+
+
+def test_turn_resolved_integrations_trusts_plan_without_reresolving(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With a plan present, the resolved view is read from it — never re-resolved.
+
+    Pins the single-resolve contract for the empty-integrations edge: an empty
+    ``{}`` on the plan is authoritative, not a signal to resolve again.
+    """
+    from dataclasses import replace
+
+    from core.agent_harness.models.turn_snapshot import TurnSnapshot
+    from core.agent_harness.turns.turn_plan import TurnPlan
+
+    def _must_not_run(_session: object) -> dict:
+        raise AssertionError("must not re-resolve when the plan is present")
+
+    monkeypatch.setattr(
+        "core.agent_harness.turns.action_driver.resolve_and_cache_integrations", _must_not_run
+    )
+    snapshot = replace(TurnSnapshot.from_session("q", Session()), resolved_integrations={})
+    plan = TurnPlan(snapshot=snapshot)
+
+    assert _turn_resolved_integrations(Session(), plan) == {}

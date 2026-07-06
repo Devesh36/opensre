@@ -38,7 +38,7 @@ from core.agent_harness.session.tasks import TaskRegistry
 from core.agent_harness.session.terminal_metrics import TerminalMetrics
 from core.agent_harness.session.token_usage import TokenUsage
 from core.agent_harness.session.types import SessionStorage
-from core.context.state import MutableAgentState
+from core.state import MutableAgentState
 
 # Prefilled into the next prompt after a background synthetic test exits non-zero,
 # so the user can ask the CLI assistant for a quick RCA explanation.
@@ -355,7 +355,7 @@ class Session:
             return
         # ``config`` is the shared layer both ``core`` and ``surfaces`` can
         # depend on; the constant used to live in ``surfaces.cli.tests.discover``
-        # but that direct edge is a T-4 layering violation (issue #3352).
+        # but that direct edge is a layering violation (T-06, issue #3539).
         try:
             from config.synthetic_paths import SYNTHETIC_SCENARIOS_DIR
         except Exception:

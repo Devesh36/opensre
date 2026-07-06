@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.agent_harness.models.turn_context import TurnContext
+from core.agent_harness.models.turn_snapshot import TurnSnapshot
 from core.agent_harness.prompts import (
     _SYSTEM_PROMPT_BASE,
     build_action_system_prompt,
@@ -20,8 +20,8 @@ def _ctx(
     messages: list[tuple[str, str]] | None = None,
     integrations: tuple[str, ...] = (),
     integrations_known: bool = False,
-) -> TurnContext:
-    return TurnContext(
+) -> TurnSnapshot:
+    return TurnSnapshot(
         text="",
         conversation_messages=tuple(messages or []),
         configured_integrations=integrations,
@@ -195,7 +195,7 @@ def test_local_llama_handoff_guidance_block() -> None:
 
 
 def test_local_llama_handoff_injects_setup_guidance_into_assistant_prompt() -> None:
-    turn_ctx = TurnContext(
+    turn_snapshot = TurnSnapshot(
         text="please connect to local llama",
         conversation_messages=(),
         configured_integrations=(),
@@ -210,7 +210,7 @@ def test_local_llama_handoff_injects_setup_guidance_into_assistant_prompt() -> N
         tool_observation=None,
         tool_observation_on_screen=True,
         handoff_contents=("provider:local_llama_connect",),
-        turn_ctx=turn_ctx,
+        turn_snapshot=turn_snapshot,
     )
 
     assert "opensre onboard local_llm" in prompt

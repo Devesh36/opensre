@@ -19,8 +19,8 @@ from rich.console import Console
 import core as runtime_module
 import core.llm.agent_llm_client as agent_llm_client
 import tools.investigation.stages.gather_evidence.tools as investigate_tools
-from core.agent_harness.agents.evidence_agent import EvidenceAgentFactory
 from core.agent_harness.session import Session
+from core.agent_harness.turns.evidence_driver import GatherAgentFactory
 from core.llm.types import ToolCall
 from surfaces.interactive_shell.runtime.integration_tool_gathering import (
     _format_gathering_progress_line,
@@ -42,7 +42,7 @@ class _DummyTool:
         self.source = source
 
 
-def _stub_agent_factory(run: _FakeRun) -> EvidenceAgentFactory:
+def _stub_agent_factory(run: _FakeRun) -> GatherAgentFactory:
     """Return a factory that runs real gather setup but stubs ``Agent.run``."""
 
     class _StubAgent:
@@ -297,6 +297,38 @@ def test_resolve_gather_integrations_uses_session_cache_on_follow_up() -> None:
     ]
 
     resolved = _resolve_gather_integrations(session, "do these searches")
+
+    assert resolved["github"]["owner"] == "Tracer-Cloud"
+    assert resolved["github"]["repo"] == "opensre"
+
+
+def test_resolve_gather_integrations_uses_passed_turn_view() -> None:
+    """When the turn's resolved view is supplied, it is the base — no session re-resolve."""
+    session = Session()
+    # The session cache holds a different integration than the turn resolved this turn.
+    session.resolved_integrations_cache = {"datadog": {"connection_verified": True}}
+    turn_resolved = {"slack": {"connection_verified": True}}
+
+    resolved = _resolve_gather_integrations(
+        session, "post an update", resolved_integrations=turn_resolved
+    )
+
+    assert resolved == {"slack": {"connection_verified": True}}
+
+
+def test_resolve_gather_integrations_applies_github_scope_over_passed_view() -> None:
+    """GitHub repo scope is still enriched on top of the passed turn view."""
+    session = Session()
+    session.resolved_integrations_cache = {}
+    turn_resolved = {
+        "github": {"connection_verified": True, "url": "https://api.githubcopilot.com/mcp/"}
+    }
+
+    resolved = _resolve_gather_integrations(
+        session,
+        "check github issues in https://github.com/Tracer-Cloud/opensre",
+        resolved_integrations=turn_resolved,
+    )
 
     assert resolved["github"]["owner"] == "Tracer-Cloud"
     assert resolved["github"]["repo"] == "opensre"

@@ -56,10 +56,8 @@ _BASELINE_IGNORES: frozenset[str] = frozenset(
         # "approval-required" sentinels instead of calling execution_confirm
         # directly) so the surface owns its own confirmation UX.
         "tools.interactive_shell.actions.cli_command -> surfaces.interactive_shell.runtime.subprocess_runner",
-        "tools.interactive_shell.actions.investigation -> surfaces.interactive_shell.runtime",
         "tools.interactive_shell.actions.llm_provider -> surfaces.interactive_shell.command_registry",
         "tools.interactive_shell.actions.llm_provider -> surfaces.interactive_shell.ui.execution_confirm",
-        "tools.interactive_shell.actions.sample_alert -> surfaces.interactive_shell.runtime",
         "tools.interactive_shell.actions.slash -> surfaces.interactive_shell.command_registry",
         "tools.interactive_shell.actions.slash -> surfaces.interactive_shell.command_registry.slash_catalog",
         "tools.interactive_shell.actions.slash -> surfaces.interactive_shell.ui",
@@ -73,9 +71,6 @@ _BASELINE_IGNORES: frozenset[str] = frozenset(
         "tools.interactive_shell.implementation.claude_code_executor -> surfaces.interactive_shell.ui",
         "tools.interactive_shell.implementation.claude_code_executor -> surfaces.interactive_shell.ui.execution_confirm",
         "tools.interactive_shell.implementation.claude_code_executor -> surfaces.interactive_shell.utils.error_handling.exception_reporting",
-        "tools.interactive_shell.shared.investigation_launch -> surfaces.interactive_shell.runtime",
-        "tools.interactive_shell.shared.investigation_launch -> surfaces.interactive_shell.ui.execution_confirm",
-        "tools.interactive_shell.shared.investigation_launch -> surfaces.interactive_shell.ui.foreground_investigation",
         "tools.interactive_shell.shell.runner -> surfaces.interactive_shell.runtime",
         "tools.interactive_shell.shell.runner -> surfaces.interactive_shell.runtime.subprocess_runner.task_streaming",
         "tools.interactive_shell.shell.runner -> surfaces.interactive_shell.ui",
@@ -96,10 +91,10 @@ _NESTED_BASELINE_IGNORES: frozenset[str] = frozenset(
     {
         # Hermes defers investigation pipeline import until an incident runs.
         "integrations.hermes.investigation -> tools.investigation.capability",
-        "tools.interactive_shell.actions.investigation -> surfaces.cli.investigation",
         "tools.interactive_shell.actions.investigation -> surfaces.interactive_shell.runtime.background.runner",
-        "tools.interactive_shell.actions.sample_alert -> surfaces.cli.investigation",
+        "tools.interactive_shell.actions.investigation -> surfaces.interactive_shell.runtime.investigation_adapter",
         "tools.interactive_shell.actions.sample_alert -> surfaces.interactive_shell.runtime.background.runner",
+        "tools.interactive_shell.actions.sample_alert -> surfaces.interactive_shell.runtime.investigation_adapter",
         "tools.interactive_shell.actions.llm_provider -> surfaces.cli.wizard.config",
         # Nested only: runner.py also has a module-level ui import (see _BASELINE_IGNORES).
         "tools.interactive_shell.shell.runner -> surfaces.interactive_shell.ui",

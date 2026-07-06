@@ -113,7 +113,7 @@ def _prompt_investigate_path(console: Console) -> str | None:
 
 def _cmd_template(session: Session, console: Console, args: list[str]) -> bool:
     from surfaces.cli.constants import ALERT_TEMPLATE_CHOICES
-    from surfaces.cli.investigation.alert_templates import build_alert_template
+    from tools.investigation.alert_templates import build_alert_template
 
     if not args and repl_tty_interactive():
         return _interactive_template_menu(session, console)
@@ -217,11 +217,11 @@ def _cmd_investigate_file(session: Session, console: Console, args: list[str]) -
     from platform.analytics.cli import track_investigation
     from platform.analytics.source import EntrypointSource, TriggerMode
     from surfaces.cli.constants import ALERT_TEMPLATE_CHOICES
-    from surfaces.cli.investigation import (
+    from surfaces.cli.investigation.payload import resolve_alert_path
+    from surfaces.interactive_shell.runtime.investigation_adapter import (
         run_investigation_for_session,
         run_sample_alert_for_session,
     )
-    from surfaces.cli.investigation.payload import resolve_alert_path
 
     if not args and repl_tty_interactive():
         return _interactive_investigate_menu(session, console)
