@@ -34,6 +34,14 @@ _mark_tests_for_analytics()
 
 
 @pytest.fixture(autouse=True)
+def _harness_ports_per_test() -> None:
+    """Wire harness ports before each test (idempotent; survives port-reset tests)."""
+    from surfaces.interactive_shell.ui.output.boundary import install_harness_ports
+
+    install_harness_ports()
+
+
+@pytest.fixture(autouse=True)
 def _restore_os_environ():
     """Snapshot and restore ``os.environ`` around every test.
 

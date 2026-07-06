@@ -63,6 +63,13 @@ def _looks_like_timeout(exc: BaseException) -> bool:
     return False
 
 
+def is_cli_timeout_error(exc: BaseException) -> bool:
+    """Return True when *exc* is a CLI subprocess timeout (expected on slow turns)."""
+    from integrations.llm_cli.errors import CLITimeoutError
+
+    return isinstance(exc, CLITimeoutError)
+
+
 def classify_llm_invoke_failure(exc: BaseException) -> LLMInvokeFailure | None:
     """Return a structured failure when *exc* is a known operational LLM error.
 
