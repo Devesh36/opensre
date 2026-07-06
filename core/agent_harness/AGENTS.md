@@ -16,7 +16,7 @@ terminal and be invoked headlessly via `agent_harness.turns.headless_dispatch`.
   one-way: `interactive_shell -> agent_harness -> core`.
 - `agent_harness/` may depend on `core/`, `config/`, and `platform/`. It must not
   import `integrations/`, `tools/`, `surfaces/`, or `gateway/`. Integration and tool
-  behavior reaches the harness through ports in `platform/harness_ports/`, wired at
+  behavior reaches the harness through ports in `platform/harness_ports.py`, wired at
   startup via `install_harness_ports()` in `surfaces/interactive_shell/ui/output/boundary.py`
   (called from `install_product_adapters()`).
   It must not depend on terminal UI concerns (Rich rendering,
