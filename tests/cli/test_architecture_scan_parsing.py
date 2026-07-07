@@ -65,12 +65,16 @@ def test_architecture_scan_args_include_issue_numbers(args: list[str], expected:
 
 
 def test_architecture_scan_github_repo_argument_extracts_explicit_repo() -> None:
-    assert architecture_scan_github_repo_argument(
-        ["propose", _EXTERNAL_REPO, "--repo-root", "/tmp"]
-    ) == _EXTERNAL_REPO
-    assert architecture_scan_github_repo_argument(
-        ["--repo-root", "/tmp", "file-issues", "example/external"]
-    ) == "example/external"
+    assert (
+        architecture_scan_github_repo_argument(["propose", _EXTERNAL_REPO, "--repo-root", "/tmp"])
+        == _EXTERNAL_REPO
+    )
+    assert (
+        architecture_scan_github_repo_argument(
+            ["--repo-root", "/tmp", "file-issues", "example/external"]
+        )
+        == "example/external"
+    )
 
 
 def test_architecture_scan_github_repo_argument_returns_none_without_repo() -> None:
