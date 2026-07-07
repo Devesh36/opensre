@@ -6,6 +6,8 @@ import subprocess
 import tempfile
 import threading
 
+import pytest
+
 from tools.interactive_shell.subprocess import (
     read_diag,
     subprocess_env_with_width,
@@ -14,10 +16,17 @@ from tools.interactive_shell.subprocess import (
 )
 
 
-def test_subprocess_env_with_width_reserves_prefix() -> None:
+def test_subprocess_env_with_width_reserves_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("LINES", raising=False)
     env = subprocess_env_with_width(columns=100, lines=30)
     assert env["COLUMNS"] == "81"
     assert env["LINES"] == "30"
+
+
+def test_subprocess_env_with_width_preserves_existing_lines(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LINES", "24")
+    env = subprocess_env_with_width(columns=100, lines=30)
+    assert env["LINES"] == "24"
 
 
 def test_read_diag_strips_ansi() -> None:

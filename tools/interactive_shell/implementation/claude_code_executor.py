@@ -144,7 +144,7 @@ def run_claude_code_to_completion(
     proc: subprocess.Popen[str],
     invocation: ClaudeInvocation,
     *,
-    cancel_requested: bool,
+    cancel_event: threading.Event,
 ) -> ClaudeCodeRunResult:
     timed_out = False
     try:
@@ -160,7 +160,7 @@ def run_claude_code_to_completion(
     out = (stdout or "")[:MAX_COMMAND_OUTPUT_CHARS]
     err = (stderr or "")[:MAX_COMMAND_OUTPUT_CHARS]
     code = proc.returncode
-    cancelled = cancel_requested and code != 0
+    cancelled = cancel_event.is_set() and code != 0
     return ClaudeCodeRunResult(
         stdout=out,
         stderr=err,
@@ -240,7 +240,7 @@ def run_claude_code_implementation(request: str, presenter: SubprocessPresenter)
             result = run_claude_code_to_completion(
                 proc,
                 invocation,
-                cancel_requested=task.cancel_requested.is_set(),
+                cancel_event=task.cancel_requested,
             )
             if result.timed_out:
                 task.mark_failed(f"timed out after {CLAUDE_CODE_IMPLEMENTATION_TIMEOUT_SECONDS}s")

@@ -188,7 +188,6 @@ __all__ = [
     "_TASK_OUTPUT_PREFIX_WIDTH",
     "_MIN_SUBPROCESS_TERMINAL_WIDTH",
     "_TASK_OUTPUT_JOIN_TIMEOUT_SECONDS",
-    "_TASK_OUTPUT_JOIN_TIMEOUT_SECONDS",
     "terminate_child_process",
     "read_diag",
     "read_task_output",

@@ -140,7 +140,6 @@ class SubprocessPresenter(Protocol):
     @property
     def session(self) -> Any:
         """Mutable per-turn session (``core.agent_harness.session.Session``)."""
-        ...
 
     def execution_allowed(
         self,
@@ -149,31 +148,24 @@ class SubprocessPresenter(Protocol):
         action_summary: str,
     ) -> bool:
         """Apply execution policy UX and return whether the action may proceed."""
-        ...
 
     def print(self, message: str = "") -> None:
         """Print a Rich-markup message."""
-        ...
 
     def print_bold_command(self, display_command: str) -> None:
         """Print a ``$ <command>`` header line."""
-        ...
 
     def print_command_output(self, text: str, *, style: str | None = None) -> None:
         """Print captured subprocess stdout/stderr."""
-        ...
 
     def print_plain(self, text: str) -> None:
         """Print plain text without Rich markup interpretation."""
-        ...
 
     def report_exception(self, exc: BaseException, *, context: str) -> None:
         """Report an unexpected exception to observability."""
-        ...
 
     def subprocess_env(self) -> dict[str, str]:
         """Environment for child subprocesses with terminal width alignment."""
-        ...
 
     def start_task_output_streams(
         self,
@@ -184,11 +176,9 @@ class SubprocessPresenter(Protocol):
         stderr_capture: tempfile.SpooledTemporaryFile[bytes] | None = None,  # type: ignore[type-arg]
     ) -> list[threading.Thread]:
         """Start relay threads for a background task's stdout/stderr."""
-        ...
 
     def join_task_output_streams(self, threads: list[threading.Thread]) -> None:
         """Wait briefly for relay threads to finish."""
-        ...
 
     def start_background_cli_task(
         self,
@@ -200,7 +190,6 @@ class SubprocessPresenter(Protocol):
         use_pty: bool = False,
     ) -> Any:
         """Launch a background opensre CLI subprocess with streamed output."""
-        ...
 
 
 def require_subprocess_presenter(ctx: ActionToolContext) -> SubprocessPresenter:

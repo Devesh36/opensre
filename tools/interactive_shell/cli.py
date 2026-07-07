@@ -262,18 +262,15 @@ def run_foreground_cli(
     )
 
 
-def spawn_streaming_cli(argv_list: list[str]) -> subprocess.Popen[str] | None:
-    try:
-        return subprocess.Popen(
-            argv_list,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
-    except Exception:
-        return None
+def spawn_streaming_cli(argv_list: list[str]) -> subprocess.Popen[str]:
+    return subprocess.Popen(
+        argv_list,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
 
 
 def _print_wizard_handoff(presenter: SubprocessPresenter, command_str: str) -> None:
@@ -323,9 +320,14 @@ def _run_streaming_via_presenter(
     display_command: str,
 ) -> None:
     presenter.print_bold_command(display_command)
-    proc = spawn_streaming_cli(argv_list)
-    if proc is None:
-        presenter.print("[error]failed to start:[/]")
+    try:
+        proc = spawn_streaming_cli(argv_list)
+    except Exception as exc:  # noqa: BLE001
+        presenter.report_exception(
+            exc,
+            context="surfaces.interactive_shell.opensre_cli.start",
+        )
+        presenter.print(f"[error]failed to start:[/] {exc}")
         presenter.session.record("cli_command", display_command, ok=False)
         return
     if proc.stdout is not None:
