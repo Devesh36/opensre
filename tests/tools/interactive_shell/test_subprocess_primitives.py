@@ -23,7 +23,9 @@ def test_subprocess_env_with_width_reserves_prefix(monkeypatch: pytest.MonkeyPat
     assert env["LINES"] == "30"
 
 
-def test_subprocess_env_with_width_preserves_existing_lines(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_subprocess_env_with_width_preserves_existing_lines(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("LINES", "24")
     env = subprocess_env_with_width(columns=100, lines=30)
     assert env["LINES"] == "24"

@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from rich.markup import escape
 
@@ -26,13 +26,11 @@ from platform.observability.sentry_sdk import capture_exception
 
 log = logging.getLogger(__name__)
 
-if TYPE_CHECKING:
-    from tools.interactive_shell.subprocess import SubprocessPresenter
-
 ActionObserverFactory = Callable[[Any, Any, str], ToolEventObserver]
+# Return value is tools.interactive_shell.subprocess.SubprocessPresenter (surface-injected).
 SubprocessPresenterFactory = Callable[
     [Any, Any, ConfirmFn | None, bool | None, bool],
-    "SubprocessPresenter",
+    Any,
 ]
 _TOOL_INPUT_LOG_PREVIEW_LIMIT = 500
 
