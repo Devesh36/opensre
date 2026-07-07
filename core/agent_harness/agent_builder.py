@@ -8,38 +8,37 @@ the single construction site for :class:`~core.agent.Agent` across surfaces.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, TypeVar
+from typing import Any, Generic, TypeVar
 
 from core.agent import Agent
 from core.events import RuntimeEventCallback
 from core.execution import ToolExecutionHooks
+from core.llm.types import AgentLLMClient, ResolvedIntegrations
 from core.types import RuntimeTool
 
-# Pre-PEP-695 TypeVar so static analysers (CodeQL) recognise the type parameter
-# rather than flagging ``RuntimeToolT`` in the return expression as an
-# uninitialised local variable. Same bound as :class:`~core.agent.Agent`'s
-# ``RuntimeToolT``.
 RuntimeToolT = TypeVar("RuntimeToolT", bound=RuntimeTool)
 
 
 @dataclass(frozen=True)
-class AgentConfig:
+class AgentConfig(Generic[RuntimeToolT]):  # noqa: UP046
     """Immutable per-turn config the runtime :class:`Agent` needs to construct.
 
     Surfaces assemble one of these and hand it to :func:`build_agent`.
     """
 
-    llm: Any
+    llm: AgentLLMClient
     system: str
-    tools: tuple[Any, ...]
-    resolved_integrations: dict[str, Any]
+    tools: tuple[RuntimeToolT, ...]
+    resolved_integrations: ResolvedIntegrations
     max_iterations: int
     tool_resources: dict[str, Any] = field(default_factory=dict)
     tool_hooks: ToolExecutionHooks | None = None
     on_runtime_event: RuntimeEventCallback | None = None
 
 
-def build_agent(config: AgentConfig) -> Agent[RuntimeToolT]:
+def build_agent(  # noqa: UP047
+    config: AgentConfig[RuntimeToolT],
+) -> Agent[RuntimeToolT]:
     """Construct a runtime :class:`Agent` from an :class:`AgentConfig`.
 
     This is the single place :class:`Agent` is instantiated across the

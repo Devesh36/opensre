@@ -11,7 +11,7 @@ def _literal_slash_command_text(text: str) -> str | None:
 
     Terminal-UI policy only (spinner suppression and exclusive-stdin gating). The
     matching execution-side deterministic dispatch lives separately in
-    ``core/agent_harness/agents/action_agent.py``; keep this function UI-only and do not
+    ``core/agent_harness/turns/action_driver.py``; keep this function UI-only and do not
     grow natural-language intent inference here.
     """
     stripped = text.strip()
@@ -77,7 +77,7 @@ _WAIT_FOR_COMPLETION_COMMANDS: frozenset[str] = frozenset(
 
 def _architecture_scan_needs_exclusive_stdin(args: list[str]) -> bool:
     """Plain scans print a long report and may show a GitHub follow-up picker."""
-    from surfaces.cli.commands.architecture_scan import architecture_scan_github_subcommand
+    from surfaces.cli.commands.architecture_scan_parsing import architecture_scan_github_subcommand
 
     if not args:
         return True
@@ -101,7 +101,7 @@ def turn_needs_exclusive_stdin(text: str, _session: Session) -> bool:
 
     # Reserve stdin early for literal command-shaped input, but do not dispatch
     # here. This stays UI-only; deterministic slash execution lives in the turn
-    # engine (core/agent_harness/agents/action_agent.py), not in this gating layer.
+    # engine (core/agent_harness/turns/action_driver.py), not in this gating layer.
     dispatch_text = _literal_slash_command_text(t)
     if dispatch_text is None:
         return False

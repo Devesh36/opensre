@@ -3,20 +3,8 @@ from __future__ import annotations
 from click.testing import CliRunner
 
 from surfaces.cli.__main__ import cli
-from surfaces.cli.commands.architecture_scan import architecture_scan_github_subcommand
 
 _GITHUB_REPO = "https://github.com/Tracer-Cloud/opensre"
-
-
-def test_architecture_scan_github_subcommand_skips_leading_flags() -> None:
-    assert (
-        architecture_scan_github_subcommand(["--include-baselines", "propose", _GITHUB_REPO])
-        == "propose"
-    )
-    assert architecture_scan_github_subcommand(["--repo-root", "/tmp", "file-issues"]) == (
-        "file-issues"
-    )
-    assert architecture_scan_github_subcommand(["--include-baselines"]) is None
 
 
 def test_architecture_scan_command_prints_report(tmp_path) -> None:
@@ -378,6 +366,43 @@ def test_architecture_scan_invalid_issue_numbers(tmp_path) -> None:
 
     assert result.exit_code != 0
     assert "Invalid issue number 'abc': must be an integer." in result.output
+
+
+def test_architecture_scan_file_issues_exits_error_when_mutation_fails(
+    tmp_path, monkeypatch
+) -> None:
+    integrations_dir = tmp_path / "integrations"
+    integrations_dir.mkdir()
+    (integrations_dir / "shim.py").write_text(
+        'from core.module import foo\n__all__ = ["foo"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+
+    def _failing_execute(owner: str, repo: str, proposal: dict) -> dict:  # noqa: ARG001
+        return {"error": "GitHub API error 403: forbidden"}
+
+    monkeypatch.setattr(
+        "integrations.github.tools.work_status.execute_github_issue_mutation",
+        _failing_execute,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "architecture-scan",
+            "file-issues",
+            _GITHUB_REPO,
+            "--repo-root",
+            str(tmp_path),
+            "--issue-numbers",
+            "0",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "failed: GitHub API error 403: forbidden" in result.output
 
 
 def test_architecture_scan_propose_succeeds_with_no_violations(tmp_path) -> None:

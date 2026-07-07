@@ -325,7 +325,10 @@ def _cmd_misses(session: Session, console: Console, args: list[str]) -> bool:  #
 
 
 def _cmd_architecture_scan(session: Session, console: Console, args: list[str]) -> bool:
-    from surfaces.cli.commands.architecture_scan import architecture_scan_github_subcommand
+    from surfaces.cli.commands.architecture_scan_parsing import (
+        architecture_scan_args_include_issue_numbers,
+        architecture_scan_github_subcommand,
+    )
 
     subcommand = architecture_scan_github_subcommand(args)
     if subcommand is not None:
@@ -335,7 +338,7 @@ def _cmd_architecture_scan(session: Session, console: Console, args: list[str]) 
             and subcommand in {"propose", "file-issues"}
             and repl_tty_interactive()
             and getattr(session, "exclusive_stdin_active", False)
-            and not _architecture_scan_args_include_issue_numbers(args)
+            and not architecture_scan_args_include_issue_numbers(args)
         ):
             _architecture_scan_offer_issue_numbers_follow_up(
                 console,
@@ -385,12 +388,13 @@ def _prepare_repl_inline_menu_stdin() -> None:
 
 
 def _architecture_scan_repo_scope(scan_args: list[str]) -> tuple[str, str]:
+    from surfaces.cli.commands.architecture_scan_parsing import architecture_scan_repo_root
     from tools.architecture_issue_tool.scan import (
         CANONICAL_OPENSRE_GITHUB_REPO,
         resolve_architecture_scan_github_repo_scope,
     )
 
-    scope = resolve_architecture_scan_github_repo_scope(cwd=_architecture_scan_repo_root(scan_args))
+    scope = resolve_architecture_scan_github_repo_scope(cwd=architecture_scan_repo_root(scan_args))
     return scope or CANONICAL_OPENSRE_GITHUB_REPO
 
 
@@ -425,6 +429,7 @@ def _run_architecture_scan_github_subcommand(
     scan_args: list[str],
 ) -> bool:
     from integrations.github.client import resolve_github_token
+    from surfaces.cli.commands.architecture_scan_parsing import architecture_scan_follow_up_cli_args
     from tools.architecture_issue_tool.scan import (
         GITHUB_TOKEN_SETUP_HINT,
         format_github_repo_url,
@@ -453,7 +458,7 @@ def _run_architecture_scan_github_subcommand(
     repl_section_break(console)
     run_cli_command(
         console,
-        _architecture_scan_follow_up_cli_args(choice, repo_url, scan_args),
+        architecture_scan_follow_up_cli_args(choice, repo_url, scan_args),
         capture_output=True,
     )
     _architecture_scan_offer_issue_numbers_follow_up(
@@ -464,10 +469,6 @@ def _run_architecture_scan_github_subcommand(
     return True
 
 
-def _architecture_scan_args_include_issue_numbers(scan_args: list[str]) -> bool:
-    return any(arg == "--issue-numbers" or arg.startswith("--issue-numbers=") for arg in scan_args)
-
-
 def _architecture_scan_offer_issue_numbers_follow_up(
     console: Console,
     *,
@@ -476,6 +477,7 @@ def _architecture_scan_offer_issue_numbers_follow_up(
 ) -> None:
     """After propose/file-issues, offer to rerun with ``--issue-numbers``."""
     from integrations.github.client import resolve_github_token
+    from surfaces.cli.commands.architecture_scan_parsing import architecture_scan_follow_up_cli_args
     from tools.architecture_issue_tool.scan import (
         GITHUB_TOKEN_SETUP_HINT,
         format_github_repo_url,
@@ -535,54 +537,10 @@ def _architecture_scan_offer_issue_numbers_follow_up(
 
         owner, repo = _architecture_scan_repo_scope(scan_args)
         repo_url = format_github_repo_url(owner, repo)
-        cli_args = _architecture_scan_follow_up_cli_args(choice, repo_url, scan_args)
+        cli_args = architecture_scan_follow_up_cli_args(choice, repo_url, scan_args)
         cli_args.extend(["--issue-numbers", ",".join(str(index) for index in indices)])
         repl_section_break(console)
         run_cli_command(console, cli_args, capture_output=True)
-
-
-def _architecture_scan_repo_root(scan_args: list[str]) -> Path | None:
-    """Parse ``--repo-root`` from architecture-scan args when provided."""
-    for index, arg in enumerate(scan_args):
-        if arg == "--repo-root":
-            if index + 1 < len(scan_args):
-                value = scan_args[index + 1].strip()
-                if value:
-                    return Path(value).expanduser()
-            return None
-        if arg.startswith("--repo-root="):
-            value = arg.split("=", 1)[1].strip()
-            if value:
-                return Path(value).expanduser()
-            return None
-    return None
-
-
-def _architecture_scan_follow_up_cli_args(
-    choice: str,
-    repo_url: str,
-    scan_args: list[str],
-) -> list[str]:
-    """Build follow-up CLI args, preserving scan flags from the original scan."""
-    follow_up = ["architecture-scan", choice, repo_url]
-    index = 0
-    while index < len(scan_args):
-        arg = scan_args[index]
-        if arg in {"--repo-root", "--max-file-lines"}:
-            if index + 1 < len(scan_args):
-                follow_up.extend([arg, scan_args[index + 1]])
-            index += 2
-            continue
-        if arg == "--include-baselines":
-            follow_up.append(arg)
-            index += 1
-            continue
-        if arg.startswith("--repo-root=") or arg.startswith("--max-file-lines="):
-            follow_up.append(arg)
-            index += 1
-            continue
-        index += 1
-    return follow_up
 
 
 COMMANDS: list[SlashCommand] = [

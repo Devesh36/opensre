@@ -11,13 +11,13 @@ from click.core import ParameterSource
 
 from platform.common.exit_codes import ERROR, SUCCESS
 from platform.common.runtime_flags import is_json_output
+from surfaces.cli.commands.architecture_scan_parsing import (
+    parse_issue_numbers_option,
+    resolve_github_repo_for_subcommand,
+)
 from tools.architecture_issue_tool.scan import (
-    CANONICAL_OPENSRE_GITHUB_REPO,
     format_file_issues_report_text,
     format_propose_report_text,
-    parse_github_repo_argument,
-    parse_issue_numbers,
-    resolve_architecture_scan_github_repo_scope,
     run_architecture_scan,
     run_architecture_scan_and_file_github_issues,
     run_architecture_scan_and_propose_github_issues,
@@ -49,62 +49,6 @@ def _scan_options(func: Any) -> Any:
     for option in reversed(options):
         decorated = option(decorated)
     return decorated
-
-
-def _subcommand_scan_options(func: Any) -> Any:
-    options = (
-        click.option(
-            "--repo-root",
-            default=None,
-            type=click.Path(exists=False, file_okay=False, dir_okay=True, resolve_path=True),
-            help="Repository root to scan (default: current checkout).",
-        ),
-        click.option(
-            "--max-file-lines",
-            default=500,
-            show_default=True,
-            type=int,
-            help="Non-blank line limit for oversized-file detection.",
-        ),
-        click.option(
-            "--include-baselines",
-            is_flag=True,
-            help="Include known baseline dependency debt tracked in CI.",
-        ),
-    )
-    decorated = func
-    for option in reversed(options):
-        decorated = option(decorated)
-    return decorated
-
-
-ARCHITECTURE_SCAN_GITHUB_SUBCOMMANDS = frozenset({"propose", "file-issues"})
-_SCAN_OPTION_FLAGS = frozenset({"--repo-root", "--max-file-lines", "--issue-numbers"})
-_SCAN_FLAG_ONLY = frozenset({"--include-baselines"})
-
-
-def architecture_scan_github_subcommand(args: list[str]) -> str | None:
-    """Return ``propose``/``file-issues`` when present, skipping scan-only flags."""
-    i = 0
-    while i < len(args):
-        token = args[i]
-        if token in _SCAN_OPTION_FLAGS:
-            i += 2
-            continue
-        if token in _SCAN_FLAG_ONLY:
-            i += 1
-            continue
-        if any(token.startswith(f"{flag}=") for flag in _SCAN_OPTION_FLAGS):
-            i += 1
-            continue
-        if token.startswith("-"):
-            i += 1
-            continue
-        lowered = token.lower()
-        if lowered in ARCHITECTURE_SCAN_GITHUB_SUBCOMMANDS:
-            return lowered
-        return None
-    return None
 
 
 def _scan_kwargs(ctx: click.Context) -> dict[str, Any]:
@@ -188,32 +132,6 @@ def _exit_for_issue_results(result: dict[str, Any]) -> None:
     raise SystemExit(SUCCESS)
 
 
-def _parse_issue_numbers_option(issue_numbers: str | None) -> list[int] | None:
-    try:
-        return parse_issue_numbers(issue_numbers)
-    except ValueError as exc:
-        raise click.BadParameter(str(exc), param_hint="'--issue-numbers'") from None
-
-
-def _parse_github_repo_option(value: str) -> tuple[str, str]:
-    try:
-        return parse_github_repo_argument(value)
-    except ValueError as exc:
-        raise click.BadParameter(str(exc), param_hint="'GITHUB_REPO'") from None
-
-
-def _resolve_github_repo_for_subcommand(
-    github_repo: str | None,
-    repo_root: str | None,
-) -> tuple[str, str]:
-    if github_repo and github_repo.strip():
-        return _parse_github_repo_option(github_repo.strip())
-    scope = resolve_architecture_scan_github_repo_scope(repo_root)
-    if scope:
-        return scope
-    return CANONICAL_OPENSRE_GITHUB_REPO
-
-
 @click.group(name="architecture-scan", invoke_without_command=True)
 @_scan_options
 @click.pass_context
@@ -233,7 +151,7 @@ def architecture_scan_group(
 
 
 @architecture_scan_group.command(name="propose")
-@_subcommand_scan_options
+@_scan_options
 @click.argument("github_repo", required=False, default=None)
 @click.option(
     "--issue-numbers",
@@ -252,11 +170,11 @@ def architecture_scan_propose_command(
     issue_numbers: str | None,
 ) -> None:
     """Scan, then build read-only GitHub create-issue proposals."""
-    owner, repo = _resolve_github_repo_for_subcommand(github_repo, repo_root)
+    owner, repo = resolve_github_repo_for_subcommand(github_repo, repo_root)
     result = run_architecture_scan_and_propose_github_issues(
         owner=owner,
         repo=repo,
-        issue_numbers=_parse_issue_numbers_option(issue_numbers),
+        issue_numbers=parse_issue_numbers_option(issue_numbers),
         **_merged_scan_kwargs(ctx, repo_root, max_file_lines, include_baselines),
     )
     _emit_text_or_json(result, formatter=format_propose_report_text)
@@ -264,7 +182,7 @@ def architecture_scan_propose_command(
 
 
 @architecture_scan_group.command(name="file-issues")
-@_subcommand_scan_options
+@_scan_options
 @click.argument("github_repo", required=False, default=None)
 @click.option(
     "--issue-numbers",
@@ -283,11 +201,11 @@ def architecture_scan_file_issues_command(
     issue_numbers: str | None,
 ) -> None:
     """Scan, propose GitHub issues, and create them on GitHub."""
-    owner, repo = _resolve_github_repo_for_subcommand(github_repo, repo_root)
+    owner, repo = resolve_github_repo_for_subcommand(github_repo, repo_root)
     result = run_architecture_scan_and_file_github_issues(
         owner=owner,
         repo=repo,
-        issue_numbers=_parse_issue_numbers_option(issue_numbers),
+        issue_numbers=parse_issue_numbers_option(issue_numbers),
         **_merged_scan_kwargs(ctx, repo_root, max_file_lines, include_baselines),
     )
     _emit_text_or_json(result, formatter=format_file_issues_report_text)

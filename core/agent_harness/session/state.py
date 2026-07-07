@@ -38,7 +38,7 @@ from core.agent_harness.session.tasks import TaskRegistry
 from core.agent_harness.session.terminal_metrics import TerminalMetrics
 from core.agent_harness.session.token_usage import TokenUsage
 from core.agent_harness.session.types import SessionStorage
-from core.context.state import MutableAgentState
+from core.state import MutableAgentState
 
 # Prefilled into the next prompt after a background synthetic test exits non-zero,
 # so the user can ask the CLI assistant for a quick RCA explanation.
@@ -280,6 +280,14 @@ class Session:
     prompt_refresh_fn: Callable[[], None] | None = field(default=None, repr=False)
     """Loop-owned hook to apply pending prefill and redraw the active prompt."""
 
+    fleet_sampler_starter: Callable[[], None] | None = field(default=None, repr=False)
+    """Loop-owned hook to lazily start the fleet sampler on first live ``/fleet`` use.
+
+    Set by the interactive-shell controller so the sampler (and its ``psutil``
+    dependency) stays out of base REPL startup and only runs when fleet
+    monitoring is actually requested. Thread-safe: the starter marshals task
+    creation onto the REPL event loop."""
+
     last_synthetic_observation_path: str | None = None
     """Absolute path to ``latest.json`` for the last finished synthetic run (set on failure)."""
 
@@ -329,6 +337,11 @@ class Session:
         if self.prompt_refresh_fn is not None:
             self.prompt_refresh_fn()
 
+    def ensure_fleet_sampler_started(self) -> None:
+        """Request that the fleet sampler start (no-op if unwired or already running)."""
+        if self.fleet_sampler_starter is not None:
+            self.fleet_sampler_starter()
+
     def enqueue_background_notice(self, message: str) -> None:
         """Queue a background-thread status line for the main REPL loop to print."""
         with self._background_notices_lock:
@@ -355,7 +368,7 @@ class Session:
             return
         # ``config`` is the shared layer both ``core`` and ``surfaces`` can
         # depend on; the constant used to live in ``surfaces.cli.tests.discover``
-        # but that direct edge is a T-4 layering violation (issue #3352).
+        # but that direct edge is a layering violation (T-06, issue #3539).
         try:
             from config.synthetic_paths import SYNTHETIC_SCENARIOS_DIR
         except Exception:
@@ -502,7 +515,7 @@ class Session:
         or an investigation starts.
         """
         try:
-            from integrations.catalog import configured_integration_services
+            from platform.harness_ports import configured_integration_services
 
             self.configured_integrations = tuple(sorted(configured_integration_services()))
             self.configured_integrations_known = True
@@ -709,3 +722,4 @@ class Session:
         with self._background_notices_lock:
             self.background_notices.clear()
         self.prompt_refresh_fn = None
+        self.fleet_sampler_starter = None
