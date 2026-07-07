@@ -27,6 +27,7 @@ from surfaces.interactive_shell.runtime.subprocess_runner import (
     start_background_cli_task,
     terminate_child_process,
 )
+from surfaces.interactive_shell.runtime.subprocess_runner.repl_presenter import make_repl_presenter
 from tools.interactive_shell.implementation.claude_code_executor import (
     run_claude_code_implementation,
 )
@@ -42,6 +43,23 @@ from tools.interactive_shell.synthetic.runner import (
     run_synthetic_test,
     watch_synthetic_subprocess,
 )
+
+
+def _presenter(
+    session: Session,
+    console: Console,
+    *,
+    confirm_fn: object = None,
+    is_tty: bool | None = None,
+    action_already_listed: bool = False,
+):
+    return make_repl_presenter(
+        session,
+        console,
+        confirm_fn=confirm_fn,
+        is_tty=is_tty,
+        action_already_listed=action_already_listed,
+    )
 
 
 class _ImmediateThread:
@@ -111,7 +129,7 @@ def test_run_pwd_command_prints_cwd(monkeypatch: pytest.MonkeyPatch) -> None:
     buf = io.StringIO()
     console = Console(file=buf, force_terminal=False)
 
-    run_pwd_command("pwd", session, console)
+    run_pwd_command("pwd", _presenter(session, console))
     assert "/shown/pwd" in buf.getvalue()
     assert session.history[-1]["type"] == "shell"
 
@@ -121,7 +139,7 @@ def test_run_pwd_command_rejects_multiple_tokens() -> None:
     buf = io.StringIO()
     console = Console(file=buf, force_terminal=False)
 
-    run_pwd_command("pwd extra", session, console)
+    run_pwd_command("pwd extra", _presenter(session, console))
     assert "too many arguments" in buf.getvalue().lower()
     assert session.history[-1]["ok"] is False
 
@@ -133,7 +151,7 @@ def test_run_cd_command_chdirs_to_target(monkeypatch: pytest.MonkeyPatch) -> Non
         directories.append(target)
 
     monkeypatch.setattr(
-        "surfaces.interactive_shell.runtime.subprocess_runner.os.chdir",
+        "tools.interactive_shell.shell.runner.os.chdir",
         _chdir,
     )
 
@@ -141,7 +159,7 @@ def test_run_cd_command_chdirs_to_target(monkeypatch: pytest.MonkeyPatch) -> Non
     buf = io.StringIO()
     console = Console(file=buf, force_terminal=False)
 
-    run_cd_command("cd /tmp/example", session, console)
+    run_cd_command("cd /tmp/example", _presenter(session, console))
     assert directories == [Path("/tmp/example")]
     assert session.history[-1]["type"] == "shell"
 
@@ -153,7 +171,7 @@ def test_run_cd_command_reports_chdir_failure(monkeypatch: pytest.MonkeyPatch) -
         raise OSError("permission denied")
 
     monkeypatch.setattr(
-        "surfaces.interactive_shell.runtime.subprocess_runner.os.chdir",
+        "tools.interactive_shell.shell.runner.os.chdir",
         _chdir,
     )
     monkeypatch.setattr(
@@ -165,7 +183,7 @@ def test_run_cd_command_reports_chdir_failure(monkeypatch: pytest.MonkeyPatch) -
     buf = io.StringIO()
     console = Console(file=buf, force_terminal=False)
 
-    run_cd_command("cd /root/blocked", session, console)
+    run_cd_command("cd /root/blocked", _presenter(session, console))
 
     assert "cd failed" in buf.getvalue()
     assert len(captured_errors) == 1
@@ -191,10 +209,7 @@ def test_run_shell_command_records_when_input_is_empty() -> None:
 
     run_shell_command(
         "!",
-        session,
-        console,
-        confirm_fn=lambda _p: "n",
-        is_tty=True,
+        _presenter(session, console, confirm_fn=lambda _p: "n", is_tty=True),
     )
 
     out = buf.getvalue()
@@ -285,10 +300,7 @@ def test_run_claude_code_implementation_starts_tracked_task(
 
     run_claude_code_implementation(
         "implement",
-        session,
-        console,
-        confirm_fn=lambda _prompt: "y",
-        is_tty=True,
+        _presenter(session, console, confirm_fn=lambda _prompt: "y", is_tty=True),
     )
 
     assert len(popen_calls) == 1
@@ -319,10 +331,7 @@ def test_run_claude_code_implementation_rejects_vague_request_without_context() 
 
     run_claude_code_implementation(
         "implement",
-        session,
-        console,
-        confirm_fn=lambda _prompt: "y",
-        is_tty=True,
+        _presenter(session, console, confirm_fn=lambda _prompt: "y", is_tty=True),
     )
 
     assert "too vague" in buf.getvalue()
@@ -352,7 +361,7 @@ def test_run_shell_command_silent_success_prints_checkmark(monkeypatch: pytest.M
     buf = io.StringIO()
     console = Console(file=buf, force_terminal=False)
 
-    run_shell_command("true", session, console)
+    run_shell_command("true", _presenter(session, console))
     assert "✓" in buf.getvalue()
     assert session.history[-1] == {"type": "shell", "text": "true", "ok": True}
 
@@ -381,7 +390,7 @@ def test_run_shell_command_success_records_stdout_without_stderr_noise(
     buf = io.StringIO()
     console = Console(file=buf, force_terminal=False)
 
-    result = run_shell_command("curl wttr.in/Hawaii?format=3", session, console)
+    result = run_shell_command("curl wttr.in/Hawaii?format=3", _presenter(session, console))
 
     assert session.history[-1] == {
         "type": "shell",
@@ -417,7 +426,7 @@ def test_run_shell_command_failure_prints_exit_line(monkeypatch: pytest.MonkeyPa
     buf = io.StringIO()
     console = Console(file=buf, force_terminal=False)
 
-    run_shell_command("false", session, console)
+    run_shell_command("false", _presenter(session, console))
     out = buf.getvalue()
     assert "✗" in out
     assert "exit 7" in out
@@ -448,7 +457,7 @@ def test_run_shell_command_reports_start_failure(monkeypatch: pytest.MonkeyPatch
     buf = io.StringIO()
     console = Console(file=buf, force_terminal=False)
 
-    run_shell_command("true", session, console)
+    run_shell_command("true", _presenter(session, console))
 
     assert "command failed to start" in buf.getvalue()
     assert len(captured_errors) == 1
@@ -553,7 +562,7 @@ def test_run_opensre_agents_watch_runs_in_foreground(
         return _FakeProcess()
 
     monkeypatch.setattr(
-        "surfaces.interactive_shell.runtime.subprocess_runner.subprocess.Popen",
+        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
         _fake_popen,
     )
 
@@ -630,7 +639,7 @@ def test_start_background_cli_task_uses_pty_for_live_terminal_output(
         lambda fd: closed_fds.append(fd),
     )
     monkeypatch.setattr(
-        "surfaces.interactive_shell.runtime.subprocess_runner.subprocess.Popen",
+        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
         _fake_popen,
     )
     monkeypatch.setattr(
@@ -687,7 +696,7 @@ def test_start_background_cli_task_falls_back_to_pipes_when_pty_unavailable(
         raising=False,
     )
     monkeypatch.setattr(
-        "surfaces.interactive_shell.runtime.subprocess_runner.subprocess.Popen",
+        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
         _fake_popen,
     )
     monkeypatch.setattr(
@@ -741,7 +750,7 @@ def test_start_background_cli_task_logs_failure_outcome_to_posthog(
             return 1
 
     monkeypatch.setattr(
-        "surfaces.interactive_shell.runtime.subprocess_runner.subprocess.Popen",
+        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
         lambda _command, **_kwargs: _FakeProcess(),
     )
     monkeypatch.setattr(
@@ -799,7 +808,7 @@ def test_start_background_cli_task_logs_success_outcome_to_posthog(
             return 0
 
     monkeypatch.setattr(
-        "surfaces.interactive_shell.runtime.subprocess_runner.subprocess.Popen",
+        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
         lambda _command, **_kwargs: _FakeProcess(),
     )
     monkeypatch.setattr(
@@ -907,7 +916,7 @@ def test_start_background_cli_task_reports_spawn_failure(
         lambda exc, **_kwargs: captured_errors.append(exc),
     )
     monkeypatch.setattr(
-        "surfaces.interactive_shell.runtime.subprocess_runner.subprocess.Popen",
+        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
         _fake_popen,
     )
 
@@ -951,7 +960,7 @@ def test_start_background_cli_task_reports_watcher_failure(
         lambda exc, **_kwargs: captured_errors.append(exc),
     )
     monkeypatch.setattr(
-        "surfaces.interactive_shell.runtime.subprocess_runner.subprocess.Popen",
+        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
         _fake_popen,
     )
     monkeypatch.setattr(
@@ -1022,7 +1031,7 @@ def test_start_background_cli_task_skips_follow_up_after_session_reset(
         _DeferredThread,
     )
     monkeypatch.setattr(
-        "surfaces.interactive_shell.runtime.subprocess_runner.subprocess.Popen",
+        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
         _fake_popen,
     )
 
@@ -1076,10 +1085,9 @@ def test_watch_synthetic_subprocess_reports_daemon_failure(
         watch_synthetic_subprocess(
             task,
             _FakeProcess(),  # type: ignore[arg-type]
-            session,
+            _presenter(session, console),
             "suite:001-test",
             stderr_buf,
-            console,
         )
 
     assert task.status == TaskStatus.FAILED
@@ -1093,7 +1101,7 @@ def test_run_synthetic_test_unknown_suite_records_failure() -> None:
     buf = io.StringIO()
     console = Console(file=buf, force_terminal=False)
 
-    run_synthetic_test("nonexistent_suite", session, console)
+    run_synthetic_test("nonexistent_suite", _presenter(session, console))
     assert "unknown synthetic" in buf.getvalue().lower()
     entry = session.history[-1]
     assert entry["type"] == "synthetic_test"
@@ -1120,7 +1128,7 @@ def test_run_synthetic_test_streams_subprocess_output(
         return _FakeProcess()
 
     monkeypatch.setattr(
-        "surfaces.interactive_shell.runtime.subprocess_runner.subprocess.Popen",
+        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
         _fake_popen,
     )
     monkeypatch.setattr(
@@ -1134,10 +1142,7 @@ def test_run_synthetic_test_streams_subprocess_output(
 
     run_synthetic_test(
         "rds_postgres",
-        session,
-        console,
-        confirm_fn=lambda _prompt: "y",
-        is_tty=True,
+        _presenter(session, console, confirm_fn=lambda _prompt: "y", is_tty=True),
     )
 
     assert popen_commands[0][1] == "-u"
@@ -1171,7 +1176,7 @@ def test_run_synthetic_test_honours_explicit_scenario(
         return _FakeProcess()
 
     monkeypatch.setattr(
-        "surfaces.interactive_shell.runtime.subprocess_runner.subprocess.Popen",
+        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
         _fake_popen,
     )
     monkeypatch.setattr(
@@ -1185,10 +1190,7 @@ def test_run_synthetic_test_honours_explicit_scenario(
 
     run_synthetic_test(
         "rds_postgres:005-failover",
-        session,
-        console,
-        confirm_fn=lambda _prompt: "y",
-        is_tty=True,
+        _presenter(session, console, confirm_fn=lambda _prompt: "y", is_tty=True),
     )
 
     assert popen_commands[0][-2:] == ["--scenario", "005-failover"]
@@ -1213,7 +1215,7 @@ def test_run_synthetic_test_all_launches_suite_alias(
         return _FakeProcess()
 
     monkeypatch.setattr(
-        "surfaces.interactive_shell.runtime.subprocess_runner.subprocess.Popen",
+        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
         _fake_popen,
     )
     monkeypatch.setattr(
@@ -1227,10 +1229,7 @@ def test_run_synthetic_test_all_launches_suite_alias(
 
     run_synthetic_test(
         "rds_postgres:all",
-        session,
-        console,
-        confirm_fn=lambda _prompt: "y",
-        is_tty=True,
+        _presenter(session, console, confirm_fn=lambda _prompt: "y", is_tty=True),
     )
 
     assert popen_commands[0][-2:] == ["synthetic", "all"]
@@ -1269,7 +1268,7 @@ def _capture_popen_kwargs(
         return _CapturedPopen()
 
     monkeypatch.setattr(
-        "surfaces.interactive_shell.runtime.subprocess_runner.subprocess.Popen",
+        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
         _fake_popen,
     )
     monkeypatch.setattr(
@@ -1366,10 +1365,7 @@ def test_run_synthetic_test_forwards_columns_to_subprocess(
 
     run_synthetic_test(
         "rds_postgres:005-failover",
-        Session(),
-        console,
-        confirm_fn=lambda _prompt: "y",
-        is_tty=True,
+        _presenter(Session(), console, confirm_fn=lambda _prompt: "y", is_tty=True),
     )
 
     assert captured, "run_synthetic_test must spawn at least one subprocess"
@@ -1431,7 +1427,7 @@ def test_run_opensre_cli_command_refuses_onboard_with_helpful_message(
         raise AssertionError("subprocess.run must not be called for interactive subcommand")
 
     monkeypatch.setattr(
-        "surfaces.interactive_shell.runtime.subprocess_runner.subprocess.Popen",
+        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
         _fake_popen,
     )
     monkeypatch.setattr(
@@ -1480,7 +1476,7 @@ def test_run_opensre_cli_command_refuses_integrations_setup_with_helpful_message
     run_calls: list[list[str]] = []
 
     monkeypatch.setattr(
-        "surfaces.interactive_shell.runtime.subprocess_runner.subprocess.Popen",
+        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
         lambda cmd, **_kw: popen_calls.append(cmd),
     )
     monkeypatch.setattr(
