@@ -354,9 +354,10 @@ class TestSyntheticSubprocessWatcher:
         monkeypatch: pytest.MonkeyPatch,
         stderr_buf: tempfile.SpooledTemporaryFile,  # type: ignore[type-arg]
     ) -> None:
-        import tools.interactive_shell.synthetic.runner as runner
-
-        monkeypatch.setattr(runner.threading, "Thread", _ImmediateThread)
+        monkeypatch.setattr(
+            "tools.interactive_shell.synthetic.runner.threading.Thread",
+            _ImmediateThread,
+        )
 
         proc = MagicMock()
         proc.poll.return_value = 0
@@ -385,10 +386,10 @@ class TestSyntheticSubprocessWatcher:
         cancel_requested branch runs, so terminated_by_watcher stays False.
         The task must be COMPLETED, not CANCELLED — the process succeeded.
         """
-        import tools.interactive_shell.synthetic.runner as runner
-        import tools.interactive_shell.subprocess as subprocess_utils
-
-        monkeypatch.setattr(runner.threading, "Thread", _ImmediateThread)
+        monkeypatch.setattr(
+            "tools.interactive_shell.synthetic.runner.threading.Thread",
+            _ImmediateThread,
+        )
 
         session = Session()
         presenter = _synthetic_presenter(session)
@@ -413,7 +414,7 @@ class TestSyntheticSubprocessWatcher:
             task.cancel_requested.set()
             pending[0] = 0  # process finishes naturally in the same window
 
-        monkeypatch.setattr(subprocess_utils.time, "sleep", _fake_sleep)
+        monkeypatch.setattr("tools.interactive_shell.subprocess.time.sleep", _fake_sleep)
         watch_synthetic_subprocess(task, proc, presenter, "rds_postgres", stderr_buf)
         # terminated_by_watcher is False → honour exit code 0 → COMPLETED
         assert task.status == TaskStatus.COMPLETED
@@ -425,10 +426,10 @@ class TestSyntheticSubprocessWatcher:
         stderr_buf: tempfile.SpooledTemporaryFile,  # type: ignore[type-arg]
     ) -> None:
         """cancel_requested is set while proc is still running; watcher terminates it."""
-        import tools.interactive_shell.synthetic.runner as runner
-        import tools.interactive_shell.subprocess as subprocess_utils
-
-        monkeypatch.setattr(runner.threading, "Thread", _ImmediateThread)
+        monkeypatch.setattr(
+            "tools.interactive_shell.synthetic.runner.threading.Thread",
+            _ImmediateThread,
+        )
 
         session = Session()
         presenter = _synthetic_presenter(session)
@@ -444,7 +445,7 @@ class TestSyntheticSubprocessWatcher:
         task.cancel_requested.set()  # cancel already set before first loop check
 
         # Skip the sleep so the loop iterates immediately to the cancel branch.
-        monkeypatch.setattr(subprocess_utils.time, "sleep", lambda _: None)
+        monkeypatch.setattr("tools.interactive_shell.subprocess.time.sleep", lambda _: None)
 
         watch_synthetic_subprocess(task, proc, presenter, "rds_postgres", stderr_buf)
         assert task.status == TaskStatus.CANCELLED
@@ -462,9 +463,10 @@ class TestSyntheticSubprocessWatcher:
         The watcher should mark the task COMPLETED, not CANCELLED, because we
         never called _terminate_child_process — the process was already gone.
         """
-        import tools.interactive_shell.synthetic.runner as runner
-
-        monkeypatch.setattr(runner.threading, "Thread", _ImmediateThread)
+        monkeypatch.setattr(
+            "tools.interactive_shell.synthetic.runner.threading.Thread",
+            _ImmediateThread,
+        )
 
         session = Session()
         presenter = _synthetic_presenter(session)
@@ -488,9 +490,10 @@ class TestSyntheticSubprocessWatcher:
         stderr_buf: tempfile.SpooledTemporaryFile,  # type: ignore[type-arg]
     ) -> None:
         """Diagnostic stderr output is included in mark_failed message."""
-        import tools.interactive_shell.synthetic.runner as runner
-
-        monkeypatch.setattr(runner.threading, "Thread", _ImmediateThread)
+        monkeypatch.setattr(
+            "tools.interactive_shell.synthetic.runner.threading.Thread",
+            _ImmediateThread,
+        )
 
         session = Session()
         presenter = _synthetic_presenter(session)
@@ -512,10 +515,11 @@ class TestSyntheticSubprocessWatcher:
         monkeypatch: pytest.MonkeyPatch,
         stderr_buf: tempfile.SpooledTemporaryFile,  # type: ignore[type-arg]
     ) -> None:
-        import tools.interactive_shell.synthetic.runner as runner
-
         _DeferredSyntheticThread.pending.clear()
-        monkeypatch.setattr(runner.threading, "Thread", _DeferredSyntheticThread)
+        monkeypatch.setattr(
+            "tools.interactive_shell.synthetic.runner.threading.Thread",
+            _DeferredSyntheticThread,
+        )
 
         proc = MagicMock()
         proc.poll.return_value = 0
@@ -538,10 +542,11 @@ class TestSyntheticSubprocessWatcher:
         monkeypatch: pytest.MonkeyPatch,
         stderr_buf: tempfile.SpooledTemporaryFile,  # type: ignore[type-arg]
     ) -> None:
-        import tools.interactive_shell.synthetic.runner as runner
-
         _DeferredSyntheticThread.pending.clear()
-        monkeypatch.setattr(runner.threading, "Thread", _DeferredSyntheticThread)
+        monkeypatch.setattr(
+            "tools.interactive_shell.synthetic.runner.threading.Thread",
+            _DeferredSyntheticThread,
+        )
 
         proc = MagicMock()
         proc.poll.return_value = 0
