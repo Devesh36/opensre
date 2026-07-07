@@ -195,11 +195,11 @@ def run_claude_code_implementation(request: str, presenter: SubprocessPresenter)
     adapter = ClaudeCodeAdapter()
     probe = adapter.detect()
     if not probe.installed or not probe.bin_path:
-        presenter.print(f"[error]Claude Code CLI not available:[/] {probe.detail}")
+        presenter.print_error(f"Claude Code CLI not available: {probe.detail}")
         session.record("implementation", request, ok=False)
         return
     if probe.logged_in is False:
-        presenter.print(f"[error]Claude Code is not authenticated:[/] {probe.detail}")
+        presenter.print_error(f"Claude Code is not authenticated: {probe.detail}")
         session.record("implementation", request, ok=False)
         return
 
@@ -213,7 +213,7 @@ def run_claude_code_implementation(request: str, presenter: SubprocessPresenter)
         )
     except Exception as exc:
         presenter.report_exception(exc, context="surfaces.interactive_shell.claude_code.build")
-        presenter.print(f"[error]Claude Code failed to prepare:[/] {exc}")
+        presenter.print_error(f"Claude Code failed to prepare: {exc}")
         session.record("implementation", request, ok=False)
         return
 
@@ -228,7 +228,7 @@ def run_claude_code_implementation(request: str, presenter: SubprocessPresenter)
     except Exception as exc:
         task.mark_failed(str(exc))
         presenter.report_exception(exc, context="surfaces.interactive_shell.claude_code.start")
-        presenter.print(f"[error]Claude Code failed to start:[/] {exc}")
+        presenter.print_error(f"Claude Code failed to start: {exc}")
         session.record("implementation", request, ok=False)
         return
 
@@ -259,7 +259,7 @@ def run_claude_code_implementation(request: str, presenter: SubprocessPresenter)
 
             if result.exit_code == 0:
                 task.mark_completed(result="ok")
-                presenter.print(f"[{_HIGHLIGHT_STYLE}]Claude Code completed[/] task {task.task_id}")
+                presenter.print_highlight(f"Claude Code completed task {task.task_id}")
                 presenter.print_command_output(result.stdout)
                 if result.stderr:
                     presenter.print_command_output(result.stderr, style=_DIM_STYLE)
@@ -278,7 +278,7 @@ def run_claude_code_implementation(request: str, presenter: SubprocessPresenter)
             presenter.report_exception(exc, context="surfaces.interactive_shell.claude_code.watch")
             if session.history_generation == history_gen_when_started:
                 session.mark_latest(ok=False, kind="implementation")
-            presenter.print(f"[error]Claude Code watcher failed:[/] {exc}")
+            presenter.print_error(f"Claude Code watcher failed: {exc}")
 
     threading.Thread(target=_watch, daemon=True, name=f"claude-code-{task.task_id}").start()
     presenter.print(

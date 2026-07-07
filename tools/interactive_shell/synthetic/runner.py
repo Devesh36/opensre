@@ -164,7 +164,7 @@ def watch_synthetic_subprocess(
             )
             _record_synthetic_if_current_session(ok=False)
             suggest_follow_up = True
-            presenter.print(f"[error]synthetic watcher failed:[/] {exc}")
+            presenter.print_error(f"synthetic watcher failed: {exc}")
         finally:
             presenter.join_task_output_streams(output_threads)
             stderr_buf.close()
@@ -180,7 +180,7 @@ def run_synthetic_test(suite_name: str, presenter: SubprocessPresenter) -> None:
     session = presenter.session
     spec = resolve_synthetic_suite(suite_name)
     if not spec.valid:
-        presenter.print(f"[error]unknown synthetic suite:[/] {suite_name}")
+        presenter.print_error(f"unknown synthetic suite: {suite_name}")
         session.record("synthetic_test", suite_name, ok=False)
         return
 
@@ -205,7 +205,7 @@ def run_synthetic_test(suite_name: str, presenter: SubprocessPresenter) -> None:
         stderr_buf.close()
         task.mark_failed(str(exc))
         presenter.report_exception(exc, context="surfaces.interactive_shell.synthetic_test.start")
-        presenter.print(f"[error]synthetic test failed to start:[/] {exc}")
+        presenter.print_error(f"synthetic test failed to start: {exc}")
         session.record("synthetic_test", suite_name, ok=False)
         return
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 import tempfile
 import threading
@@ -35,6 +36,51 @@ _MARKUP_STYLE_ALIASES: dict[str, str] = {
     "highlight": str(HIGHLIGHT),
     "warning": str(WARNING),
 }
+
+# Intentional Rich markup tags used by subprocess presenters and action tools.
+_ALLOWED_MARKUP_TAG = re.compile(
+    r"(\["
+    r"(?:"
+    r"#[0-9A-Fa-f]{6}|"
+    r"bold|dim|highlight|warning|error|"
+    r"/(?:bold|dim|highlight|warning|error)?"
+    r")"
+    r"\])"
+)
+_MARKUP_HINT = re.compile(r"\[(?:/?(?:error|dim|highlight|warning|bold)|/)\]")
+
+
+def _expand_markup_aliases(message: str) -> str:
+    for alias, token in _MARKUP_STYLE_ALIASES.items():
+        message = message.replace(f"[{alias}]", f"[{token}]")
+        message = message.replace(f"[/{alias}]", f"[/{token}]")
+    return message
+
+
+def _message_uses_intentional_markup(message: str) -> bool:
+    if _MARKUP_HINT.search(message):
+        return True
+    return any(
+        f"[{token}]" in message or f"[/{token}]" in message
+        for token in _MARKUP_STYLE_ALIASES.values()
+    )
+
+
+def _escape_markup_message(message: str) -> str:
+    """Escape plain-text segments while preserving intentional Rich markup tags."""
+    expanded = _expand_markup_aliases(message)
+    if not _message_uses_intentional_markup(expanded):
+        return escape(expanded)
+    parts = _ALLOWED_MARKUP_TAG.split(expanded)
+    if len(parts) == 1:
+        return escape(expanded)
+    rendered: list[str] = []
+    for index, part in enumerate(parts):
+        if index % 2 == 1:
+            rendered.append(part)
+        elif part:
+            rendered.append(escape(part))
+    return "".join(rendered)
 
 
 class ReplSubprocessPresenter:
@@ -80,10 +126,7 @@ class ReplSubprocessPresenter:
         )
 
     def print(self, message: str = "") -> None:
-        for alias, token in _MARKUP_STYLE_ALIASES.items():
-            message = message.replace(f"[{alias}]", f"[{token}]")
-            message = message.replace(f"[/{alias}]", f"[/{token}]")
-        self._console.print(message)
+        self._console.print(_escape_markup_message(message))
 
     def print_bold_command(self, display_command: str) -> None:
         self._console.print(f"[bold]$ {escape(display_command)}[/bold]")
@@ -150,18 +193,16 @@ class ReplSubprocessPresenter:
         )
 
     def print_error(self, message: str) -> None:
-        self._console.print(f"[{ERROR}]{message}[/]")
+        self._console.print(f"[{ERROR}]{escape(message)}[/]")
 
     def print_dim(self, message: str) -> None:
-        from surfaces.interactive_shell.ui import DIM
-
-        self._console.print(f"[{DIM}]{message}[/]")
+        self._console.print(f"[{DIM}]{escape(message)}[/]")
 
     def print_highlight(self, message: str) -> None:
-        self._console.print(f"[{HIGHLIGHT}]{message}[/]")
+        self._console.print(f"[{HIGHLIGHT}]{escape(message)}[/]")
 
     def print_warning(self, message: str) -> None:
-        self._console.print(f"[{WARNING}]{message}[/]")
+        self._console.print(f"[{WARNING}]{escape(message)}[/]")
 
 
 def make_repl_presenter(

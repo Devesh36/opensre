@@ -107,7 +107,7 @@ def run_shell_command(
 
         response_text = f"command failed to start: {str(exc)}"
 
-        presenter.print(f"[error]command failed to start:[/] {exc}")
+        presenter.print_error(f"command failed to start: {exc}")
         session.record("shell", command, ok=False, response_text=response_text)
         return _shell_payload(
             command=command,
@@ -150,7 +150,7 @@ def run_shell_command(
     else:
         code = result.exit_code if result.exit_code is not None else "?"
         exit_text = f"✗ exit {code}"
-        presenter.print(f"[error]✗[/] exit {code}")
+        presenter.print_error(f"✗ exit {code}")
 
         response_parts = []
         if had_stdout:
@@ -190,7 +190,7 @@ def run_cd_command(command: str, presenter: SubprocessPresenter) -> dict[str, An
     except ValueError as exc:
         response_text = f"cd failed: {str(exc)}"
 
-        presenter.print(f"[error]cd failed:[/] {exc}")
+        presenter.print_error(f"cd failed: {exc}")
         session.record("shell", command, ok=False, response_text=response_text)
         return _shell_payload(command=command, ok=False, response_text=response_text)
 
@@ -209,7 +209,7 @@ def run_cd_command(command: str, presenter: SubprocessPresenter) -> dict[str, An
 
         response_text = f"cd failed: {str(exc)}"
 
-        presenter.print(f"[error]cd failed:[/] {exc}")
+        presenter.print_error(f"cd failed: {exc}")
         session.record("shell", command, ok=False, response_text=response_text)
         return _shell_payload(command=command, ok=False, response_text=response_text)
 
@@ -226,7 +226,7 @@ def run_pwd_command(command: str, presenter: SubprocessPresenter) -> dict[str, A
     except ValueError as exc:
         response_text = f"pwd failed: {str(exc)}"
 
-        presenter.print(f"[error]pwd failed:[/] {exc}")
+        presenter.print_error(f"pwd failed: {exc}")
         session.record("shell", command, ok=False, response_text=response_text)
         return _shell_payload(command=command, ok=False, response_text=response_text)
 

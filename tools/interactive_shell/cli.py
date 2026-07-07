@@ -296,7 +296,7 @@ def _run_foreground_via_presenter(
                 RuntimeError(result.start_error),
                 context="surfaces.interactive_shell.opensre_cli.start",
             )
-            presenter.print(f"[error]failed to start:[/] {result.start_error}")
+            presenter.print_error(f"failed to start: {result.start_error}")
         presenter.session.record("cli_command", display_command, ok=False)
         return
     presenter.print_command_output(result.stdout)
@@ -327,7 +327,7 @@ def _run_streaming_via_presenter(
             exc,
             context="surfaces.interactive_shell.opensre_cli.start",
         )
-        presenter.print(f"[error]failed to start:[/] {exc}")
+        presenter.print_error(f"failed to start: {exc}")
         presenter.session.record("cli_command", display_command, ok=False)
         return
     if proc.stdout is not None:

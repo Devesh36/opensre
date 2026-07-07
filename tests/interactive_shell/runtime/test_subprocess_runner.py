@@ -44,6 +44,11 @@ from tools.interactive_shell.synthetic.runner import (
     watch_synthetic_subprocess,
 )
 
+_BACKGROUND_TASK_POPEN = "surfaces.interactive_shell.runtime.subprocess_runner.subprocess.Popen"
+_CLI_POPEN = "tools.interactive_shell.cli.subprocess.Popen"
+_CLI_RUN = "tools.interactive_shell.cli.subprocess.run"
+_SYNTHETIC_RUNNER_POPEN = "tools.interactive_shell.synthetic.runner.subprocess.Popen"
+
 
 def _presenter(
     session: Session,
@@ -562,7 +567,7 @@ def test_run_opensre_agents_watch_runs_in_foreground(
         return _FakeProcess()
 
     monkeypatch.setattr(
-        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
+        _CLI_POPEN,
         _fake_popen,
     )
 
@@ -639,7 +644,7 @@ def test_start_background_cli_task_uses_pty_for_live_terminal_output(
         lambda fd: closed_fds.append(fd),
     )
     monkeypatch.setattr(
-        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
+        _BACKGROUND_TASK_POPEN,
         _fake_popen,
     )
     monkeypatch.setattr(
@@ -696,7 +701,7 @@ def test_start_background_cli_task_falls_back_to_pipes_when_pty_unavailable(
         raising=False,
     )
     monkeypatch.setattr(
-        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
+        _BACKGROUND_TASK_POPEN,
         _fake_popen,
     )
     monkeypatch.setattr(
@@ -750,7 +755,7 @@ def test_start_background_cli_task_logs_failure_outcome_to_posthog(
             return 1
 
     monkeypatch.setattr(
-        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
+        _BACKGROUND_TASK_POPEN,
         lambda _command, **_kwargs: _FakeProcess(),
     )
     monkeypatch.setattr(
@@ -808,7 +813,7 @@ def test_start_background_cli_task_logs_success_outcome_to_posthog(
             return 0
 
     monkeypatch.setattr(
-        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
+        _BACKGROUND_TASK_POPEN,
         lambda _command, **_kwargs: _FakeProcess(),
     )
     monkeypatch.setattr(
@@ -916,7 +921,7 @@ def test_start_background_cli_task_reports_spawn_failure(
         lambda exc, **_kwargs: captured_errors.append(exc),
     )
     monkeypatch.setattr(
-        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
+        _BACKGROUND_TASK_POPEN,
         _fake_popen,
     )
 
@@ -960,7 +965,7 @@ def test_start_background_cli_task_reports_watcher_failure(
         lambda exc, **_kwargs: captured_errors.append(exc),
     )
     monkeypatch.setattr(
-        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
+        _BACKGROUND_TASK_POPEN,
         _fake_popen,
     )
     monkeypatch.setattr(
@@ -1031,7 +1036,7 @@ def test_start_background_cli_task_skips_follow_up_after_session_reset(
         _DeferredThread,
     )
     monkeypatch.setattr(
-        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
+        _BACKGROUND_TASK_POPEN,
         _fake_popen,
     )
 
@@ -1128,7 +1133,7 @@ def test_run_synthetic_test_streams_subprocess_output(
         return _FakeProcess()
 
     monkeypatch.setattr(
-        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
+        _SYNTHETIC_RUNNER_POPEN,
         _fake_popen,
     )
     monkeypatch.setattr(
@@ -1176,7 +1181,7 @@ def test_run_synthetic_test_honours_explicit_scenario(
         return _FakeProcess()
 
     monkeypatch.setattr(
-        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
+        _SYNTHETIC_RUNNER_POPEN,
         _fake_popen,
     )
     monkeypatch.setattr(
@@ -1215,7 +1220,7 @@ def test_run_synthetic_test_all_launches_suite_alias(
         return _FakeProcess()
 
     monkeypatch.setattr(
-        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
+        _SYNTHETIC_RUNNER_POPEN,
         _fake_popen,
     )
     monkeypatch.setattr(
@@ -1260,6 +1265,8 @@ class _CapturedPopen:
 
 def _capture_popen_kwargs(
     monkeypatch: pytest.MonkeyPatch,
+    *,
+    popen_target: str = _BACKGROUND_TASK_POPEN,
 ) -> list[dict[str, object]]:
     captured: list[dict[str, object]] = []
 
@@ -1268,7 +1275,7 @@ def _capture_popen_kwargs(
         return _CapturedPopen()
 
     monkeypatch.setattr(
-        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
+        popen_target,
         _fake_popen,
     )
     monkeypatch.setattr(
@@ -1360,7 +1367,7 @@ def test_run_synthetic_test_forwards_columns_to_subprocess(
     pipe-default 80 columns and then wrapped mid-row in the user's terminal
     once the 18-char ``<task_id> stdout │ `` prefix had been prepended.
     """
-    captured = _capture_popen_kwargs(monkeypatch)
+    captured = _capture_popen_kwargs(monkeypatch, popen_target=_SYNTHETIC_RUNNER_POPEN)
     console = Console(file=io.StringIO(), force_terminal=False, width=110)
 
     run_synthetic_test(
@@ -1427,11 +1434,11 @@ def test_run_opensre_cli_command_refuses_onboard_with_helpful_message(
         raise AssertionError("subprocess.run must not be called for interactive subcommand")
 
     monkeypatch.setattr(
-        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
+        _CLI_POPEN,
         _fake_popen,
     )
     monkeypatch.setattr(
-        "surfaces.interactive_shell.runtime.subprocess_runner.subprocess.run",
+        _CLI_RUN,
         _fake_run,
     )
 
@@ -1476,11 +1483,11 @@ def test_run_opensre_cli_command_refuses_integrations_setup_with_helpful_message
     run_calls: list[list[str]] = []
 
     monkeypatch.setattr(
-        "tools.interactive_shell.synthetic.runner.subprocess.Popen",
+        _CLI_POPEN,
         lambda cmd, **_kw: popen_calls.append(cmd),
     )
     monkeypatch.setattr(
-        "surfaces.interactive_shell.runtime.subprocess_runner.subprocess.run",
+        _CLI_RUN,
         lambda cmd, **_kw: run_calls.append(cmd),
     )
 
