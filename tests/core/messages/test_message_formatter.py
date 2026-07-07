@@ -167,7 +167,7 @@ class TestToProviderMessages:
         real_import = builtins.__import__
 
         def guarded(name: str, *args: Any, **kwargs: Any) -> Any:
-            if name == "core.llm.litellm.clients" or name.startswith("litellm"):
+            if name == "core.llm.transports.litellm.clients" or name.startswith("litellm"):
                 raise AssertionError(f"unexpected LiteLLM import: {name}")
             return real_import(name, *args, **kwargs)
 
@@ -212,7 +212,7 @@ class TestToolResultsFromExecution:
         assert results[0]["role"] == "tool"
 
     def test_openai_compat_returns_multiple_messages(self) -> None:
-        from core.llm.sdk.agent_clients import OpenAIAgentClient
+        from core.llm.transports.sdk.agent_clients import OpenAIAgentClient
 
         llm = OpenAIAgentClient.__new__(OpenAIAgentClient)
         bus = MessageFormatter(llm)
@@ -236,7 +236,7 @@ class TestSyntheticAssistantToolCall:
         assert "query_logs" in result["content"]
 
     def test_anthropic_tool_use_blocks(self) -> None:
-        from core.llm.sdk.agent_clients import AnthropicAgentClient
+        from core.llm.transports.sdk.agent_clients import AnthropicAgentClient
 
         llm = AnthropicAgentClient.__new__(AnthropicAgentClient)
         bus = MessageFormatter(llm)
@@ -249,7 +249,7 @@ class TestSyntheticAssistantToolCall:
         assert block["name"] == "get_logs"
 
     def test_openai_compat_function_tool_calls(self) -> None:
-        from core.llm.sdk.agent_clients import OpenAIAgentClient
+        from core.llm.transports.sdk.agent_clients import OpenAIAgentClient
 
         llm = OpenAIAgentClient.__new__(OpenAIAgentClient)
         bus = MessageFormatter(llm)
@@ -275,7 +275,7 @@ class TestSyntheticAssistantToolCall:
                 client=lambda *_a, **_kw: types.SimpleNamespace(converse=lambda **_: {})
             ),
         )
-        from core.llm.agent_llm_client import BedrockConverseAgentClient
+        from core.llm.transports.sdk.agent_clients import BedrockConverseAgentClient
 
         llm = BedrockConverseAgentClient(model="mistral.mistral-large-3-675b-instruct")
         tc = ToolCall(id="abc12def3", name="query_logs", input={"query": "error"})
