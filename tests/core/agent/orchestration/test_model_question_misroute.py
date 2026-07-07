@@ -9,7 +9,7 @@ informational question) is exercised by the live planning scenario
 ``chat_handoff/342-which-model-is-used-now``. These tests pin the *deterministic*
 half: given that the action agent picks ``/model``, the turn ends without
 answering the user, because ``/model`` records no ``last_command_observation`` and
-so the turn router (``core.agent_harness.agents.turn_orchestrator._route_turn``) takes the
+so the turn router (``core.agent_harness.turns.orchestrator._route_turn``) takes the
 ``handled_without_llm`` path instead of summarizing an observation.
 """
 
@@ -21,7 +21,6 @@ from collections.abc import Iterator
 import pytest
 from rich.console import Console
 
-import core.llm.llm_client as llm_module
 import surfaces.interactive_shell.runtime.shell_turn_execution as shell_turn_execution
 import tools.interactive_shell.actions.slash as slash_tool
 from core.agent_harness.providers import default_prompt_context
@@ -33,7 +32,7 @@ from tests.core.agent.orchestration.action_execution_test_harness import (
     tool_response,
 )
 
-_ACTION_LLM_FACTORY_PATCH = "surfaces.interactive_shell.runtime.action_turn._default_llm_factory"
+_ACTION_LLM_FACTORY_PATCH = "surfaces.interactive_shell.runtime.action_turn.default_llm_factory"
 _PROMPT = "which model is being used now?"
 
 
@@ -184,7 +183,7 @@ def test_model_question_handoff_answers_from_active_llm_context(
         _ACTION_LLM_FACTORY_PATCH,
         lambda: FakeActionLLM([tool_response("assistant_handoff", {"content": "chat:model"})]),
     )
-    monkeypatch.setattr(llm_module, "get_llm_for_reasoning", lambda: llm)
+    monkeypatch.setattr("core.llm.factory.get_llm", lambda _role: llm)
     monkeypatch.setattr(default_prompt_context, "load_llm_settings", lambda: _Settings())
     monkeypatch.setattr(
         default_prompt_context,

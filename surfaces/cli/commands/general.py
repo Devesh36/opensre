@@ -9,7 +9,7 @@ import time
 import click
 
 import platform
-from config.version import get_version
+from config.version import get_opensre_version
 from platform.analytics.cli import (
     capture_update_completed,
     capture_update_failed,
@@ -64,7 +64,7 @@ def version_command() -> None:
         click.echo(
             json.dumps(
                 {
-                    "opensre": get_version(),
+                    "opensre": get_opensre_version(),
                     "python": platform.python_version(),
                     "os": platform.system().lower(),
                     "arch": platform.machine(),
@@ -72,7 +72,7 @@ def version_command() -> None:
             )
         )
         return
-    click.echo(f"opensre {get_version()}")
+    click.echo(f"opensre {get_opensre_version()}")
     click.echo(f"Python  {platform.python_version()}")
     click.echo(f"OS      {platform.system().lower()} ({platform.machine()})")
 
@@ -174,8 +174,8 @@ def investigate_command(
 
     from surfaces.cli import write_json
     from surfaces.cli.investigation import run_investigation_cli, run_investigation_cli_streaming
-    from surfaces.cli.investigation.alert_templates import build_alert_template
     from surfaces.cli.investigation.payload import load_payload
+    from tools.investigation.alert_templates import build_alert_template
 
     try:
         if print_template:

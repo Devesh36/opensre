@@ -119,10 +119,8 @@ def _patch_discover_paths(
 ) -> None:
     """Helper: monkeypatch any subset of the discover module's path constants.
 
-    Reduces the ``monkeypatch.setattr("surfaces.cli.tests.discover.X", ...)`` ×4
-    repetition that tests in ``TestDiscoverGracefulOnMissingSource`` would
-    otherwise carry. Per @muddlebee's PR #952 review nit on duplicated test
-    setup."""
+    Corpus directories live in :mod:`surfaces.cli.tests.discover`.
+    """
     if repo_root is not None:
         monkeypatch.setattr("surfaces.cli.tests.discover.REPO_ROOT", repo_root)
     if makefile is not None:

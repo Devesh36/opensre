@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from core.agent_harness.prompts.action import ActionPlannerPrompt, build_action_planner_prompt
 from core.agent_harness.prompts.action_agent_prompt import (
     build_action_system_prompt,
     build_action_system_prompt_envelope,
@@ -27,24 +26,22 @@ from core.agent_harness.prompts.assistant_agent_prompt import (
 from core.agent_harness.prompts.envelope import PromptBlock, PromptEnvelope
 from core.agent_harness.prompts.gather import (
     build_gather_system_prompt,
-    build_gather_system_prompt_from_turn_context,
+    build_gather_system_prompt_from_turn_snapshot,
 )
 
 __all__ = [
     "_SYSTEM_PROMPT_BASE",
     "_build_observation_block",
     "_build_system_prompt",
-    "ActionPlannerPrompt",
     "AssistantPromptContextProvider",
     "PromptBlock",
     "PromptEnvelope",
-    "build_action_planner_prompt",
     "build_action_system_prompt",
     "build_action_system_prompt_envelope",
     "build_action_user_message",
     "build_assistant_system_prompt",
     "build_gather_system_prompt",
-    "build_gather_system_prompt_from_turn_context",
+    "build_gather_system_prompt_from_turn_snapshot",
     "build_cli_agent_prompt_from_provider",
     "build_environment_block",
     "build_observation_block",

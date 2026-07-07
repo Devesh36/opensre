@@ -9,6 +9,7 @@ from typing import Any, cast
 import pytest
 
 from core.agent import Agent, AgentRunResult
+from core.agent_harness.turns.headless_dispatch import dispatch_message_to_headless_agent
 from core.events import (
     MessageUpdateEvent,
     RuntimeEvent,
@@ -135,16 +136,16 @@ def test_agent_exposes_headless_dispatch_entrypoint(monkeypatch: pytest.MonkeyPa
             yield "hello from headless"
 
     monkeypatch.setattr(
-        "core.agent_harness.agents.action_agent._default_llm_factory",
+        "core.agent_harness.turns.action_driver.default_llm_factory",
         lambda: FakeLLM(iter([AgentLLMResponse(content="", tool_calls=[], raw_content=None)])),
     )
 
-    from core.agent_harness.agents.headless_agent import (
+    from core.agent_harness.turns.headless_dispatch import (
         NullToolProvider,
         StaticReasoningClientProvider,
     )
 
-    result = Agent.dispatch_message_to_headless_agent(
+    result = dispatch_message_to_headless_agent(
         "hello",
         tools=NullToolProvider(),
         reasoning=StaticReasoningClientProvider(client=EchoReasoningClient()),
@@ -155,7 +156,7 @@ def test_agent_exposes_headless_dispatch_entrypoint(monkeypatch: pytest.MonkeyPa
 
 def test_agent_defaults_to_agent_llm_without_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     llm = FakeLLM(iter([_text_response("reasoned answer")]))
-    monkeypatch.setattr("core.llm.agent_llm_client.get_agent_llm", lambda: llm)
+    monkeypatch.setattr("core.llm.factory.get_llm", lambda _role: llm)
 
     agent = Agent(system="sys", tools=[], resolved_integrations={}, max_iterations=1)
     result = agent.run([{"role": "user", "content": "hello"}])
@@ -167,7 +168,7 @@ def test_agent_defaults_to_agent_llm_without_tools(monkeypatch: pytest.MonkeyPat
 
 def test_agent_default_agent_llm_receives_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     llm = FakeLLM(iter([_text_response("unused")]))
-    monkeypatch.setattr("core.llm.agent_llm_client.get_agent_llm", lambda: llm)
+    monkeypatch.setattr("core.llm.factory.get_llm", lambda _role: llm)
 
     agent = Agent(
         system="sys",
@@ -221,6 +222,69 @@ def test_run_records_system_prompt_edited_by_before_provider_request_hook() -> N
     assert result.final_system_prompt == "sys [edited]"
 
 
+def test_transform_messages_hook_filters_context_sent_to_llm() -> None:
+    llm = FakeLLM(iter([_text_response("done")]))
+    agent = Agent(
+        llm=llm,
+        system="sys",
+        tools=[],
+        resolved_integrations={},
+        max_iterations=1,
+        provider_hooks=ProviderHooks(transform_messages=lambda messages: list(messages)[-1:]),
+    )
+
+    agent.run(
+        [
+            {"role": "user", "content": "first"},
+            {"role": "user", "content": "second"},
+        ]
+    )
+
+    assert llm.invocations == 1
+    assert len(llm.seen_messages[0]) == 1
+    assert llm.seen_messages[0][0]["content"] == "second"
+
+
+def test_convert_to_llm_hook_replaces_default_message_conversion() -> None:
+    llm = FakeLLM(iter([_text_response("done")]))
+
+    def stamp(_llm: Any, messages: Any) -> list[dict[str, Any]]:
+        return [{"role": "user", "content": f"converted:{m.content}"} for m in messages]
+
+    agent = Agent(
+        llm=llm,
+        system="sys",
+        tools=[],
+        resolved_integrations={},
+        max_iterations=1,
+        provider_hooks=ProviderHooks(convert_to_llm=stamp),
+    )
+
+    agent.run([{"role": "user", "content": "hello"}])
+
+    assert llm.invocations == 1
+    assert llm.seen_messages[0][0]["content"] == "converted:hello"
+
+
+def test_after_response_hook_can_rewrite_llm_reply() -> None:
+    llm = FakeLLM(iter([_text_response("original")]))
+    agent = Agent(
+        llm=llm,
+        system="sys",
+        tools=[],
+        resolved_integrations={},
+        max_iterations=1,
+        provider_hooks=ProviderHooks(
+            after_provider_response=lambda _req, resp: replace(resp, content="rewritten")
+        ),
+    )
+
+    result = agent.run([{"role": "user", "content": "hi"}])
+
+    assert llm.invocations == 1
+    assert result.final_text == "rewritten"
+
+
 def test_one_tool_round_then_final() -> None:
     output = {"value": 42}
     llm = FakeLLM(
@@ -257,7 +321,7 @@ def test_generic_tool_result_conversion_does_not_import_litellm(
     real_import = builtins.__import__
 
     def guarded_import(name: str, *args: Any, **kwargs: Any) -> Any:
-        if name == "core.llm.litellm.clients" or name.startswith("litellm"):
+        if name == "core.llm.transports.litellm.clients" or name.startswith("litellm"):
             raise AssertionError(f"unexpected LiteLLM import: {name}")
         return real_import(name, *args, **kwargs)
 
@@ -308,7 +372,7 @@ def test_agent_excludes_unrecognized_provider_dict_roles_from_llm_context() -> N
 
 
 def test_legacy_text_blocks_convert_to_bedrock_converse_content() -> None:
-    from core.llm.agent_llm_client import BedrockConverseAgentClient
+    from core.llm.transports.sdk.agent_clients import BedrockConverseAgentClient
 
     llm = BedrockConverseAgentClient.__new__(BedrockConverseAgentClient)
     messages = [AppRuntimeMessage("custom", [{"type": "text", "text": "custom note"}])]
@@ -388,7 +452,7 @@ def test_on_event_failure_is_logged_and_swallowed(caplog: pytest.LogCaptureFixtu
     def on_event(_kind: str, _data: dict[str, Any]) -> None:
         raise RuntimeError("broken renderer")
 
-    with caplog.at_level(logging.DEBUG, logger="core.agent_mixins"):
+    with caplog.at_level(logging.DEBUG, logger="core.agent.mixins"):
         result = _agent(llm, _tools(FakeTool("query_logs")), on_event=on_event).run(
             [{"role": "user", "content": "hello"}]
         )

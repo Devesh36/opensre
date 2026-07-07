@@ -52,11 +52,9 @@ def _is_model_allowed(provider: object, model: str) -> bool:
 
 def _reset_runtime_llm_caches() -> None:
     """Force subsequent REPL assistant calls to use the updated model env."""
-    from core.llm.agent_llm_client import reset_agent_client
-    from core.llm.llm_client import reset_llm_singletons
+    from core.llm.factory import reset_llm_clients
 
-    reset_llm_singletons()
-    reset_agent_client()
+    reset_llm_clients()
 
 
 def switch_llm_provider(
@@ -86,7 +84,7 @@ def switch_llm_provider(
     # confirming it requires an intentional request-time credential read.
     auth_status = credential_status(provider.value)
     if provider.value == "azure-openai":
-        from core.llm.azure_openai import azure_openai_endpoint_configured
+        from core.llm.providers.azure_openai import azure_openai_endpoint_configured
 
         if not azure_openai_endpoint_configured():
             console.print(
@@ -97,14 +95,41 @@ def switch_llm_provider(
     if provider.credential_secret and provider.api_key_env and not auth_status.configured:
         console.print(
             f"[{ERROR}]missing credential for {provider.value}:[/] "
-            f"{provider.api_key_env} is not set in env or OpenSRE auth metadata."
+            f"{provider.api_key_env} is not set."
         )
-        console.print(
-            f"[{DIM}]set it with[/] [bold]export {provider.api_key_env}=<your-key>[/bold] "
-            f"[{DIM}]or run[/] [bold]opensre auth login {provider.value}[/bold] "
-            f"[{DIM}]to save it, then rerun this command.[/]"
-        )
-        return False
+        if not getattr(console, "is_terminal", False):
+            # Non-interactive (script/headless): no stdin to prompt on.
+            console.print(
+                f"[{DIM}]set it with[/] [bold]export {provider.api_key_env}=<your-key>[/bold] "
+                f"[{DIM}]or run[/] [bold]opensre auth login {provider.value}[/bold] "
+                f"[{DIM}]to save it, then rerun this command.[/]"
+            )
+            return False
+        api_key = console.input(
+            f"[{HIGHLIGHT}]paste your {provider.api_key_env} (blank to cancel)> [/]",
+            password=True,
+        ).strip()
+        if not api_key:
+            console.print(
+                f"[{DIM}]cancelled — set it later with[/] "
+                f"[bold]opensre auth login {provider.value}[/bold][{DIM}].[/]"
+            )
+            return False
+        from surfaces.cli.llm_auth.providers import resolve_auth_profile
+        from surfaces.cli.llm_auth.service import AuthSetupError, configure_api_key_provider
+
+        console.print(f"[{DIM}]validating {provider.value} key…[/]")
+        try:
+            configure_api_key_provider(
+                profile=resolve_auth_profile(provider.value),
+                api_key=api_key,
+                set_provider=False,
+            )
+        except (AuthSetupError, KeyError) as exc:
+            console.print(f"[{ERROR}]could not save {provider.api_key_env}:[/] {escape(str(exc))}")
+            return False
+        console.print(f"[{DIM}]saved {provider.api_key_env}.[/]")
+        auth_status = credential_status(provider.value)
     if provider.credential_secret and provider.api_key_env and auth_status.stale:
         console.print(
             f"[{WARNING}]credential status for {provider.value} is stale:[/] "

@@ -12,14 +12,14 @@ import pytest
 from rich.console import Console
 
 from core import Agent, AgentTool, AgentToolContext
-from core.agent_harness.agents.action_agent import _MAX_TOOL_CALLING_ITERATIONS
 from core.agent_harness.prompts import (
     build_action_system_prompt,
     build_action_user_message,
 )
 from core.agent_harness.tools.action_tools import get_action_tools_from_integrations_context
 from core.agent_harness.tools.tool_context import ActionToolContext
-from core.llm.llm_retry import LLMCreditExhaustedError
+from core.agent_harness.turns.action_driver import _MAX_TOOL_CALLING_ITERATIONS
+from core.llm.shared.llm_retry import LLMCreditExhaustedError
 from core.llm.types import ToolCall
 from surfaces.interactive_shell.command_registry import SLASH_COMMANDS
 from tests.core.agent._ci_gates import (
@@ -421,14 +421,14 @@ def _assert_live_action_planning_once(case: ScenarioCase) -> None:
         session=session, console=Console(file=io.StringIO(), force_terminal=False)
     )
     tools = get_action_tools_from_integrations_context(ctx, resolved_integrations=resolved_override)
-    from core.llm import agent_llm_client
+    from core.llm.factory import LLMRole, get_llm
 
-    llm = agent_llm_client.get_agent_llm()
-    from core.agent_harness.models.turn_context import TurnContext
+    llm = get_llm(LLMRole.AGENT)
+    from core.agent_harness.models.turn_snapshot import TurnSnapshot
 
     result = Agent(
         llm=llm,
-        system=build_action_system_prompt(TurnContext.from_session(prompt, session)),
+        system=build_action_system_prompt(TurnSnapshot.from_session(prompt, session)),
         tools=[_planning_probe_tool(tool) for tool in tools],
         resolved_integrations={},
         max_iterations=_LIVE_PLANNING_MAX_ITERATIONS,

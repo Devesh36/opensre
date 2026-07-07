@@ -7,7 +7,6 @@ from typing import Any, TypedDict, cast
 
 from pydantic import BaseModel
 
-from core.context.state import InvestigationState
 from core.domain.alerts.alert_source import resolve_alert_source
 from core.domain.diagnosis import (
     InvestigationResult,
@@ -17,6 +16,7 @@ from core.domain.diagnosis import (
     result_to_state,
     taxonomy_categories_for_alert_source,
 )
+from core.state import InvestigationState
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +97,7 @@ def _parse_via_structured_output(
     *,
     alert_source: str = "",
 ) -> InvestigationResult:
-    from core.llm.llm_client import get_llm_for_reasoning
+    from core.llm.factory import LLMRole, get_llm
 
     prompt = f"""Extract the structured diagnosis from this investigation conclusion.
 
@@ -116,7 +116,7 @@ Evidence keys collected: {", ".join(evidence.keys()) if evidence else "none"}
         remediation_steps: list[str]
         validity_score: float
 
-    llm = get_llm_for_reasoning()
+    llm = get_llm(LLMRole.REASONING)
     schema_model = build_diagnosis_schema(taxonomy_categories_for_alert_source(alert_source))
     raw_schema = (
         llm.with_structured_output(schema_model)
@@ -147,7 +147,7 @@ def _parse_via_legacy(
     *,
     alert_source: str = "",
 ) -> InvestigationResult:
-    from core.llm.llm_client import parse_root_cause
+    from core.llm.parsers.root_cause import parse_root_cause
 
     try:
         rr = parse_root_cause(last_text)

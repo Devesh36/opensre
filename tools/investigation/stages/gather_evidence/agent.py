@@ -16,13 +16,13 @@ from core import (
     summarise,
     tool_source,
 )
-from core.agent_mixins import AgentEventEmitter, AgentToolFilter
-from core.context.state import InvestigationState
-from core.context.state.evidence import EvidenceEntry
-from core.llm.agent_llm_client import get_agent_llm
+from core.agent.mixins import EventEmitterMixin, ToolFilterMixin
+from core.llm.factory import LLMRole, get_llm
 from core.llm.types import ToolCall
 from core.llm_invoke_errors import classify_llm_invoke_failure
 from core.messages import MessageFormatter
+from core.state import InvestigationState
+from core.state.evidence import EvidenceEntry
 from platform.observability import debug_print
 from platform.observability import get_progress_tracker as get_tracker
 from platform.observability.tool_trace import redact_sensitive
@@ -55,14 +55,14 @@ def _mark_messages(messages: list[dict[str, Any]], key: str) -> None:
         msg[key] = True
 
 
-class ConnectedInvestigationAgent(AgentEventEmitter, AgentToolFilter):
+class ConnectedInvestigationAgent(EventEmitterMixin, ToolFilterMixin):
     """ReAct loop scoped to the tools enabled by connected integrations.
 
     Owns a specialised investigation ``run()`` — seed calls, evidence collection,
     duplicate detection, and stagnation handling — assembling its config (LLM,
     tools, prompt, resolved integrations) inline from ``state``. Uses two agent
-    hooks: :class:`~core.agent_mixins.AgentEventEmitter` for event dispatch and
-    :class:`~core.agent_mixins.AgentToolFilter` for tool narrowing.
+    hooks: :class:`~core.agent.mixins.EventEmitterMixin` for event dispatch and
+    :class:`~core.agent.mixins.ToolFilterMixin` for tool narrowing.
     """
 
     def _should_accept_conclusion(
@@ -120,7 +120,7 @@ class ConnectedInvestigationAgent(AgentEventEmitter, AgentToolFilter):
         if not tools:
             logger.warning("No tools available for investigation")
 
-        llm = get_agent_llm()
+        llm = get_llm(LLMRole.AGENT)
         msg_formatter = MessageFormatter(llm)
         tool_schemas = llm.tool_schemas(tools)
 
@@ -363,9 +363,9 @@ def get_investigation_agent_class() -> type[ConnectedInvestigationAgent]:
     Callers that need a fixed class (e.g. bench harness, integration tests) should
     pass an explicit ``agent_class`` to the pipeline rather than calling this.
     """
-    from core.llm.sdk.agent_clients import CLIBackedAgentClient
+    from core.llm.transports.sdk.agent_clients import CLIBackedAgentClient
 
-    if isinstance(get_agent_llm(), CLIBackedAgentClient):
+    if isinstance(get_llm(LLMRole.AGENT), CLIBackedAgentClient):
         return CLIBackedInvestigationAgent
     return ConnectedInvestigationAgent
 

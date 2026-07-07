@@ -76,7 +76,13 @@ class DefaultToolProvider:
         self._subprocess_presenter_factory = subprocess_presenter_factory
         self._tool_context: ActionToolContext | None = None
 
-    def action_tools(self, *, confirm_fn: ConfirmFn | None, is_tty: bool | None) -> list[Any]:
+    def action_tools(
+        self,
+        *,
+        confirm_fn: ConfirmFn | None,
+        is_tty: bool | None,
+        resolved_integrations: dict[str, Any] | None = None,
+    ) -> list[Any]:
         subprocess_presenter = None
         if self._subprocess_presenter_factory is not None:
             subprocess_presenter = self._subprocess_presenter_factory(
@@ -98,9 +104,12 @@ class DefaultToolProvider:
         self._tool_context = ctx
         if self._precomputed_action_tools is not None:
             return list(self._precomputed_action_tools)
-        return get_action_tools_from_integrations_context(
-            ctx, resolved_integrations=self._resolved_integrations()
+        resolved = (
+            resolved_integrations
+            if resolved_integrations is not None
+            else self._resolved_integrations()
         )
+        return get_action_tools_from_integrations_context(ctx, resolved_integrations=resolved)
 
     def tool_resources(self) -> dict[str, Any]:
         if self._tool_context is None:
@@ -133,10 +142,10 @@ class DefaultToolProvider:
         return _logging_observer
 
     def _resolved_integrations(self) -> dict[str, Any]:
-        from core.agent import Agent
+        from core.agent_harness.integrations.resolution import resolve_and_cache_integrations
 
-        # Agent.resolve_integrations already returns a fresh dict.
-        return Agent.resolve_integrations(self._session)
+        # resolve_and_cache_integrations returns a fresh dict.
+        return resolve_and_cache_integrations(self._session)
 
 
 class DefaultReasoningClientProvider:
@@ -155,14 +164,14 @@ class DefaultReasoningClientProvider:
 
     def get(self) -> Any | None:
         try:
-            from core.llm.llm_client import get_llm_for_reasoning
+            from core.llm.factory import LLMRole, get_llm
         except Exception as exc:
             self._handle_unavailable(
                 exc, context="core.agent_harness.default_reasoning_client.import"
             )
             return None
         try:
-            return get_llm_for_reasoning()
+            return get_llm(LLMRole.REASONING)
         except Exception as exc:
             self._handle_unavailable(
                 exc, context="core.agent_harness.default_reasoning_client.create"
@@ -173,7 +182,7 @@ class DefaultReasoningClientProvider:
         if self._error_reporter is not None:
             self._error_reporter.report(exc, context=context)
         if self._session is not None:
-            from core.agent_harness.agents.turn_orchestrator import stage_turn_error
+            from core.agent_harness.turns.orchestrator import stage_turn_error
 
             stage_turn_error(self._session, "llm_unavailable", str(exc))
         if self._output is not None:

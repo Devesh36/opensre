@@ -273,9 +273,7 @@ def run_synthetic_suite(
     #
     # We pre-check the data dir explicitly *and* catch a narrow
     # ``ModuleNotFoundError`` so users see one structured message regardless
-    # of which failure mode their bundle produces. The data-dir path is the
-    # ``SYNTHETIC_SCENARIOS_DIR`` constant from ``discover.py`` — single
-    # source of truth shared with ``_discover_rds_synthetic_scenarios``.
+    # of which failure mode their bundle produces.
     from surfaces.cli.tests.discover import SYNTHETIC_SCENARIOS_DIR
 
     if not SYNTHETIC_SCENARIOS_DIR.is_dir():

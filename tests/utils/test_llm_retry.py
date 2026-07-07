@@ -10,7 +10,7 @@ import pytest
 # the same lookup path as the symbols under test. Satisfies CodeQL
 # "Module imported with both 'import' and 'import from'" (a from-import
 # alongside a module-import flags as mixed-style).
-import core.llm.llm_retry as llm_retry
+import core.llm.shared.llm_retry as llm_retry
 
 # --------------------------------------------------------------------------- #
 # is_rate_limit_error — provider recognizer                                   #
@@ -181,6 +181,18 @@ def test_is_credit_exhausted_falls_back_to_text_for_anthropic_400() -> None:
         "'message': 'Your credit balance is too low to access the Anthropic API.'}"
     )
     assert llm_retry.is_credit_exhausted_error(err)
+
+
+def test_maybe_raise_credit_exhausted_offers_provider_switch_recovery() -> None:
+    """The message leads with the in-tool recovery (switch providers), not only
+    a pointer to the billing console."""
+    with pytest.raises(llm_retry.LLMCreditExhaustedError) as excinfo:
+        llm_retry.maybe_raise_credit_exhausted(
+            "Anthropic", RuntimeError("Your credit balance is too low")
+        )
+    message = str(excinfo.value)
+    assert "switch to another configured LLM provider" in message
+    assert "Anthropic console" in message
 
 
 # --------------------------------------------------------------------------- #

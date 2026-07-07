@@ -7,7 +7,23 @@ subdirectories. The repo-root `AGENTS.md` still applies.
 
 This package hosts the **action-tool implementations** the agent harness calls
 during an interactive-shell turn — the concrete `run` bodies behind the action
-tools listed in `core/agent_harness/tools/action_tools.py`.
+tools listed in `core/agent_harness/tools/action_tools.py`:
+
+- `actions/` — the action tools themselves (`shell_run`, `cli_exec`,
+  `slash_invoke`, `code_implement`, `investigation_start`, `alert_sample`,
+  `assistant_handoff`, `llm_set_provider`, `synthetic_run`, `task_cancel`).
+- `shell/` — shell command parsing, execution policy, and the
+  `run_shell_command`/`run_cd`/`run_pwd` runner behind `actions/shell.py`.
+- `synthetic/` — the synthetic-test runner behind `actions/synthetic.py`.
+- `implementation/` — the `/implement` (Claude Code) launcher.
+- `shared/` — cross-tool helpers (e.g. investigation launch, `allow_tool`).
+- `contracts` — imported by `command_registry.slash_catalog` during early import
+  wiring; see the `__init__.py` docstring for why tool submodules must be
+  imported explicitly rather than eagerly here (circular-import avoidance).
+
+Per the repo-root `AGENTS.md`, `tools/` owns every `@tool(...)` function and
+`RegisteredTool`/`BaseTool` class; this package is the interactive-shell slice of
+that ownership.
 
 ## Subprocess runner decoupling (T-03)
 
@@ -43,8 +59,8 @@ surfaces/interactive_shell (ui, dispatch, ReplSubprocessPresenter)
 
 `tools/interactive_shell/` **may** depend on:
 
-- `core.agent_harness.session` / `platform.common.task_types` for session and
-  task bookkeeping.
+- `core.agent_harness.session` runtime types (`Session`, `TaskKind`,
+  `TaskRecord`, `TaskStatus`) for session/task bookkeeping.
 - `integrations/` when an action tool wraps an integration client (e.g. Claude
   Code in `implementation/claude_code_executor.py`).
 
@@ -54,6 +70,9 @@ It must **not**:
 - Import `surfaces.interactive_shell.*` from subprocess runners (see T-03 list
   above). Other action tools (`slash`, `investigation`, etc.) may still reach
   into the surface temporarily — that is separate T-4 debt.
+- Grow eager submodule imports in `__init__.py` (keep the explicit-import
+  discipline documented there; several tool modules import back into
+  `command_registry`, so eager imports here reintroduce circular imports).
 
 ## Remaining surface coupling (T-4 debt, out of T-03 scope)
 

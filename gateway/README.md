@@ -37,7 +37,7 @@ A person can already receive messages the agent *sends* to Slack, but cannot yet
 *chat to* the agent from Slack.
 
 **One core for every surface.** Shell, CLI, and the Telegram gateway all hand the
-message to the same place: `Agent.dispatch_message_to_headless_agent`. They differ
+message to the same place: `dispatch_message_to_headless_agent`. They differ
 only in *how they receive input and send output* — never in how the agent thinks.
 
 ## Quick start
@@ -74,7 +74,7 @@ pieces, the same shape Telegram already has:
    receives incoming Slack messages (Slack Events API or Socket Mode) and calls the
    shared handler with `(text, session, sink, logger)`.
 2. **An output sink** (implement `GatewayOutputSink` from
-   `config/gateway_output_sink.py`): its `stream()` / `finalize()` send text back to
+   `gateway/gateway_output_sink.py`): its `stream()` / `finalize()` send text back to
    the Slack channel via `integrations/slack/delivery.py`.
 3. **A session resolver** (like `gateway/storage/session/resolver.py`): map a Slack
    user + channel to a `Session`.

@@ -8,27 +8,20 @@ from typing import cast
 import yaml
 from typing_extensions import TypedDict
 
-from config.synthetic_paths import (
-    CLOUDOPSBENCH_DIR,
-    OPENCLAW_SYNTHETIC_SCENARIOS_DIR,
-    RCA_DIR,
-    REPO_ROOT,
-    SYNTHETIC_SCENARIOS_DIR,
-)
+from config.constants.paths import REPO_ROOT, SYNTHETIC_SCENARIOS_DIR
 from surfaces.cli.tests.catalog import TestCatalog, TestCatalogItem, TestRequirement
 
 MAKEFILE_PATH = REPO_ROOT / "Makefile"
+RCA_DIR = REPO_ROOT / "tests" / "e2e" / "rca"
+OPENCLAW_SYNTHETIC_SCENARIOS_DIR = REPO_ROOT / "tests" / "synthetic" / "openclaw" / "scenarios"
+CLOUDOPSBENCH_DIR = REPO_ROOT / "tests" / "benchmarks" / "cloudopsbench"
 
-# Re-exported so existing callers and ``unittest.mock.patch`` targets
-# ``surfaces.cli.tests.discover.<name>`` keep working after the constants
-# moved to :mod:`config.synthetic_paths` (T-4 layering fix, issue #3352).
 __all__ = (
-    "CLOUDOPSBENCH_DIR",
     "MAKEFILE_PATH",
-    "OPENCLAW_SYNTHETIC_SCENARIOS_DIR",
-    "RCA_DIR",
-    "REPO_ROOT",
-    "SYNTHETIC_SCENARIOS_DIR",
+    "discover_cli_commands",
+    "discover_make_targets",
+    "discover_rca_files",
+    "load_test_catalog",
 )
 
 _TARGETS_TO_INDEX = (

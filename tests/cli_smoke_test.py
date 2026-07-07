@@ -18,9 +18,9 @@ from threading import Thread
 
 import pytest
 
-from config.version import get_version
+from config.constants.paths import REPO_ROOT
+from config.version import get_opensre_version
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
 _SCRIPT_NAME = "opensre.exe" if os.name == "nt" else "opensre"
 _ANSI_RE = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 _CLEARED_ENV_KEYS = (
@@ -56,8 +56,10 @@ _CLEARED_ENV_KEYS = (
     "OPENCLAW_MCP_COMMAND",
     "OPENCLAW_MCP_MODE",
     "OPENCLAW_MCP_URL",
+    "OPENSRE_LLM_AUTH_METADATA_PATH",
     "OPENSRE_PROJECT_ENV_PATH",
     "OPENSRE_RELEASES_API_URL",
+    "OPENSRE_WIZARD_STORE_PATH",
     "SLACK_WEBHOOK_URL",
     "TELEGRAM_BOT_TOKEN",
     "TELEGRAM_DEFAULT_CHAT_ID",
@@ -457,7 +459,7 @@ def test_opensre_version_smoke(cli_sandbox: CliSandbox) -> None:
     result = _run_cli(cli_sandbox, "--version")
 
     assert result.exit_code == 0
-    assert get_version() in result.stdout
+    assert get_opensre_version() in result.stdout
 
 
 def test_health_smoke_uses_real_datadog_store_config(cli_sandbox: CliSandbox) -> None:
