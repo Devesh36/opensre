@@ -8,14 +8,17 @@ import pytest
 from surfaces.cli.commands.architecture_scan_parsing import (
     architecture_scan_args_include_issue_numbers,
     architecture_scan_follow_up_cli_args,
+    architecture_scan_github_repo_argument,
     architecture_scan_github_subcommand,
     architecture_scan_repo_root,
     parse_github_repo_option,
     parse_issue_numbers_option,
+    resolve_architecture_scan_repo_scope_from_args,
     resolve_github_repo_for_subcommand,
 )
 
 _GITHUB_REPO = "https://github.com/Tracer-Cloud/opensre"
+_EXTERNAL_REPO = "https://github.com/example/external"
 
 
 @pytest.mark.parametrize(
@@ -61,19 +64,52 @@ def test_architecture_scan_args_include_issue_numbers(args: list[str], expected:
     assert architecture_scan_args_include_issue_numbers(args) is expected
 
 
+def test_architecture_scan_github_repo_argument_extracts_explicit_repo() -> None:
+    assert architecture_scan_github_repo_argument(
+        ["propose", _EXTERNAL_REPO, "--repo-root", "/tmp"]
+    ) == _EXTERNAL_REPO
+    assert architecture_scan_github_repo_argument(
+        ["--repo-root", "/tmp", "file-issues", "example/external"]
+    ) == "example/external"
+
+
+def test_architecture_scan_github_repo_argument_returns_none_without_repo() -> None:
+    assert architecture_scan_github_repo_argument(["propose"]) is None
+    assert architecture_scan_github_repo_argument(["--include-baselines"]) is None
+
+
+def test_resolve_architecture_scan_repo_scope_from_args_prefers_explicit_repo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tools.architecture_issue_tool import scan as scan_module
+
+    monkeypatch.setattr(
+        scan_module,
+        "resolve_architecture_scan_github_repo_scope",
+        lambda cwd=None: ("Tracer-Cloud", "opensre"),  # noqa: ARG005
+    )
+
+    scope = resolve_architecture_scan_repo_scope_from_args(
+        ["propose", _EXTERNAL_REPO, "--repo-root", "/tmp"]
+    )
+    assert scope == ("example", "external")
+
+
 def test_architecture_scan_follow_up_cli_args_preserves_scan_flags(tmp_path: Path) -> None:
     scan_args = [
+        "propose",
+        _EXTERNAL_REPO,
         "--repo-root",
         str(tmp_path),
         "--max-file-lines",
         "50",
         "--include-baselines",
     ]
-    cli_args = architecture_scan_follow_up_cli_args("propose", _GITHUB_REPO, scan_args)
+    cli_args = architecture_scan_follow_up_cli_args("propose", scan_args)
     assert cli_args == [
         "architecture-scan",
         "propose",
-        _GITHUB_REPO,
+        _EXTERNAL_REPO,
         "--repo-root",
         str(tmp_path),
         "--max-file-lines",

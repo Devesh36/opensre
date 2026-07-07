@@ -388,14 +388,11 @@ def _prepare_repl_inline_menu_stdin() -> None:
 
 
 def _architecture_scan_repo_scope(scan_args: list[str]) -> tuple[str, str]:
-    from surfaces.cli.commands.architecture_scan_parsing import architecture_scan_repo_root
-    from tools.architecture_issue_tool.scan import (
-        CANONICAL_OPENSRE_GITHUB_REPO,
-        resolve_architecture_scan_github_repo_scope,
+    from surfaces.cli.commands.architecture_scan_parsing import (
+        resolve_architecture_scan_repo_scope_from_args,
     )
 
-    scope = resolve_architecture_scan_github_repo_scope(cwd=architecture_scan_repo_root(scan_args))
-    return scope or CANONICAL_OPENSRE_GITHUB_REPO
+    return resolve_architecture_scan_repo_scope_from_args(scan_args)
 
 
 def _architecture_scan_initial_choice(
@@ -430,13 +427,9 @@ def _run_architecture_scan_github_subcommand(
 ) -> bool:
     from integrations.github.client import resolve_github_token
     from surfaces.cli.commands.architecture_scan_parsing import architecture_scan_follow_up_cli_args
-    from tools.architecture_issue_tool.scan import (
-        GITHUB_TOKEN_SETUP_HINT,
-        format_github_repo_url,
-    )
+    from tools.architecture_issue_tool.scan import GITHUB_TOKEN_SETUP_HINT
 
     _ = session
-    scope = _architecture_scan_repo_scope(scan_args)
     if choice == "file-issues":
         if not resolve_github_token():
             console.print()
@@ -453,12 +446,10 @@ def _run_architecture_scan_github_subcommand(
         if confirmed != "yes":
             return True
 
-    owner, repo = scope
-    repo_url = format_github_repo_url(owner, repo)
     repl_section_break(console)
     run_cli_command(
         console,
-        architecture_scan_follow_up_cli_args(choice, repo_url, scan_args),
+        architecture_scan_follow_up_cli_args(choice, scan_args),
         capture_output=True,
     )
     _architecture_scan_offer_issue_numbers_follow_up(
@@ -478,11 +469,7 @@ def _architecture_scan_offer_issue_numbers_follow_up(
     """After propose/file-issues, offer to rerun with ``--issue-numbers``."""
     from integrations.github.client import resolve_github_token
     from surfaces.cli.commands.architecture_scan_parsing import architecture_scan_follow_up_cli_args
-    from tools.architecture_issue_tool.scan import (
-        GITHUB_TOKEN_SETUP_HINT,
-        format_github_repo_url,
-        parse_issue_numbers,
-    )
+    from tools.architecture_issue_tool.scan import GITHUB_TOKEN_SETUP_HINT, parse_issue_numbers
 
     if not repl_tty_interactive() or choice not in {"propose", "file-issues"}:
         return
@@ -535,9 +522,7 @@ def _architecture_scan_offer_issue_numbers_follow_up(
             if confirmed != "yes":
                 continue
 
-        owner, repo = _architecture_scan_repo_scope(scan_args)
-        repo_url = format_github_repo_url(owner, repo)
-        cli_args = architecture_scan_follow_up_cli_args(choice, repo_url, scan_args)
+        cli_args = architecture_scan_follow_up_cli_args(choice, scan_args)
         cli_args.extend(["--issue-numbers", ",".join(str(index) for index in indices)])
         repl_section_break(console)
         run_cli_command(console, cli_args, capture_output=True)
