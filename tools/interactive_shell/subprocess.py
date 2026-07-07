@@ -152,6 +152,12 @@ class SubprocessPresenter(Protocol):
     def print(self, message: str = "") -> None:
         """Print a Rich-markup message."""
 
+    def print_error(self, message: str) -> None:
+        """Print an error-styled plain-text message."""
+
+    def print_highlight(self, message: str) -> None:
+        """Print a highlight-styled plain-text message."""
+
     def print_bold_command(self, display_command: str) -> None:
         """Print a ``$ <command>`` header line."""
 
