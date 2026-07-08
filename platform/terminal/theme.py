@@ -15,6 +15,16 @@ Token reference
   WARNING    warnings only — no auth, fallback store, config issues
   ERROR      errors only — missing required config, failures
   BG         terminal background, never used as foreground
+  INPUT_SURFACE  prompt/menu surface background
+
+Optional per-theme splash gradient (``CliTheme`` only)
+----------------------------------------------------
+  SPLASH_GRADIENT_START  left/start colour for splash ASCII art gradients
+  SPLASH_GRADIENT_END    right/end colour for splash ASCII art gradients
+
+When both gradient fields are set, the splash banner interpolates between
+them across each row of ``█`` block characters. Themes without these fields
+continue to use ``HIGHLIGHT`` for splash art.
 
 Usage
 -----

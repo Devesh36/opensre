@@ -49,6 +49,7 @@ from platform.terminal.theme import (
     SECONDARY,
     TEXT,
     WARNING,
+    _parse_hex_color,
     get_active_theme,
 )
 from surfaces.interactive_shell.ui.banner.banner_state import _build_ambient_right_column
@@ -69,16 +70,10 @@ def _is_first_run() -> bool:
 # ── Splash screen ─────────────────────────────────────────────────────────────
 
 
-def _parse_hex_triplet(value: str) -> tuple[int, int, int]:
-    """Convert ``#RRGGBB`` into an RGB tuple."""
-    stripped = value.lstrip("#")
-    return (int(stripped[0:2], 16), int(stripped[2:4], 16), int(stripped[4:6], 16))
-
-
 def _interpolate_hex_color(start: str, end: str, t: float) -> str:
     """Return a hex color linearly interpolated between ``start`` and ``end``."""
-    start_rgb = _parse_hex_triplet(start)
-    end_rgb = _parse_hex_triplet(end)
+    start_rgb = _parse_hex_color(start)
+    end_rgb = _parse_hex_color(end)
     clamped = max(0.0, min(1.0, t))
     channels = tuple(
         int(round(start_rgb[idx] + (end_rgb[idx] - start_rgb[idx]) * clamped)) for idx in range(3)
@@ -91,8 +86,10 @@ def _splash_block_style(block_index: int, block_total: int) -> str:
     theme = get_active_theme()
     start = theme.SPLASH_GRADIENT_START
     end = theme.SPLASH_GRADIENT_END
-    if not start or not end or block_total <= 1:
+    if not start or not end:
         return f"bold {HIGHLIGHT}"
+    if block_total <= 1:
+        return f"bold {_interpolate_hex_color(start, end, 0.0)}"
     ratio = block_index / (block_total - 1)
     return f"bold {_interpolate_hex_color(start, end, ratio)}"
 
