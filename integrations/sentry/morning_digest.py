@@ -486,9 +486,7 @@ def build_uptime_digest_view(
                 detail = f"since {since}"
             else:
                 detail = "ongoing (start time unavailable)"
-            still_down.append(
-                UptimeStatusRow(label=timeline.label, detail=detail, status="down")
-            )
+            still_down.append(UptimeStatusRow(label=timeline.label, detail=detail, status="down"))
         elif timeline.recovered_at is not None:
             stamp = timeline.recovered_at.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
             recovered.append(

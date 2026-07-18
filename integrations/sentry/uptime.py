@@ -462,9 +462,7 @@ def prune_transition_records(
         if existing_at is None or parsed < existing_at:
             pinned_down[record.monitor_id] = record
 
-    pinned_keys = {
-        (record.monitor_id, record.kind, record.at) for record in pinned_down.values()
-    }
+    pinned_keys = {(record.monitor_id, record.kind, record.at) for record in pinned_down.values()}
     kept: list[UptimeTransitionRecord] = []
     seen_pinned: set[tuple[str, str, str]] = set()
     for record in records:
