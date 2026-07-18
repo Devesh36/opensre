@@ -304,7 +304,7 @@ def merge_watch_histories(
         for monitor_id in state.open_incidents:
             if scope:
                 projects = monitor_projects.get(monitor_id, set())
-                if projects and scope not in projects:
+                if not projects or scope not in projects:
                     continue
             open_incidents.add(str(monitor_id))
 
@@ -320,6 +320,19 @@ def _label_for_records(records: list[UptimeTransitionRecord]) -> str:
     return "unknown monitor"
 
 
+def _earliest_down_at(records: list[UptimeTransitionRecord]) -> datetime | None:
+    earliest: datetime | None = None
+    for record in records:
+        if record.kind != "down":
+            continue
+        parsed = parse_transition_at(record)
+        if parsed is None:
+            continue
+        if earliest is None or parsed < earliest:
+            earliest = parsed
+    return earliest
+
+
 def _scan_timeline(
     records: list[UptimeTransitionRecord],
     *,
@@ -327,21 +340,18 @@ def _scan_timeline(
 ) -> tuple[datetime | None, datetime | None]:
     open_down_at: datetime | None = None
     recovered_at: datetime | None = None
-    last_down: datetime | None = None
 
     for record in records:
         parsed = parse_transition_at(record)
         if parsed is None:
             continue
         if record.kind == "down":
-            last_down = parsed
             open_down_at = parsed
             continue
         if record.kind == "recovered":
-            if parsed >= window_start and last_down is not None:
+            if parsed >= window_start:
                 recovered_at = parsed
             open_down_at = None
-            last_down = None
 
     return open_down_at, recovered_at
 
@@ -352,6 +362,7 @@ class _MonitorTimeline:
     label: str
     open_down_at: datetime | None
     recovered_at: datetime | None
+    ongoing_without_timestamp: bool = False
 
 
 def _build_monitor_timelines(
@@ -365,12 +376,18 @@ def _build_monitor_timelines(
     for monitor_id in open_incidents:
         records = grouped.get(monitor_id, [])
         open_down_at, _ = _scan_timeline(records, window_start=window_start)
+        ongoing_without_timestamp = False
+        if open_down_at is None:
+            open_down_at = _earliest_down_at(records)
+        if open_down_at is None:
+            ongoing_without_timestamp = True
         timelines.append(
             _MonitorTimeline(
                 monitor_id=monitor_id,
                 label=_label_for_records(records),
                 open_down_at=open_down_at,
                 recovered_at=None,
+                ongoing_without_timestamp=ongoing_without_timestamp,
             )
         )
 
@@ -398,21 +415,31 @@ def _build_monitor_timelines(
     return timelines
 
 
+def _prefer_still_down_timeline(
+    candidate: _MonitorTimeline,
+    current: _MonitorTimeline,
+) -> bool:
+    if candidate.open_down_at is None:
+        return False
+    if current.open_down_at is None:
+        return True
+    return candidate.open_down_at > current.open_down_at
+
+
 def _dedupe_open_timelines(timelines: list[_MonitorTimeline]) -> list[_MonitorTimeline]:
     open_by_label: dict[str, _MonitorTimeline] = {}
     recovered: list[_MonitorTimeline] = []
 
     for timeline in timelines:
-        if timeline.open_down_at is not None and timeline.recovered_at is None:
-            key = timeline.label.lower()
-            existing = open_by_label.get(key)
-            if existing is None or (
-                timeline.open_down_at is not None
-                and (existing.open_down_at is None or timeline.open_down_at > existing.open_down_at)
-            ):
-                open_by_label[key] = timeline
+        if timeline.recovered_at is not None:
+            recovered.append(timeline)
             continue
-        recovered.append(timeline)
+        if timeline.open_down_at is None and not timeline.ongoing_without_timestamp:
+            continue
+        key = timeline.label.lower()
+        existing = open_by_label.get(key)
+        if existing is None or _prefer_still_down_timeline(timeline, existing):
+            open_by_label[key] = timeline
 
     return sorted(open_by_label.values(), key=lambda item: item.label) + sorted(
         recovered,
@@ -451,10 +478,16 @@ def build_uptime_digest_view(
             window_start=window_start,
         )
     ):
-        if timeline.open_down_at is not None and timeline.recovered_at is None:
-            since = timeline.open_down_at.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
+        if timeline.recovered_at is None and (
+            timeline.open_down_at is not None or timeline.ongoing_without_timestamp
+        ):
+            if timeline.open_down_at is not None:
+                since = timeline.open_down_at.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
+                detail = f"since {since}"
+            else:
+                detail = "ongoing (start time unavailable)"
             still_down.append(
-                UptimeStatusRow(label=timeline.label, detail=f"since {since}", status="down")
+                UptimeStatusRow(label=timeline.label, detail=detail, status="down")
             )
         elif timeline.recovered_at is not None:
             stamp = timeline.recovered_at.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")

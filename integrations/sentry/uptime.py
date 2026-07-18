@@ -428,7 +428,11 @@ def append_transition_records(
     now = at or datetime.now(UTC)
     for transition in transitions:
         state.transitions.append(transition_record_from(transition, at=now))
-    state.transitions = prune_transition_records(state.transitions, now=now)
+    state.transitions = prune_transition_records(
+        state.transitions,
+        now=now,
+        open_incident_ids=state.open_incidents,
+    )
 
 
 def prune_transition_records(
@@ -436,11 +440,40 @@ def prune_transition_records(
     *,
     now: datetime | None = None,
     retention_days: int = _TRANSITION_RETENTION_DAYS,
+    open_incident_ids: set[str] | None = None,
 ) -> list[UptimeTransitionRecord]:
-    """Drop transition records older than the retention window."""
-    cutoff = (now or datetime.now(UTC)) - timedelta(days=retention_days)
-    kept: list[UptimeTransitionRecord] = []
+    """Drop aged transitions; retain founding DOWN rows for open incidents."""
+    current = now or datetime.now(UTC)
+    cutoff = current - timedelta(days=retention_days)
+    pinned_monitor_ids = {str(item) for item in (open_incident_ids or set()) if str(item).strip()}
+
+    pinned_down: dict[str, UptimeTransitionRecord] = {}
     for record in records:
+        if record.monitor_id not in pinned_monitor_ids or record.kind != "down":
+            continue
+        parsed = parse_transition_at(record)
+        if parsed is None:
+            continue
+        existing = pinned_down.get(record.monitor_id)
+        if existing is None:
+            pinned_down[record.monitor_id] = record
+            continue
+        existing_at = parse_transition_at(existing)
+        if existing_at is None or parsed < existing_at:
+            pinned_down[record.monitor_id] = record
+
+    pinned_keys = {
+        (record.monitor_id, record.kind, record.at) for record in pinned_down.values()
+    }
+    kept: list[UptimeTransitionRecord] = []
+    seen_pinned: set[tuple[str, str, str]] = set()
+    for record in records:
+        key = (record.monitor_id, record.kind, record.at)
+        if key in pinned_keys:
+            if key not in seen_pinned:
+                kept.append(record)
+                seen_pinned.add(key)
+            continue
         parsed = parse_transition_at(record)
         if parsed is not None and parsed >= cutoff:
             kept.append(record)

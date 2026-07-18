@@ -290,6 +290,54 @@ class TestUptimeDigestView:
         assert len(view.still_down) == 1
         assert view.still_down[0].detail == "since 2026-07-16 07:00 UTC"
 
+    def test_recovered_in_window_without_down_record(self, tmp_path: Path) -> None:
+        now = datetime(2026, 7, 16, 8, 0, tzinfo=UTC)
+        recovered_at = now - timedelta(hours=2)
+        save_watch_state(
+            "task-a",
+            WatchState(
+                transitions=[
+                    _uptime_record(
+                        "1",
+                        kind="recovered",
+                        at=recovered_at,
+                        url="https://api.example.com",
+                    )
+                ]
+            ),
+            path=tmp_path / "state.json",
+        )
+
+        view = build_uptime_digest_view(state_path=tmp_path / "state.json", now=now)
+        assert view is not None
+        assert view.recovered[0].label == "api.example.com"
+
+    def test_still_down_when_open_incident_has_no_transition_records(self, tmp_path: Path) -> None:
+        now = datetime(2026, 7, 16, 8, 0, tzinfo=UTC)
+        save_watch_state(
+            "task-a",
+            WatchState(open_incidents={"1"}, transitions=[]),
+            path=tmp_path / "state.json",
+        )
+
+        view = build_uptime_digest_view(state_path=tmp_path / "state.json", now=now)
+        assert view is not None
+        assert view.still_down[0].detail == "ongoing (start time unavailable)"
+
+    def test_scoped_digest_skips_open_incident_without_project_metadata(
+        self, tmp_path: Path
+    ) -> None:
+        now = datetime(2026, 7, 16, 8, 0, tzinfo=UTC)
+        path = tmp_path / "state.json"
+        save_watch_state(
+            "task-a",
+            WatchState(open_incidents={"1"}, transitions=[]),
+            path=path,
+        )
+
+        view = build_uptime_digest_view(state_path=path, now=now, project_slug="web")
+        assert view is None
+
 
 class TestDigestFormatting:
     def test_issues_section_layout(self) -> None:

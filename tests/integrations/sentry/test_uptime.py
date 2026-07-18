@@ -285,6 +285,22 @@ def test_prune_transition_records_drops_old_entries() -> None:
     assert pruned == [recent]
 
 
+def test_prune_transition_records_keeps_open_incident_down() -> None:
+    from datetime import UTC, datetime, timedelta
+
+    now = datetime.now(UTC)
+    old = UptimeTransitionRecord(
+        monitor_id="1",
+        kind="down",
+        at=(now - timedelta(days=10)).isoformat(),
+        name="sandbox",
+        url="https://sandbox.example.com",
+        project_slug="web",
+    )
+    pruned = prune_transition_records([old], now=now, open_incident_ids={"1"})
+    assert pruned == [old]
+
+
 def test_transition_record_from_uses_monitor_metadata() -> None:
     down = _monitor("9", health="down", name="api", url="https://api.example.com")
     transitions, _ = detect_uptime_transitions({}, [down], notify_initial_down=True)

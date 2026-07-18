@@ -145,9 +145,7 @@ def _deliver_slack(task: ScheduledTask, message: str) -> tuple[bool, str, str]:
     webhook_url = creds.get("webhook_url", "")
 
     # Strip HTML tags — Slack uses mrkdwn, not HTML
-    from integrations.slack.formatting import markdown_to_slack_mrkdwn
-
-    plain_message = markdown_to_slack_mrkdwn(_strip_html(message))
+    plain_message = _strip_html(message)
 
     if access_token and task.chat_id:
         # Direct API post as a new top-level message
