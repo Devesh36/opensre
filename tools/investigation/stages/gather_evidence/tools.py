@@ -9,7 +9,6 @@ from core.domain.alerts.alert_source import (
     SECONDARY_TOOL_SOURCES,
     primary_sources_for_alert,
     relevant_sources_for_alert,
-    resolve_alert_source,
     seed_tool_sources_for_alert,
 )
 from core.llm.types import ToolCall
@@ -229,10 +228,6 @@ def build_seed_calls(
         calls.append(ToolCall(id=tool_id, name=tool.name, input=public_tool_input(injected)))
 
     return calls
-
-
-def get_alert_source(state: dict[str, Any]) -> str:
-    return resolve_alert_source(state)
 
 
 def tool_event_payload(tc: ToolCall, *, output: Any | None = None) -> dict[str, Any]:

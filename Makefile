@@ -22,7 +22,7 @@ export
 	rabbitmq-local-up rabbitmq-local-down test-rabbitmq-real \
 	test-openclaw test-openclaw-synthetic \
 	test-hermes test-hermes-synthetic test-hermes-synthetic-only refresh-hermes-tuples \
-	clean lint format-check format typecheck \
+	clean lint format-check format typecheck vulture \
 	check-imports check-cycles check-layers check-imports-strict check-layers-strict check help
 
 
@@ -462,6 +462,10 @@ format:
 # Type check
 typecheck:
 	$(PYTHON) -m mypy $(PYTHON_SOURCE_PATHS)
+
+# Dead-code scan (reads [tool.vulture] from pyproject.toml; advisory only, not in CI)
+vulture:
+	$(PYTHON) -m vulture
 
 # Import graph: cycles + layering + forbidden direct edges (one command).
 check-imports:

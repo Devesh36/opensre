@@ -527,36 +527,6 @@ class HelmIntegrationConfig(StrictConfigModel):
         return bool(str(self.helm_path or "").strip())
 
 
-class GitLabIntegrationConfig(StrictConfigModel):
-    """Normalized GitLab credentials used by resolution and verification flows."""
-
-    url: str
-    access_token: str
-    integration_id: str = ""
-
-
-# ---------------------------------------------------------------------------
-# Error Tracking & APM
-# ---------------------------------------------------------------------------
-
-
-class SentryIntegrationConfig(StrictConfigModel):
-    """Normalized Sentry credentials — kept for type-check consumers."""
-
-    base_url: str = "https://sentry.io"
-    organization_slug: str = ""
-    auth_token: str = ""
-    project_slug: str = ""
-    integration_id: str = ""
-
-    _normalize_base_url = field_validator("base_url", mode="before")(
-        normalize_url("https://sentry.io")
-    )
-    _normalize_strs = field_validator(
-        "organization_slug", "auth_token", "project_slug", mode="before"
-    )(normalize_str())
-
-
 # ---------------------------------------------------------------------------
 # Databases — Relational
 # ---------------------------------------------------------------------------
@@ -602,42 +572,6 @@ class MySQLIntegrationConfig(StrictConfigModel):
     )
 
 
-class MariaDBIntegrationConfig(StrictConfigModel):
-    """Normalized MariaDB credentials used by resolution and verification flows."""
-
-    host: str
-    port: int = 3306
-    database: str
-    username: str
-    password: str = ""
-    ssl: bool = True
-    integration_id: str = ""
-
-    _normalize_strs = field_validator("host", "database", "username", mode="before")(
-        normalize_str()
-    )
-
-
-class AzureSQLIntegrationConfig(StrictConfigModel):
-    """Normalized Azure SQL Database credentials used by resolution and verification flows."""
-
-    server: str
-    port: int = 1433
-    database: str
-    username: str = ""
-    password: str = ""
-    driver: str = "ODBC Driver 18 for SQL Server"
-    encrypt: bool = True
-    integration_id: str = ""
-
-    _normalize_strs = field_validator("server", "database", "username", mode="before")(
-        normalize_str()
-    )
-    _normalize_driver = field_validator("driver", mode="before")(
-        normalize_with_default("ODBC Driver 18 for SQL Server")
-    )
-
-
 # ---------------------------------------------------------------------------
 # Databases — Document / NoSQL
 # ---------------------------------------------------------------------------
@@ -674,44 +608,6 @@ class RedisIntegrationConfig(StrictConfigModel):
     _normalize_host = field_validator("host", mode="before")(normalize_str())
     _normalize_username = field_validator("username", mode="before")(normalize_str())
     _normalize_password = field_validator("password", mode="before")(normalize_str())
-
-
-class MongoDBAtlasIntegrationConfig(StrictConfigModel):
-    """Normalized MongoDB Atlas API credentials used by resolution and verification flows."""
-
-    api_public_key: str
-    api_private_key: str
-    project_id: str
-    base_url: str = "https://cloud.mongodb.com/api/atlas/v2"
-    integration_id: str = ""
-
-    _normalize_strs = field_validator(
-        "api_public_key", "api_private_key", "project_id", mode="before"
-    )(normalize_str())
-    _normalize_base_url = field_validator("base_url", mode="before")(
-        normalize_url("https://cloud.mongodb.com/api/atlas/v2")
-    )
-
-
-# ---------------------------------------------------------------------------
-# Message Queues
-# ---------------------------------------------------------------------------
-
-
-class RabbitMQIntegrationConfig(StrictConfigModel):
-    """Normalized RabbitMQ Management API credentials used by resolution and verification flows."""
-
-    host: str
-    management_port: int = 15672
-    username: str
-    password: str = ""
-    vhost: str = "/"
-    ssl: bool = False
-    verify_ssl: bool = True
-    integration_id: str = ""
-
-    _normalize_strs = field_validator("host", "username", mode="before")(normalize_str())
-    _normalize_vhost = field_validator("vhost", mode="before")(normalize_with_default("/"))
 
 
 # ---------------------------------------------------------------------------
@@ -798,26 +694,6 @@ class ServiceNowIntegrationConfig(StrictConfigModel):
     @property
     def api_base(self) -> str:
         return f"{self.instance_url}/api/now"
-
-
-class NotionIntegrationConfig(StrictConfigModel):
-    """Normalized Notion credentials used by resolution and verification flows."""
-
-    api_key: str
-    database_id: str
-    integration_id: str = ""
-
-    _normalize_strs = field_validator("api_key", "database_id", mode="before")(normalize_str())
-
-
-class TrelloIntegrationConfig(StrictConfigModel):
-    """Normalized Trello credentials."""
-
-    api_key: str
-    api_token: str
-    integration_id: str = ""
-
-    _normalize_strs = field_validator("api_key", "api_token", mode="before")(normalize_str())
 
 
 class GoogleDocsIntegrationConfig(StrictConfigModel):

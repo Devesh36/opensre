@@ -486,33 +486,6 @@ def capture_onboard_failed() -> None:
     _capture(Event.ONBOARD_FAILED)
 
 
-def capture_investigation_started(
-    *,
-    input_path: str | None,
-    input_json: str | None,
-    interactive: bool,
-    entrypoint: EntrypointSource = EntrypointSource.CLI_COMMAND,
-    trigger_mode: TriggerMode = TriggerMode.FILE,
-    investigation_id: str | None = None,
-    evaluate_requested: bool = False,
-) -> None:
-    shared_properties = build_source_properties(
-        entrypoint=entrypoint,
-        trigger_mode=trigger_mode,
-        investigation_id=investigation_id or str(uuid4()),
-    )
-    _capture(
-        Event.INVESTIGATION_STARTED,
-        _investigation_started_properties(
-            input_path=input_path,
-            input_json=input_json,
-            interactive=interactive,
-            evaluate_requested=evaluate_requested,
-            shared_properties=shared_properties,
-        ),
-    )
-
-
 def capture_diagnosis_category_mismatch(
     *,
     root_cause_category: str,
@@ -1035,18 +1008,6 @@ def capture_terminal_turn_summarized(
             "session_fallback_rate_bucket": _bucket_percentage(session_fallback_rate_percent),
         },
     )
-
-
-def capture_deploy_started(*, target: str, dry_run: bool) -> None:
-    _capture(Event.DEPLOY_STARTED, {"target": target, "dry_run": dry_run})
-
-
-def capture_deploy_completed(*, target: str, dry_run: bool) -> None:
-    _capture(Event.DEPLOY_COMPLETED, {"target": target, "dry_run": dry_run})
-
-
-def capture_deploy_failed(*, target: str, dry_run: bool) -> None:
-    _capture(Event.DEPLOY_FAILED, {"target": target, "dry_run": dry_run})
 
 
 def capture_update_started(*, check_only: bool) -> None:

@@ -98,6 +98,7 @@ dev = [
     "ruff>=0.4.0",
     "mypy>=1.10.0",
     "import-linter>=2.0",
+    "vulture>=2.14",
     "types-requests",
     "types-psycopg2",
     "types-PyMySQL",
@@ -188,10 +189,13 @@ ignore_names = [
   "shell_complete", "format_help", "show",        # Click overrides
   "_normalize_*",                                  # Pydantic field validators
   "_require_*",                                    # Pydantic model validators
+  "model_config",                                  # Pydantic v2 ConfigDict alias
   "on_thread_*", "on_assistant_*", "on_cron_*",
   "discord_interactions", "health_check",
   "version_check", "deep_health_check",
   "investigate_stream",
+  "clean_env", "empty_store",                      # pytest fixtures
+  "_isolated_*", "_reset_*", "_harness_*", "_no_*", # pytest fixtures / autouse hooks
 ]
 
 # uv installs this PEP 735 group by default (`uv sync`; omit with `--no-dev`).
@@ -204,4 +208,5 @@ dev = [
     "types-psutil>=7.2.2.20260408",
     "types-PyYAML>=6.0.12",
     "import-linter>=2.0",
+    "vulture>=2.14",
 ]
