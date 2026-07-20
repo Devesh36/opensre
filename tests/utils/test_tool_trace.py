@@ -140,6 +140,19 @@ def test_redact_sensitive_scrubs_embedded_secrets_in_error_values() -> None:
     assert jwt not in redacted["error"]
 
 
+def test_redact_sensitive_scrubs_standalone_jwt_in_error_values() -> None:
+    """Exercise the eyJ… JWT arm without a bearer prefix."""
+    jwt = (
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+        "eyJzdWIiOiIxMjM0NTY3ODkwIn0."
+        "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+    )
+    redacted = redact_sensitive({"error": f"Auth failed token={jwt}"})
+
+    assert redacted["error"] == "Auth failed token=[redacted]"
+    assert jwt not in redacted["error"]
+
+
 def test_redact_sensitive_truncates_long_error_values() -> None:
     long_body = "x" * 500
     redacted = redact_sensitive({"error": f"HTTP 500: {long_body}"})
@@ -147,6 +160,21 @@ def test_redact_sensitive_truncates_long_error_values() -> None:
     assert len(redacted["error"]) == 123
     assert redacted["error"].endswith("...")
     assert long_body not in redacted["error"]
+
+
+def test_redact_sensitive_truncation_does_not_bisect_redacted_placeholder() -> None:
+    # Place a JWT so after scrubbing, "[redacted]" straddles the 120-char cut.
+    jwt = (
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+        "eyJzdWIiOiIxMjM0NTY3ODkwIn0."
+        "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+    )
+    prefix = "x" * 115
+    redacted = redact_sensitive({"error": f"{prefix}{jwt}"})
+
+    assert "[redacte" not in redacted["error"]
+    assert redacted["error"].endswith("...")
+    assert jwt not in redacted["error"]
 
 
 def test_redact_sensitive_passes_through_short_safe_error_values() -> None:

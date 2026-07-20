@@ -39,6 +39,22 @@ _JSON_TRUNCATION_SUFFIX = "\n... [truncated]"
 _SEED_LOOP_ITERATION = -1
 
 
+def _sanitize_error_value(value: str) -> str:
+    """Scrub embedded secrets from an error string, then bound its length.
+
+    Truncation backs up past a partial ``[redacted]`` so the sentinel is never
+    sliced mid-token (e.g. ``[redacte...``).
+    """
+    scrubbed = _EMBEDDED_SECRET_RE.sub(_REDACTED_PLACEHOLDER, value)
+    if len(scrubbed) <= _MAX_ERROR_VALUE_LEN:
+        return scrubbed
+    truncated = scrubbed[:_MAX_ERROR_VALUE_LEN]
+    open_bracket = truncated.rfind("[")
+    if open_bracket != -1 and "]" not in truncated[open_bracket:]:
+        truncated = truncated[:open_bracket].rstrip()
+    return truncated + "..."
+
+
 def redact_sensitive(value: Any) -> Any:
     """Return a copy of ``value`` with credentials and runtime objects hidden."""
     if isinstance(value, dict):
@@ -50,10 +66,7 @@ def redact_sensitive(value: Any) -> Any:
             elif _RUNTIME_KEY_RE.search(key_str):
                 redacted[key_str] = _RUNTIME_OBJECT_PLACEHOLDER
             elif _ERROR_KEY_RE.match(key_str) and isinstance(item, str):
-                scrubbed = _EMBEDDED_SECRET_RE.sub(_REDACTED_PLACEHOLDER, item)
-                if len(scrubbed) > _MAX_ERROR_VALUE_LEN:
-                    scrubbed = scrubbed[:_MAX_ERROR_VALUE_LEN] + "..."
-                redacted[key_str] = scrubbed
+                redacted[key_str] = _sanitize_error_value(item)
             else:
                 redacted[key_str] = redact_sensitive(item)
         return redacted
