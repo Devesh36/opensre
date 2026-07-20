@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 import pytest
 
@@ -13,7 +12,6 @@ from integrations.sentry.tools.sentry_uptime_digest_tool import (
 from integrations.sentry.uptime import (
     UptimeTransitionRecord,
     WatchState,
-    save_watch_state,
 )
 
 
@@ -63,7 +61,7 @@ class TestGetSentryUptimeDigest:
         )
         monkeypatch.setattr(
             "integrations.sentry.tools.sentry_uptime_digest_tool.datetime",
-            type("_MockDT", (), {"now": staticmethod(lambda tz: now)}),
+            type("_MockDT", (), {"now": staticmethod(lambda _tz: now)}),
         )
         result = get_sentry_uptime_digest()
         assert result["uptime_watch_active"] is True
@@ -96,7 +94,7 @@ class TestGetSentryUptimeDigest:
         )
         monkeypatch.setattr(
             "integrations.sentry.tools.sentry_uptime_digest_tool.datetime",
-            type("_MockDT", (), {"now": staticmethod(lambda tz: now)}),
+            type("_MockDT", (), {"now": staticmethod(lambda _tz: now)}),
         )
         result = get_sentry_uptime_digest()
         assert result["recovered_count"] == 1
@@ -122,7 +120,7 @@ class TestGetSentryUptimeDigest:
         )
         monkeypatch.setattr(
             "integrations.sentry.tools.sentry_uptime_digest_tool.datetime",
-            type("_MockDT", (), {"now": staticmethod(lambda tz: now)}),
+            type("_MockDT", (), {"now": staticmethod(lambda _tz: now)}),
         )
         result = get_sentry_uptime_digest()
         assert result["uptime_watch_active"] is True
