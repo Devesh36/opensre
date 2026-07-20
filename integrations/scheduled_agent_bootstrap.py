@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from integrations.github.pr_sweep_runner import run_github_pr_sweep
-from integrations.sentry.morning_digest import run_sentry_morning_digest
+from integrations.sentry.morning_digest_runner import run_sentry_morning_digest
 from integrations.sentry.uptime import run_uptime_watch_tick
 from platform.scheduler.agent_runner import AgentPayload, register_agent_runner
 

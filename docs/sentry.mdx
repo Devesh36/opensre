@@ -103,11 +103,11 @@ Detail: Sentry validated for org your-org; 30 issue(s) in the last 7 days
 
 ## Morning digest (scheduled)
 
-Deliver a daily unresolved-issues summary to Slack or Telegram. The Issues
-section is built deterministically from Sentry (`search_sentry_issues` data
-shape via `build_sentry_issue_digest`), not an LLM instruction block. An optional
-uptime section is appended from the uptime watch transition log when history
-exists. This is not the investigation pipeline or generic `opensre cron` kinds.
+Deliver a daily unresolved-issues summary to Slack or Telegram. This uses the
+headless **sentry-summary** skill path (tools + LLM answer via the gateway),
+not the investigation pipeline or generic `opensre cron` kinds. When an uptime
+watch schedule is running, the skill also calls `get_sentry_uptime_digest` to
+include downtime/recovery context in the digest.
 
 | Command | What it does |
 | --- | --- |
@@ -140,15 +140,13 @@ opensre sentry digest schedule add \
 
 Optional `--project my-service` scopes the digest to one Sentry project.
 
-When an **uptime watch** schedule is running, the digest may also include a
-deterministic **Uptime / downtime (last 24h)** section built from the watch
-transition log (monitors that went down, recovered, or are still down). That
-section is separate from the LLM Issues summary and does not use the
-`sentry-summary` skill. If no uptime watch history exists, the digest stays
-Issues-only.
+When an **uptime watch** schedule is running, the `sentry-summary` skill
+automatically includes an **Uptime / downtime (last 24h)** section with
+monitors that are still down or recovered in the window. If no uptime watch
+history exists, the digest stays Issues-only.
 
 The gateway daemon picks up scheduled digests automatically when it is running.
-Issues and uptime sections are deterministic; no LLM is required for delivery.
+If the LLM is unavailable, the run fails with an error.
 
 <Note>
 The count reflects issues seen in the last 7 days (capped at 100, shown as
@@ -184,9 +182,9 @@ opensre sentry uptime watch add \
 Requires `alerts:read` (or equivalent) on the Sentry token. The agent tool
 `list_sentry_uptime_alerts` exposes the same monitor list in chat/investigation.
 
-Schedule an uptime watch alongside the morning digest if you want the digest to
-include yesterday's downtime summary; the watch records DOWN/RECOVERED
-transitions locally for that rollup.
+Schedule an uptime watch alongside the morning digest so the `sentry-summary`
+skill can include yesterday's downtime summary via `get_sentry_uptime_digest`;
+the watch records DOWN/RECOVERED transitions locally for that rollup.
 
 Follow-ups (not in v1): inbound Sentry webhooks and auto-remediation attempts.
 
