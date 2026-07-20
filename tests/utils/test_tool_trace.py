@@ -125,3 +125,31 @@ def test_format_tool_trace_entry_handles_empty_trace_record_and_output_limit() -
     assert limited.startswith("- `large_tool` (iteration 1)")
     assert "... [truncated]" in limited
     assert limited.count("\n") == 2
+
+
+def test_redact_sensitive_scrubs_embedded_secrets_in_error_values() -> None:
+    jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.signature"
+    redacted = redact_sensitive(
+        {
+            "error": f"HTTP 403: Invalid bearer {jwt}",
+            "available": False,
+        }
+    )
+
+    assert redacted["error"] == "HTTP 403: Invalid [redacted]"
+    assert jwt not in redacted["error"]
+
+
+def test_redact_sensitive_truncates_long_error_values() -> None:
+    long_body = "x" * 500
+    redacted = redact_sensitive({"error": f"HTTP 500: {long_body}"})
+
+    assert len(redacted["error"]) == 123
+    assert redacted["error"].endswith("...")
+    assert long_body not in redacted["error"]
+
+
+def test_redact_sensitive_passes_through_short_safe_error_values() -> None:
+    for message in ("HTTP 403", "RuntimeError", "ConnectError"):
+        redacted = redact_sensitive({"error": message})
+        assert redacted["error"] == message

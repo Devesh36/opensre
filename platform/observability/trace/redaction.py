@@ -11,9 +11,19 @@ _SENSITIVE_KEY_RE = re.compile(
     re.IGNORECASE,
 )
 _RUNTIME_KEY_RE = re.compile(r"(^_|backend$|_backend$)", re.IGNORECASE)
+_ERROR_KEY_RE = re.compile(r"^error$", re.IGNORECASE)
+
+_EMBEDDED_SECRET_RE = re.compile(
+    r"(?i)(bearer\s+[A-Za-z0-9._~+/=-]{6,}"
+    r"|xox[baprs]-[A-Za-z0-9-]{8,}"
+    r"|gh[pousr]_[A-Za-z0-9_]{20,}"
+    r"|AKIA[0-9A-Z]{16}"
+    r"|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})"
+)
 
 _REDACTED_PLACEHOLDER = "[redacted]"
 _RUNTIME_OBJECT_PLACEHOLDER = "[runtime object]"
+_MAX_ERROR_VALUE_LEN = 120
 
 #: Default bound for pretty-printed JSON previews in the terminal.
 DEFAULT_JSON_PREVIEW_MAX_CHARS = 4000
@@ -39,6 +49,11 @@ def redact_sensitive(value: Any) -> Any:
                 redacted[key_str] = _REDACTED_PLACEHOLDER
             elif _RUNTIME_KEY_RE.search(key_str):
                 redacted[key_str] = _RUNTIME_OBJECT_PLACEHOLDER
+            elif _ERROR_KEY_RE.match(key_str) and isinstance(item, str):
+                scrubbed = _EMBEDDED_SECRET_RE.sub(_REDACTED_PLACEHOLDER, item)
+                if len(scrubbed) > _MAX_ERROR_VALUE_LEN:
+                    scrubbed = scrubbed[:_MAX_ERROR_VALUE_LEN] + "..."
+                redacted[key_str] = scrubbed
             else:
                 redacted[key_str] = redact_sensitive(item)
         return redacted
