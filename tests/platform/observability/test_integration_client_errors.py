@@ -63,6 +63,23 @@ def test_integration_client_error_result_logs_and_returns_safe_envelope() -> Non
     }
 
 
+def test_integration_client_error_result_ignores_caller_error_override() -> None:
+    logger = logging.getLogger("test.integration_client_errors")
+    exc = RuntimeError("sensitive detail")
+
+    with patch("platform.observability.errors.client_errors.capture_service_error"):
+        result = integration_client_error_result(
+            exc,
+            integration="datadog",
+            method="search_logs",
+            logger=logger,
+            error="HTTP 500: secret=LEAKED",
+        )
+
+    assert result["error"] == "RuntimeError"
+    assert "LEAKED" not in result["error"]
+
+
 @pytest.mark.parametrize(
     ("exc", "expected"),
     [

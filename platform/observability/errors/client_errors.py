@@ -40,7 +40,9 @@ def integration_client_error_result(
         method=method,
         extras=extras,
     )
-    return {"success": False, "error": safe_integration_error_message(exc), **fields}
+    # Unpack fields first so a caller-supplied error= cannot replace the
+    # sanitized message (CWE-209).
+    return {"success": False, **fields, "error": safe_integration_error_message(exc)}
 
 
 __all__ = [
