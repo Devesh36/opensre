@@ -274,10 +274,21 @@ def _is_canonical_candidate(candidate: str) -> bool:
     )
 
 
+def _canonical_from_local_family_fallback(candidate: str) -> str | None:
+    for prefix, canonical_id in _LOCAL_FAMILY_FALLBACKS:
+        if candidate.startswith(prefix):
+            return canonical_id
+    return None
+
+
 def normalize_model_name(model: str | None) -> str | None:
     if model is None:
         return None
     candidates = _model_candidates(model)
+    for candidate in candidates:
+        canonical = _canonical_from_local_family_fallback(candidate)
+        if canonical is not None:
+            return canonical
     resolving = [
         candidate
         for candidate in candidates
@@ -289,10 +300,6 @@ def normalize_model_name(model: str | None) -> str | None:
         # the bare family alias); fall back to any resolving candidate if
         # every match still carries a routing artifact.
         return max(canonical or resolving, key=len)
-    for candidate in candidates:
-        for prefix, canonical_id in _LOCAL_FAMILY_FALLBACKS:
-            if candidate.startswith(prefix):
-                return canonical_id
     return candidates[0] if candidates else None
 
 
@@ -348,16 +355,18 @@ def _override_related_rate(
 def _lookup_price(model: str) -> ModelPrice | None:
     candidates = _model_candidates(model)
     for candidate in candidates:
+        canonical = _canonical_from_local_family_fallback(candidate)
+        if canonical is not None:
+            local = _LOCAL_MODEL_PRICES.get(canonical)
+            if local is not None:
+                return local
+    for candidate in candidates:
         price = _litellm_price(candidate)
         if price is not None:
             return price
         local = _LOCAL_MODEL_PRICES.get(candidate)
         if local is not None:
             return local
-    for candidate in candidates:
-        for prefix, canonical_id in _LOCAL_FAMILY_FALLBACKS:
-            if candidate.startswith(prefix):
-                return _LOCAL_MODEL_PRICES.get(canonical_id)
     for candidate in candidates:
         for provider_prefix in _COMPAT_PROVIDER_PREFIXES:
             price = _litellm_price(f"{provider_prefix}{candidate}")
