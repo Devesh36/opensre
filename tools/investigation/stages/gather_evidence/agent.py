@@ -14,7 +14,6 @@ from core import (
     estimate_message_tokens,
     execute_tools,
     summarise,
-    tool_source,
 )
 from core.agent.mixins import EventEmitterMixin, ToolFilterMixin
 from core.llm.factory import LLMRole, get_llm
@@ -58,6 +57,13 @@ logger = logging.getLogger(__name__)
 def _mark_messages(messages: list[dict[str, Any]], key: str) -> None:
     for msg in messages:
         msg[key] = True
+
+
+def _runtime_tool_source(tool_by_name: dict[str, Any], tool_name: str) -> str:
+    tool = tool_by_name.get(tool_name)
+    if tool is None:
+        return "unknown"
+    return str(getattr(tool, "source", "unknown"))
 
 
 class ConnectedInvestigationAgent(EventEmitterMixin, ToolFilterMixin):
@@ -132,6 +138,7 @@ class ConnectedInvestigationAgent(EventEmitterMixin, ToolFilterMixin):
         available_tools = list(self._filter_tools(get_available_tools(resolved)))
         tools = list(select_investigation_tools(available_tools, state_dict))
         tool_context = build_connected_tool_context(resolved, tools)
+        tool_by_name = {tool.name: tool for tool in tools}
 
         if not tools:
             logger.warning("No tools available for investigation")
@@ -196,7 +203,7 @@ class ConnectedInvestigationAgent(EventEmitterMixin, ToolFilterMixin):
                         data=redact_sensitive(output),
                         tool_name=tc.name,
                         tool_args=redact_sensitive(tc.input),
-                        source=tool_source(tools, tc.name),
+                        source=_runtime_tool_source(tool_by_name, tc.name),
                         loop_iteration=-1,
                     )
                 )
@@ -322,7 +329,7 @@ class ConnectedInvestigationAgent(EventEmitterMixin, ToolFilterMixin):
                         data=redact_sensitive(output),
                         tool_name=tc.name,
                         tool_args=redact_sensitive(tc.input),
-                        source=tool_source(tools, tc.name),
+                        source=_runtime_tool_source(tool_by_name, tc.name),
                         loop_iteration=iteration,
                     )
                 )
