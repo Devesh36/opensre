@@ -274,7 +274,15 @@ def _is_canonical_candidate(candidate: str) -> bool:
     )
 
 
-def _canonical_from_local_family_fallback(candidate: str) -> str | None:
+def _local_family_alias_canonical(candidate: str) -> str | None:
+    """Map bare alias ids (prefix != canonical) over a litellm hit on the alias."""
+    for prefix, canonical_id in _LOCAL_FAMILY_FALLBACKS:
+        if candidate == prefix and prefix != canonical_id:
+            return canonical_id
+    return None
+
+
+def _local_family_fallback_canonical(candidate: str) -> str | None:
     for prefix, canonical_id in _LOCAL_FAMILY_FALLBACKS:
         if candidate.startswith(prefix):
             return canonical_id
@@ -285,21 +293,25 @@ def normalize_model_name(model: str | None) -> str | None:
     if model is None:
         return None
     candidates = _model_candidates(model)
-    for candidate in candidates:
-        canonical = _canonical_from_local_family_fallback(candidate)
-        if canonical is not None:
-            return canonical
     resolving = [
         candidate
         for candidate in candidates
         if _litellm_price(candidate) is not None or candidate in _LOCAL_MODEL_PRICES
     ]
     if resolving:
-        canonical = [candidate for candidate in resolving if _is_canonical_candidate(candidate)]
+        canonical_candidates = [
+            candidate for candidate in resolving if _is_canonical_candidate(candidate)
+        ]
         # Prefer the most specific canonical match (keeps a date suffix over
         # the bare family alias); fall back to any resolving candidate if
         # every match still carries a routing artifact.
-        return max(canonical or resolving, key=len)
+        resolved = max(canonical_candidates or resolving, key=len)
+        alias = _local_family_alias_canonical(resolved)
+        return alias if alias is not None else resolved
+    for candidate in candidates:
+        fallback = _local_family_fallback_canonical(candidate)
+        if fallback is not None:
+            return fallback
     return candidates[0] if candidates else None
 
 
@@ -355,18 +367,21 @@ def _override_related_rate(
 def _lookup_price(model: str) -> ModelPrice | None:
     candidates = _model_candidates(model)
     for candidate in candidates:
-        canonical = _canonical_from_local_family_fallback(candidate)
-        if canonical is not None:
-            local = _LOCAL_MODEL_PRICES.get(canonical)
-            if local is not None:
-                return local
-    for candidate in candidates:
         price = _litellm_price(candidate)
         if price is not None:
+            alias = _local_family_alias_canonical(candidate)
+            if alias is not None:
+                local = _LOCAL_MODEL_PRICES.get(alias)
+                if local is not None:
+                    return local
             return price
         local = _LOCAL_MODEL_PRICES.get(candidate)
         if local is not None:
             return local
+    for candidate in candidates:
+        fallback = _local_family_fallback_canonical(candidate)
+        if fallback is not None:
+            return _LOCAL_MODEL_PRICES.get(fallback)
     for candidate in candidates:
         for provider_prefix in _COMPAT_PROVIDER_PREFIXES:
             price = _litellm_price(f"{provider_prefix}{candidate}")
