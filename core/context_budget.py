@@ -181,16 +181,6 @@ def _message_token_estimates(messages: list[dict[str, Any]]) -> tuple[list[int],
     return tokens, sum(tokens)
 
 
-def _refresh_message_token_estimates(
-    messages: list[dict[str, Any]],
-    *,
-    current_estimates: list[int],
-) -> tuple[list[int], int]:
-    if len(current_estimates) != len(messages):
-        return _message_token_estimates(messages)
-    return current_estimates, sum(current_estimates)
-
-
 def _estimate_messages_tokens(messages: list[dict[str, Any]]) -> int:
     return sum(_message_token_estimate(message) for message in messages)
 
@@ -213,7 +203,6 @@ def estimate_message_tokens(
     *,
     system: str | None = None,
     tools: list[dict[str, Any]] | None = None,
-    system_tools_overhead_tokens: int | None = None,
 ) -> int:
     """Cheap upper-bound token estimate covering everything Anthropic sees.
 
@@ -222,9 +211,7 @@ def estimate_message_tokens(
     aggressively while system + tools (tens of thousands of tokens for
     opensre's 100+ tool registry) silently pushed us over the line.
     """
-    if system_tools_overhead_tokens is None:
-        system_tools_overhead_tokens = _system_and_tools_tokens(system, tools)
-    return _estimate_messages_tokens(messages) + system_tools_overhead_tokens
+    return _estimate_messages_tokens(messages) + _system_and_tools_tokens(system, tools)
 
 
 def trim_lowest_value_tool_pair(messages: list[dict[str, Any]]) -> bool:
@@ -379,10 +366,7 @@ def enforce_context_budget(
                 "[agent] truncated oversized message to fit context budget (ceiling=%d)", ceiling
             )
             continue
-        message_tokens, total_message_tokens = _refresh_message_token_estimates(
-            messages,
-            current_estimates=message_tokens,
-        )
+        message_tokens, total_message_tokens = _message_token_estimates(messages)
         logger.warning(
             "[agent] trimmed low-value tool pair to fit context budget (ceiling=%d)", ceiling
         )

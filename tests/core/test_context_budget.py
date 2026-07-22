@@ -4,6 +4,7 @@ import json
 from unittest.mock import patch
 
 from core.context_budget import (
+    _TOKENS_PER_CHAR,
     context_budget_ceiling_for_model,
     enforce_context_budget,
     estimate_message_tokens,
@@ -89,9 +90,9 @@ def test_estimate_message_tokens_includes_system_and_tools_overhead() -> None:
         },
     ]
 
-    message_tokens = int(len("abcd") * 0.50)
-    system_tokens = int(len(system) * 0.50)
-    tool_tokens = sum(int(len(json.dumps(schema, default=str)) * 0.50) for schema in tools)
+    message_tokens = int(len("abcd") * _TOKENS_PER_CHAR)
+    system_tokens = int(len(system) * _TOKENS_PER_CHAR)
+    tool_tokens = sum(int(len(json.dumps(schema, default=str)) * _TOKENS_PER_CHAR) for schema in tools)
     expected = message_tokens + system_tokens + tool_tokens
 
     assert estimate_message_tokens(messages, system=system, tools=tools) == expected
@@ -106,43 +107,9 @@ def test_estimate_message_tokens_distinguishes_distinct_tool_lists() -> None:
     assert estimate_message_tokens(
         messages, system=system, tools=tools_a
     ) != estimate_message_tokens(messages, system=system, tools=tools_b)
-    assert estimate_message_tokens(messages, system=system, tools=[]) == int(len(system) * 0.50)
-
-
-def test_estimate_message_tokens_reuses_precomputed_overhead() -> None:
-    tools = [
-        {
-            "type": "function",
-            "name": f"tool_{index}",
-            "parameters": {"type": "object", "x": "y" * 40},
-        }
-        for index in range(20)
-    ]
-    messages = [{"role": "user", "content": "hi"}]
-    system = "system prompt"
-
-    schema_dump_calls = 0
-    original_dumps = json.dumps
-
-    def counting_dumps(value: object, *args: object, **kwargs: object) -> str:
-        nonlocal schema_dump_calls
-        if isinstance(value, dict) and value.get("type") == "function":
-            schema_dump_calls += 1
-        return original_dumps(value, *args, **kwargs)
-
-    overhead = sum(int(len(json.dumps(schema, default=str)) * 0.50) for schema in tools) + int(
-        len(system) * 0.50
+    assert estimate_message_tokens(messages, system=system, tools=[]) == int(
+        len(system) * _TOKENS_PER_CHAR
     )
-
-    with patch("core.context_budget.json.dumps", side_effect=counting_dumps):
-        estimate_message_tokens(
-            messages,
-            tools=tools,
-            system=system,
-            system_tools_overhead_tokens=overhead,
-        )
-
-    assert schema_dump_calls == 0
 
 
 def test_enforce_context_budget_serializes_tool_schemas_once_per_invocation() -> None:
