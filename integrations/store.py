@@ -54,6 +54,12 @@ STORE_PATH = INTEGRATIONS_STORE_PATH
 _VERSION = 2
 _LOCK_TIMEOUT_SECONDS = 10.0
 
+# In-process read cache keyed on ``STORE_PATH`` mtime. Writes refresh via
+# ``_save_unlocked``; mutating loads bypass the cache via ``_read_raw_unlocked``.
+# Stored as one ``(mtime_ns, data)`` tuple so concurrent readers never observe
+# a torn mtime/data pair — a single reference assignment is atomic under the GIL.
+_cache: tuple[int, dict[str, Any]] | None = None
+
 # Structural fields on an integration record — everything else at the top
 # level of a v1 record is migrated into the default instance's credentials.
 _STRUCTURAL_RECORD_FIELDS = frozenset({"id", "service", "status", "instances"})
@@ -111,6 +117,25 @@ def _lock_path() -> Path:
     return STORE_PATH.with_suffix(".lock")
 
 
+def _store_mtime_ns() -> int:
+    """Return ``STORE_PATH`` mtime in nanoseconds, or ``-1`` when missing."""
+    try:
+        return STORE_PATH.stat().st_mtime_ns
+    except OSError:
+        return -1
+
+
+def clear_integrations_cache() -> None:
+    """Drop the in-process read cache (tests and ``STORE_PATH`` monkeypatches)."""
+    global _cache
+    _cache = None
+
+
+def _cache_store_data(data: dict[str, Any]) -> None:
+    global _cache
+    _cache = (_store_mtime_ns(), data)
+
+
 def _acquire_lock() -> FileLock:
     """Create and return a FileLock for the current STORE_PATH."""
     STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -149,13 +174,15 @@ def _save_unlocked(data: dict[str, Any]) -> None:
     Callers must already hold the store lock.
     """
     _atomic_write(STORE_PATH, data)
+    _cache_store_data(data)
 
 
-def _load_raw_unlocked() -> tuple[dict[str, Any], bool]:
+def _read_raw_unlocked() -> tuple[dict[str, Any], bool]:
     """Read the store from disk and migrate in memory.
 
     Returns ``(data, did_migrate)``.  This helper does **not** write back
-    migrations and does **not** acquire any lock.
+    migrations, does **not** acquire any lock, and does **not** use the
+    read cache (callers that mutate must always see fresh disk state).
     """
     if not STORE_PATH.exists():
         return {"version": _VERSION, "integrations": []}, False
@@ -171,6 +198,26 @@ def _load_raw_unlocked() -> tuple[dict[str, Any], bool]:
     return _migrate_if_needed(data)
 
 
+def _load_raw_unlocked() -> tuple[dict[str, Any], bool]:
+    """Return store data, using the mtime cache on repeated read-only loads.
+
+    Cached data is shared across callers and must be treated read-only;
+    ``load_integrations`` returns a fresh list wrapper, and all in-repo callers
+    copy records before mutating them.
+    """
+    cached = _cache
+    mtime_ns = _store_mtime_ns()
+    if cached is not None and cached[0] == mtime_ns:
+        return cached[1], False
+
+    data, did_migrate = _read_raw_unlocked()
+    if not did_migrate:
+        _cache_store_data(data)
+    else:
+        clear_integrations_cache()
+    return data, did_migrate
+
+
 def _load_raw() -> dict[str, Any]:
     """Read the store, migrating on disk if necessary.
 
@@ -182,7 +229,7 @@ def _load_raw() -> dict[str, Any]:
         try:
             with _acquire_lock():
                 # Re-read under lock in case another process already migrated
-                data2, did_migrate2 = _load_raw_unlocked()
+                data2, did_migrate2 = _read_raw_unlocked()
                 if did_migrate2:
                     try:
                         _save_unlocked(data2)
@@ -191,6 +238,9 @@ def _load_raw() -> dict[str, Any]:
                             "Failed to persist v2 migration; continuing with in-memory v2",
                             exc_info=True,
                         )
+                        clear_integrations_cache()
+                else:
+                    _cache_store_data(data2)
                 return data2
         except Timeout:
             logger.warning(
@@ -221,10 +271,12 @@ def _locked_update(mutator: Callable[[dict[str, Any]], bool]) -> tuple[dict[str,
     """
     try:
         with _acquire_lock():
-            data, did_migrate = _load_raw_unlocked()
+            data, did_migrate = _read_raw_unlocked()
             changed = mutator(data)
             if changed or did_migrate:
                 _save_unlocked(data)
+            elif not did_migrate:
+                _cache_store_data(data)
             return data, changed
     except Timeout as exc:
         raise _lock_timeout_error() from exc

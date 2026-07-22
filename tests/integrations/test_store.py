@@ -9,7 +9,20 @@ from unittest.mock import patch
 
 import pytest
 
-from integrations.store import _save
+from integrations import store
+from integrations.store import (
+    _save,
+    clear_integrations_cache,
+    load_integrations,
+    upsert_integration,
+)
+
+
+@pytest.fixture(autouse=True)
+def _clear_store_cache() -> None:
+    clear_integrations_cache()
+    yield
+    clear_integrations_cache()
 
 
 def _assert_private_permissions(store_file) -> None:
@@ -61,3 +74,39 @@ class TestSavePermissions:
 
         _assert_private_permissions(store_file)
         assert json.loads(store_file.read_text())["updated"] is True
+
+
+class TestLoadIntegrationsCache:
+    def test_repeated_loads_hit_disk_once(self, tmp_path: pytest.TempPathFactory) -> None:
+        store_file = tmp_path / "integrations.json"  # type: ignore[operator]
+        payload = {
+            "version": 2,
+            "integrations": [{"id": "gh-1", "service": "github", "status": "active", "instances": []}],
+        }
+        store_file.write_text(json.dumps(payload))
+
+        with patch("integrations.store.STORE_PATH", store_file):
+            with patch(
+                "integrations.store._read_raw_unlocked",
+                wraps=store._read_raw_unlocked,
+            ) as read_raw:
+                for _ in range(10):
+                    records = load_integrations()
+                assert len(records) == 1
+                assert records[0]["service"] == "github"
+                assert read_raw.call_count == 1
+
+    def test_save_refreshes_cache(self, tmp_path: pytest.TempPathFactory) -> None:
+        store_file = tmp_path / "integrations.json"  # type: ignore[operator]
+        store_file.write_text(json.dumps({"version": 2, "integrations": []}))
+
+        with patch("integrations.store.STORE_PATH", store_file):
+            with patch(
+                "integrations.store._read_raw_unlocked",
+                wraps=store._read_raw_unlocked,
+            ) as read_raw:
+                load_integrations()
+                upsert_integration("gitlab", {"credentials": {"token": "glpat-test"}})
+                records = load_integrations()
+                assert any(record.get("service") == "gitlab" for record in records)
+                assert read_raw.call_count == 2
