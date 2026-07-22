@@ -132,6 +132,12 @@ def clear_integrations_cache() -> None:
 
 
 def _cache_store_data(data: dict[str, Any]) -> None:
+    """Cache ``data`` under the file's current mtime.
+
+    Only safe while holding the store lock (writers stat after their own
+    write); the lock-free read path keys the cache with a pre-read mtime
+    snapshot instead — see ``_load_raw_unlocked``.
+    """
     global _cache
     _cache = (_store_mtime_ns(), data)
 
@@ -202,9 +208,16 @@ def _load_raw_unlocked() -> tuple[dict[str, Any], bool]:
     """Return store data, using the mtime cache on repeated read-only loads.
 
     Cached data is shared across callers and must be treated read-only;
-    ``load_integrations`` returns a fresh list wrapper, and all in-repo callers
-    copy records before mutating them.
+    ``load_integrations`` returns fresh per-record copies, and all in-repo
+    callers copy nested structures before mutating them.
+
+    The mtime is snapshotted **before** the disk read and reused as the cache
+    key. If a concurrent writer replaces the file mid-read, the (possibly
+    stale) data is stored under the pre-read mtime, so the next call observes
+    a different mtime, misses the cache, and re-reads fresh state — stale data
+    is never served from a cache hit.
     """
+    global _cache
     cached = _cache
     mtime_ns = _store_mtime_ns()
     if cached is not None and cached[0] == mtime_ns:
@@ -212,7 +225,7 @@ def _load_raw_unlocked() -> tuple[dict[str, Any], bool]:
 
     data, did_migrate = _read_raw_unlocked()
     if not did_migrate:
-        _cache_store_data(data)
+        _cache = (mtime_ns, data)
     else:
         clear_integrations_cache()
     return data, did_migrate
@@ -275,7 +288,7 @@ def _locked_update(mutator: Callable[[dict[str, Any]], bool]) -> tuple[dict[str,
             changed = mutator(data)
             if changed or did_migrate:
                 _save_unlocked(data)
-            elif not did_migrate:
+            else:
                 _cache_store_data(data)
             return data, changed
     except Timeout as exc:
@@ -283,8 +296,15 @@ def _locked_update(mutator: Callable[[dict[str, Any]], bool]) -> tuple[dict[str,
 
 
 def load_integrations() -> list[dict[str, Any]]:
-    """Return all active local integrations (v2 shape)."""
-    return list(_load_raw().get("integrations", []))
+    """Return all active local integrations (v2 shape).
+
+    Each record is a fresh shallow copy so callers can add or replace
+    top-level keys without poisoning the shared read cache. Nested values
+    (``instances`` lists, credential dicts) are shared and must be copied
+    before mutation — which every in-repo caller already does.
+    """
+    records = _load_raw().get("integrations", [])
+    return [dict(record) if isinstance(record, dict) else record for record in records]
 
 
 def _record_with_flat_credentials_view(record: dict[str, Any]) -> dict[str, Any]:
