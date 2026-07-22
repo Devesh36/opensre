@@ -14,6 +14,7 @@ from core import (
     estimate_message_tokens,
     execute_tools,
     summarise,
+    system_and_tools_overhead,
     tool_source,
 )
 from core.agent.mixins import EventEmitterMixin, ToolFilterMixin
@@ -219,6 +220,8 @@ class ConnectedInvestigationAgent(EventEmitterMixin, ToolFilterMixin):
         self._current_evidence: dict[str, Any] = evidence
 
         context_ceiling = context_budget_ceiling_for_model(getattr(llm, "_model", None))
+        full_overhead = system_and_tools_overhead(system, tool_schemas)
+        system_only_overhead = system_and_tools_overhead(system, None)
         stagnant_iterations = 0
         force_conclusion = False
         self._last_assistant_text = ""
@@ -229,8 +232,9 @@ class ConnectedInvestigationAgent(EventEmitterMixin, ToolFilterMixin):
             logger.debug("[agent] iteration=%d", iteration)
             self._emit("llm_start", {"iteration": iteration})
             active_tool_schemas: list[dict[str, Any]] = [] if force_conclusion else tool_schemas
+            active_overhead = system_only_overhead if force_conclusion else full_overhead
             enforce_context_budget(
-                messages, system=system, tools=active_tool_schemas, ceiling=context_ceiling
+                messages, fixed_overhead_tokens=active_overhead, ceiling=context_ceiling
             )
             try:
                 response = llm.invoke(messages, system=system, tools=active_tool_schemas)

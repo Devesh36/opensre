@@ -185,13 +185,22 @@ def _estimate_messages_tokens(messages: list[dict[str, Any]]) -> int:
     return sum(_message_token_estimate(message) for message in messages)
 
 
-def _system_and_tools_tokens(
+def _system_tokens(system: str | None) -> int:
+    return int(len(system) * _TOKENS_PER_CHAR) if system else 0
+
+
+def system_and_tools_overhead(
     system: str | None,
     tools: list[dict[str, Any]] | None,
 ) -> int:
-    total = 0
-    if system:
-        total += int(len(system) * _TOKENS_PER_CHAR)
+    """Fixed token overhead for the system prompt and tool schemas.
+
+    Callers on a hot path (e.g. the investigation ReAct loop) should call this
+    once and pass the result to ``enforce_context_budget`` via
+    ``fixed_overhead_tokens`` so tool schemas are not re-serialized every
+    iteration.
+    """
+    total = _system_tokens(system)
     if tools:
         for schema in tools:
             total += int(len(json.dumps(schema, default=str)) * _TOKENS_PER_CHAR)
@@ -211,7 +220,7 @@ def estimate_message_tokens(
     aggressively while system + tools (tens of thousands of tokens for
     opensre's 100+ tool registry) silently pushed us over the line.
     """
-    return _estimate_messages_tokens(messages) + _system_and_tools_tokens(system, tools)
+    return _estimate_messages_tokens(messages) + system_and_tools_overhead(system, tools)
 
 
 def trim_lowest_value_tool_pair(messages: list[dict[str, Any]]) -> bool:
@@ -341,10 +350,17 @@ def enforce_context_budget(
     *,
     system: str | None = None,
     tools: list[dict[str, Any]] | None = None,
+    fixed_overhead_tokens: int | None = None,
     ceiling: int = _TOKEN_BUDGET_CEILING,
 ) -> None:
-    """Trim low-value tool exchanges until the prompt fits under ``ceiling``."""
-    fixed_overhead_tokens = _system_and_tools_tokens(system, tools)
+    """Trim low-value tool exchanges until the prompt fits under ``ceiling``.
+
+    Pass ``fixed_overhead_tokens`` (from :func:`system_and_tools_overhead`) to
+    skip re-serializing tool schemas on every call.  When omitted the overhead
+    is computed from ``system`` and ``tools``.
+    """
+    if fixed_overhead_tokens is None:
+        fixed_overhead_tokens = system_and_tools_overhead(system, tools)
     message_tokens, total_message_tokens = _message_token_estimates(messages)
     while (total_message_tokens + fixed_overhead_tokens) > ceiling:
         if not trim_lowest_value_tool_pair(messages):

@@ -9,6 +9,7 @@ from core.context_budget import (
     enforce_context_budget,
     estimate_message_tokens,
     strip_internal_message_markers,
+    system_and_tools_overhead,
 )
 
 
@@ -159,6 +160,38 @@ def test_enforce_context_budget_serializes_tool_schemas_once_per_invocation() ->
         enforce_context_budget(messages, tools=tools, ceiling=ceiling)
 
     assert schema_dump_calls <= len(tools)
+
+
+def test_enforce_context_budget_accepts_precomputed_overhead() -> None:
+    tools = [
+        {"type": "function", "name": f"tool_{index}", "parameters": {"type": "object"}}
+        for index in range(12)
+    ]
+    messages = [
+        {"role": "user", "content": "alert"},
+        {
+            "role": "assistant",
+            "content": [{"type": "tool_use", "id": "t1", "name": "noop", "input": {}}],
+        },
+        {
+            "role": "user",
+            "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "x" * 4000}],
+        },
+    ]
+    ceiling = 500
+    precomputed = system_and_tools_overhead(system="sys", tools=tools)
+    schema_dump_calls = 0
+    original_dumps = json.dumps
+
+    def counting_dumps(value: object, *args: object, **kwargs: object) -> str:
+        nonlocal schema_dump_calls
+        schema_dump_calls += _tool_schema_dump_count(value)
+        return original_dumps(value, *args, **kwargs)
+
+    with patch("core.context_budget.json.dumps", side_effect=counting_dumps):
+        enforce_context_budget(messages, fixed_overhead_tokens=precomputed, ceiling=ceiling)
+
+    assert schema_dump_calls == 0
 
 
 def test_enforce_context_budget_still_trims_when_over_ceiling_with_tools() -> None:
