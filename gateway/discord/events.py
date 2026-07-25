@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+#: Sentinel guild id used for direct messages (no guild context).
+DM_GUILD_ID = "dm"
+
 
 @dataclass(frozen=True)
 class DiscordInboundAttachment:
@@ -33,3 +36,8 @@ class DiscordInboundMessage:
     def conversation_key(self) -> str:
         """Session binding key: one conversation per Discord thread root."""
         return f"{self.guild_id}:{self.channel_id}:{self.thread_id}"
+
+    @property
+    def is_guild_message(self) -> bool:
+        """Whether this message arrived through a guild (server), not a DM."""
+        return self.guild_id != DM_GUILD_ID

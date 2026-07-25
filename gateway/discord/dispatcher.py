@@ -193,6 +193,7 @@ class DiscordTurnDispatcher:
                 text=inbound.text,
                 env_allowed_user_ids=self._settings.allowed_user_ids,
                 allow_open_guild=self._settings.allow_open_guild,
+                is_guild_message=inbound.is_guild_message,
             )
             session = self._apply_inbound_decision(inbound, decision)
             if session is None:
@@ -228,8 +229,6 @@ class DiscordTurnDispatcher:
                         broker=self._approvals,
                         bot_token=self._bot_token,
                         channel_id=inbound.channel_id,
-                        allowed_user_ids=self._settings.allowed_user_ids,
-                        allow_open_guild=self._settings.allow_open_guild,
                     )
                 ),
             )

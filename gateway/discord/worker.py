@@ -13,15 +13,19 @@ from dataclasses import replace
 
 import discord
 
+from config.constants.investigation import ALERT_TEMPLATE_CHOICES
 from gateway.discord.approvals import handle_component_interaction
 from gateway.discord.dispatcher import DiscordTurnDispatcher
-from gateway.discord.events import DiscordInboundAttachment, DiscordInboundMessage
+from gateway.discord.events import (
+    DM_GUILD_ID,
+    DiscordInboundAttachment,
+    DiscordInboundMessage,
+)
 from gateway.discord.feedback import record_feedback_interaction
 from gateway.discord.settings import DiscordGatewaySettings
 from gateway.runtime.sink_protocol import GatewayAgentCallback
 from gateway.slack.approvals import ApprovalBroker
 from gateway.storage import SessionBindingStore, SessionResolver
-from surfaces.cli.constants import ALERT_TEMPLATE_CHOICES
 
 _PLATFORM_DISCORD = "discord"
 _THREAD_HISTORY_LIMIT = 40
@@ -164,7 +168,10 @@ async def _discord_gateway_main(
                     interaction,
                     broker=approvals,
                     allowed_user_ids=settings.allowed_user_ids,
-                    allow_open_guild=settings.allow_open_guild,
+                    # Open-guild trust never extends to DMs.
+                    allow_open_guild=(
+                        settings.allow_open_guild and interaction.guild_id is not None
+                    ),
                 ):
                     with contextlib.suppress(discord.HTTPException):
                         await interaction.response.send_message("Recorded.", ephemeral=True)
@@ -181,17 +188,17 @@ async def _discord_gateway_main(
             alert = application_command_option(interaction, "alert")
             # Resolve the interaction with a real message instead of
             # defer(thinking=True): turn output is posted to the channel by the
-            # output sink, so a deferred interaction would show "thinking…"
+            # output sink, so a deferred interaction would show "thinking..."
             # forever. Interactions expire fast (3s / already-acked), so 404s
             # here are expected and non-fatal.
             with contextlib.suppress(discord.HTTPException):
                 await interaction.response.send_message(
-                    f"Running `/investigate {alert.strip() or 'generic'}` — "
+                    f"Running `/investigate {alert.strip() or 'generic'}` -- "
                     "progress and results will follow in this channel."
                 )
             user_id = str(interaction.user.id)
             channel_id = str(interaction.channel_id or "")
-            guild_id = str(interaction.guild_id or "dm")
+            guild_id = str(interaction.guild_id or DM_GUILD_ID)
             thread_id = channel_id
             if isinstance(interaction.channel, discord.Thread):
                 thread_id = str(interaction.channel.id)
@@ -262,7 +269,7 @@ def normalize_message(
         return None
     user_id = str(message.author.id)
     channel_id = str(message.channel.id)
-    guild_id = str(message.guild.id) if message.guild else "dm"
+    guild_id = str(message.guild.id) if message.guild else DM_GUILD_ID
     thread_id = channel_id
     if isinstance(message.channel, discord.Thread):
         thread_id = str(message.channel.id)

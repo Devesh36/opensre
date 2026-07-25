@@ -118,7 +118,11 @@ def load_discord_gateway_settings() -> DiscordGatewaySettings:
         )
 
     if env.allow_open_guild and not allowed_users:
-        logger.warning("%s=1: any guild member can talk to the bot", DISCORD_ALLOW_OPEN_GUILD_ENV)
+        logger.warning(
+            "%s=1: any guild member can talk to the bot in server channels "
+            "(DMs still require the allowlist)",
+            DISCORD_ALLOW_OPEN_GUILD_ENV,
+        )
 
     return DiscordGatewaySettings(
         bot_token=choose_bot_token(env, credentials),

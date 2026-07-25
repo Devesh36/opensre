@@ -47,7 +47,7 @@ from surfaces.interactive_shell.utils.telemetry.turn_outcome import (
 
 
 def _interactive_template_menu(session: Session, console: Console) -> bool:
-    from surfaces.cli.constants import ALERT_TEMPLATE_CHOICES
+    from config.constants.investigation import ALERT_TEMPLATE_CHOICES
 
     root = "/template"
     choices: list[tuple[str, str]] = [(c, c) for c in ALERT_TEMPLATE_CHOICES]
@@ -116,7 +116,7 @@ def _prompt_investigate_path(console: Console) -> str | None:
 
 
 def _cmd_template(session: Session, console: Console, args: list[str]) -> bool:
-    from surfaces.cli.constants import ALERT_TEMPLATE_CHOICES
+    from config.constants.investigation import ALERT_TEMPLATE_CHOICES
     from tools.investigation.alert_templates import build_alert_template
 
     if not args and repl_tty_interactive():
@@ -224,9 +224,9 @@ def _record_investigation_turn(
 
 
 def _cmd_investigate_file(session: Session, console: Console, args: list[str]) -> bool:
+    from config.constants.investigation import ALERT_TEMPLATE_CHOICES
     from platform.analytics.cli import track_investigation
     from platform.analytics.source import EntrypointSource, TriggerMode
-    from surfaces.cli.constants import ALERT_TEMPLATE_CHOICES
     from surfaces.cli.investigation.payload import resolve_alert_path
     from surfaces.interactive_shell.runtime.investigation_adapter import (
         run_investigation_for_session,

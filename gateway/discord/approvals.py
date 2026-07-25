@@ -28,14 +28,10 @@ class DiscordApprovalPrompter:
         broker: ApprovalBroker,
         bot_token: str,
         channel_id: str,
-        allowed_user_ids: list[str],
-        allow_open_guild: bool,
     ) -> None:
         self._broker = broker
         self._bot_token = bot_token
         self._channel_id = channel_id
-        self._allowed_user_ids = allowed_user_ids
-        self._allow_open_guild = allow_open_guild
 
     def request(
         self,

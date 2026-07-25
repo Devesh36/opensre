@@ -103,10 +103,18 @@ def enforce_inbound_discord_message_security(
     text: str,
     env_allowed_user_ids: list[str],
     allow_open_guild: bool = False,
+    is_guild_message: bool = False,
 ) -> DiscordInboundDecision:
-    """Authorize inbound Discord text and handle /pair, /new, /help."""
+    """Authorize inbound Discord text and handle /pair, /new, /help.
+
+    ``allow_open_guild`` only ever applies to messages that arrived through a
+    guild (``is_guild_message=True``). DMs always require the allowlist:
+    anyone sharing a server with the bot can DM it, so an open-DM mode would
+    let arbitrary users consume credits and reach agent turns.
+    """
     _record, policy = _load_policy()
     policy = _merge_env_allowlist(policy, env_allowed_user_ids)
+    open_guild_applies = allow_open_guild and is_guild_message
 
     stripped = text.strip()
     lower = stripped.lower()
@@ -132,17 +140,22 @@ def enforce_inbound_discord_message_security(
         )
         return DiscordInboundDecision(allowed=False, reply_text=_HELP_TEXT)
 
-    if not policy.allowed_user_ids and not allow_open_guild:
+    if not policy.allowed_user_ids and not open_guild_applies:
+        reason = (
+            "open guild mode does not cover DMs; allowlist required"
+            if allow_open_guild
+            else _EMPTY_ALLOWLIST_REASON
+        )
         _audit(
             user_id=user_id,
             channel_id=channel_id,
             text=text,
             authorized=False,
-            reason=_EMPTY_ALLOWLIST_REASON,
+            reason=reason,
         )
         return DiscordInboundDecision(allowed=False)
 
-    if allow_open_guild and not policy.allowed_user_ids:
+    if open_guild_applies and not policy.allowed_user_ids:
         result = AuthorizationResult(allowed=True, reason="open guild")
     else:
         result = authorize_inbound_message(
