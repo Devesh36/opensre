@@ -19,6 +19,7 @@ changes.
 | HTTP FastAPI app | `http/webapp.py` (`app`) |
 | Telegram start | `telegram/wiring.py` (`start_telegram_worker`) |
 | Slack start | `slack/wiring.py` (`start_slack_worker`) |
+| Discord start | `discord/wiring.py` (`start_discord_worker`) |
 
 ## Layout
 
@@ -33,13 +34,13 @@ changes.
 - `http/` — everything served over HTTP: `http/webapp.py` (FastAPI app),
   `http/web_server.py`, the `/api/investigations` routes, and the
   investigation store / worker / artifacts.
-- `telegram/` and `slack/` — one package per transport, each owning settings,
+- `telegram/`, `slack/`, and `discord/` — one package per transport, each owning settings,
   the inbound worker, inbound security, the output sink, and `wiring.py`
   (e.g. `telegram/wiring.py` wires the handler into the polling worker).
 - `storage/session/resolver.py` — per-conversation session binding keyed by
   platform; delegates create / resolve / rotate to `SessionManager`.
 
-Tests mirror the subpackages: `gateway/tests/{runtime,http,telegram,slack}/`.
+Tests mirror the subpackages: `gateway/tests/{runtime,http,telegram,slack,discord}/`.
 
 ## Gateway turn dispatch
 

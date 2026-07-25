@@ -245,6 +245,51 @@ def _cmd_investigate_file(session: Session, console: Console, args: list[str]) -
 
     raw_target = args[0]
     normalized_target = raw_target.strip().lower()
+    if normalized_target.startswith("alert:"):
+        alert_body = raw_target.split(":", 1)[1].strip()
+        if not alert_body:
+            console.print(
+                f"[{DIM}]usage:[/] /investigate <file|template>  "
+                f"(e.g. /investigate generic or Discord /investigate with alert filled in)"
+            )
+            session.mark_latest(ok=False, kind="slash")
+            return True
+        if alert_body.lower() in ALERT_TEMPLATE_CHOICES:
+            return _cmd_investigate_file(session, console, [alert_body.lower()])
+        target_slug = normalize_investigation_target(alert_body[:120])
+
+        def _run_alert_text(task: TaskRecord) -> dict[str, object]:
+            with (
+                apply_reasoning_effort(session.reasoning_effort),
+                track_investigation(
+                    entrypoint=EntrypointSource.CLI_REPL_FILE,
+                    trigger_mode=TriggerMode.FILE,
+                    input_path="discord:alert",
+                    interactive=True,
+                    session=session,
+                    investigation_target=target_slug,
+                ) as tracker,
+            ):
+                final_state = run_investigation_for_session(
+                    alert_text=alert_body,
+                    context_overrides=session.accumulated_context or None,
+                    cancel_requested=task.cancel_requested,
+                )
+                tracker.record_loop_metrics_from_state(final_state)
+                return final_state
+
+        command_line = f"/investigate alert:{alert_body[:80]}"
+        outcome = run_foreground_investigation(
+            session=session,
+            console=console,
+            task_command=command_line,
+            run=_run_alert_text,
+            exception_context="surfaces.interactive_shell.investigate_discord_alert",
+            target=target_slug,
+        )
+        _record_investigation_turn(session, command_line=command_line, outcome=outcome)
+        return True
+
     template_name = normalized_target
     for prefix in ("sample:", "template:"):
         if template_name.startswith(prefix):
