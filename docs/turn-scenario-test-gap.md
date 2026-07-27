@@ -4,8 +4,8 @@
 **Concerns:** `complex_shell_prompts` scenario class; oracle coverage of conversational tool-gathering  
 **Status:** Partially addressed (2026-06-26) — gather recording, `tool_actions`, fixture `resolved_integrations`, and `@live` fail-closed CI are in place; many handoff scenarios still rely on text-only contracts
 
-> **Update (2026-06-26):** Natural-language investigation dispatch is re-enabled
-> (`INTERACTIVE_SHELL_INVESTIGATION_ENABLED = True`). Scenarios **314**, **338**,
+> **Update (2026-06-26):** Natural-language investigation dispatch runs in live turn
+> scenarios. Scenarios **314**, **338**,
 > **339**, and **315** assert gather dispatch via `tool_actions` with fixture
 > integrations; **333–335** and **337** use `@live` for canonical per-integration
 > gather. Handoff-only **313** lives under `chat_handoff/`. Remaining gap:

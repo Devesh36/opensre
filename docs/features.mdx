@@ -68,10 +68,10 @@ Reversible masking replaces sensitive infrastructure identifiers (pods, clusters
 
 ## Remote runtime investigations
 
-Investigate deployed OpenSRE services by name. OpenSRE gathers live deployment status, recent logs, and health probes, then runs the standard RCA pipeline.
+Deploy OpenSRE on your host, connect the same integrations as locally, and run the standard RCA pipeline against alert payloads (`opensre investigate -i …`). Optional gateway mode handles Telegram and scheduled work on the deployment.
 
-**Try it:** From the REPL: `/remote list`, then describe the service you want to investigate.
+**Try it:** Deploy per [Deployment](/deployment), then `opensre investigate -i alert.json` (locally or on the host).
 
-**Config:** Requires a configured remote runtime target. See [Remote runtime investigation](/remote-runtime-investigation).
+**Config:** `LLM_PROVIDER`, provider keys, and integration env vars on the deployment. See [Remote runtime investigation](/remote-runtime-investigation).
 
-**Gotcha:** Remote investigations use the same integration catalog as local runs — connect observability tools first.
+**Gotcha:** Service-by-name CLI flags are not on the current binary — build or export an alert payload from your observability stack first.

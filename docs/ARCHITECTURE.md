@@ -1,9 +1,11 @@
 # OpenSRE architecture
 
 How the OpenSRE codebase is structured: the seven first-party packages, what
-each is responsible for, and which may depend on which. These dependency rules
-are CI-enforced (`make check-imports`), so they are real invariants rather than
-aspirations.
+each is responsible for, and which may depend on which. Import rules are
+documented here as architectural intent; **default CI** runs `make check-imports`
+(config independence only). The full four-tier contract is optional via
+`make check-imports-strict` (`.importlinter.strict`). `make check_direct_imports`
+also blocks `gateway → surfaces` imports.
 
 ## The layer stack
 
@@ -13,7 +15,7 @@ last column says whether peers may import each other.
 
 | Tier | Packages | May import | Must never import | Peer rule |
 | --- | --- | --- | --- | --- |
-| 1 (top) | `surfaces`, `gateway` | `tools`, `integrations`, `core`, `platform`, `config` | — | Independent: must not import each other. |
+| 1 (top) | `surfaces`, `gateway` | `tools`, `integrations`, `core`, `platform`, `config` | — | Peers: `gateway` must not import `surfaces` (CI-enforced). `surfaces` may import `gateway` for CLI/gateway wiring — treat as allowed debt, not a layering violation. |
 | 2 | `tools` | `integrations`, `core`, `platform`, `config` | `surfaces`, `gateway` | May use an integration's client, so `integrations` effectively sits below it. |
 | 2 | `integrations` | `core`, `platform`, `config` | `tools`, `surfaces`, `gateway` | Must never import `tools`; stays reusable below the tool layer. |
 | 3 | `core`, `platform` | `config` | `surfaces`, `gateway`, `tools`, `integrations` | Siblings: **may** cross-import each other. |
@@ -79,7 +81,8 @@ layers below it.
   `gateway/slack`, outbound delivery in `integrations/slack`.
 - **`gateway/`** — the standalone messaging gateway for inbound chat platforms
   (`gateway/telegram`, `gateway/slack`, `gateway/session`, `gateway/storage`). A peer of
-  `surfaces`, not a child: the two never import each other.
+  `surfaces`, not a child: `gateway` must not import `surfaces`; CLI and REPL code in
+  `surfaces/` may import `gateway` for daemon and HTTP wiring.
 
 ### Tier 2 — `tools` and `integrations`
 
@@ -120,9 +123,11 @@ The shared runtime and cross-cutting services the capability layer is built on.
   context-budget enforcement (`core/context_budget.py`), the tool framework primitives
   (`core/tool_framework`), shared LLM clients (`core/llm`), agent-harness
   session handling (`core/agent_harness`), and pure domain rules (`core/domain`).
-- **`platform/`** — cross-cutting services with no investigation logic of their
+  Six-stage investigation orchestration lives in `tools/investigation/`, not `core/`.
+- **`platform/`** — cross-cutting services with no investigation pipeline of their
   own: guardrails, masking, sandbox, analytics, auth, notifications,
-  observability, scheduler, and deployment. It deliberately shadows the stdlib
+  observability, reporting, terminal helpers, packaging, harness ports
+  (`platform/harness_ports.py`), scheduler, and deployment. It deliberately shadows the stdlib
   `platform` name and re-exposes it, so `import platform` still works.
 
 These two are the one bidirectional pair by design: `core` reaches `platform`

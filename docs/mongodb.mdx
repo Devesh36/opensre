@@ -82,14 +82,9 @@ mongodb+srv://user:password@cluster.example.net
 URL-encode special characters in credentials: `@` → `%40`, `:` → `%3A`, `#` → `%23`
 </Tip>
 
-## TLS configuration
+## TLS
 
-TLS is enabled by default. For custom certificates:
-
-```bash
-MONGODB_CA_CERT=/path/to/ca.pem      # Custom CA certificate
-MONGODB_TLS_INSECURE=true             # Skip validation (dev only)
-```
+Set `MONGODB_TLS=true` (default) in `.env` or the integration store. TLS options beyond that are encoded in the connection string (for example Atlas `mongodb+srv://…`).
 
 ## Investigation tools
 
@@ -139,7 +134,7 @@ Detail: Connected to MongoDB 6.0.5; target database: production
 | --- | --- |
 | **Connection refused** | Verify the host/port, check firewalls, and ensure MongoDB is running. For Atlas, whitelist the OpenSRE IP. |
 | **Authentication failed** | Confirm username/password and `authSource`. Test with `mongosh` first. |
-| **SSL: CERTIFICATE_VERIFY_FAILED** | Provide a CA cert via `MONGODB_CA_CERT` or set `MONGODB_TLS_INSECURE=true` for dev. |
+| **SSL: CERTIFICATE_VERIFY_FAILED** | Fix trust in the connection string or host CA bundle; test with `mongosh` using the same URI. |
 | **Profiling is disabled** | Run `db.setProfilingLevel(1)` on the target database. |
 | **Server is not part of a replica set** | Expected for standalone instances — replica set tools return empty results, other tools still work. |
 

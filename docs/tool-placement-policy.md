@@ -53,15 +53,14 @@ Applied to the pre-existing top-level `tools/` packages:
 | `tools/cross_vendor/fix_sentry_issue/` | cross_vendor | Reads a Sentry issue and hands the fix to the Pi coding agent — two `integrations/` packages in one tool's logic. |
 
 **Left as-is, not yet migrated** (single-vendor tools that predate the
-vendor-first tool layout and belong under `integrations/<vendor>/tools/`,
-not `tools/system/` or `tools/cross_vendor/`):
+vendor-first tool layout and still live at the top level of `tools/`):
 
 - `tools/community_followup_tool/`, `tools/git_deploy_timeline_tool/`,
   `tools/work_status_report_tool/` — GitHub-only.
-- `integrations/slack/tools/slack_send_message_tool/` — Slack-only.
 - `tools/pi_coding_tool/` — Pi-only.
 
-Migrating these to `integrations/<vendor>/tools/` is in scope for T-18
+`integrations/slack/tools/slack_send_message_tool/` is already under the vendor tree.
+Migrating the remaining top-level packages to `integrations/<vendor>/tools/` is in scope for T-18
 (full vendor-first completion), not this policy change — moving them into
 `tools/system/` or `tools/cross_vendor/` now would misclassify them.
 

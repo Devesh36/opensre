@@ -1,77 +1,58 @@
 ---
-title: 'Remote Runtime Investigation'
-description: 'Start an RCA investigation for a deployed service by name'
+title: 'Remote runtime investigation'
+description: 'Run RCA against a deployed OpenSRE instance using standard investigate flows'
 ---
 
 ## Overview
 
-`opensre investigate --service <name>` kicks off a runtime investigation for a deployed service. Instead of passing an alert payload, OpenSRE gathers live signals from the service (deployment status, recent logs, health probe) and feeds them into the existing investigation pipeline as evidence.
+A **remote runtime** is an OpenSRE deployment on Railway, EC2, Docker, or another host. Investigations use the same RCA pipeline as local runs: you pass an alert payload (file, JSON, or interactive paste) to `opensre investigate`, optionally against the deployed instance's integrations and alert listener.
+
+The current CLI does **not** expose `opensre remote` or `opensre investigate --service <name>`. Gather logs, metrics, or alert JSON from your host or observability tools, then investigate with `-i` / `--input-json` / `--interactive`.
 
 ## Prerequisites
 
-You must have deployed an OpenSRE service (see [Deployment](/deployment)), registered a named remote, and configured a remote ops provider.
+1. **Deploy OpenSRE** — see [Deployment](/deployment) for Docker, gateway mode, and environment variables (`LLM_PROVIDER`, provider API keys, optional `DATABASE_URI` / `REDIS_URI`).
+2. **Configure integrations** on the deployed instance (same env vars and `opensre integrations setup` flow as local).
+3. **Optional alert listener** — set `OPENSRE_ALERT_LISTENER_TOKEN` so remote callers can POST alerts to the runtime (documented on the deployment page).
 
-1. **Deploy and register a named remote:**
-   ```bash
-   # Deploy via your hosting provider, then register the agent URL:
-   opensre remote --url https://my-service.up.railway.app health
-   # or use the interactive wizard:
-   opensre remote
-   ```
+## Run an investigation
 
-2. **Configure the remote ops provider (once):**
-   ```bash
-   opensre remote ops status     # prompts for provider/project/service on first run
-   ```
-
-## Usage
+From your laptop or from the deployed host:
 
 ```bash
-opensre investigate --service <name>
+opensre investigate -i path/to/alert.json
+opensre investigate -i alert.json --output ./rca.json
+opensre investigate --interactive
 ```
 
-For example:
-```bash
-opensre investigate --service api-backend
-opensre investigate --service api-backend --output ./rca.json
-```
+Wire alerts from your monitoring stack into a JSON file or POST body, then use one of the paths above. Output matches a local run: `problem.md`, hypothesis files, and `report.md` (or JSON with `--output`).
 
-The command will:
+## Gateway and messaging on a deployed host
 
-1. Resolve `<name>` against your named-remote registry
-2. Fetch deployment status via the configured ops provider (e.g. Railway)
-3. Fetch the most recent ~100 log lines
-4. Probe the service's `/health` or `/ok` endpoint
-5. Package all of this into an alert payload
-6. Run the standard RCA pipeline against it
-
-The output is the same structured RCA report you'd get from running `opensre investigate -i <alert-file>`.
-
-## Incorporating Slack thread context
-
-Pass `--slack-thread CHANNEL/TS` to also pull the messages from a specific Slack thread as investigation context. This is useful when an incident originated in a Slack conversation.
+For Telegram two-way chat and background scheduling on a deployment, use gateway mode:
 
 ```bash
-export SLACK_BOT_TOKEN=xoxb-...
-opensre investigate --service api-backend --slack-thread C01234/1712345.000001
+opensre gateway start
+opensre gateway status
 ```
 
-Requirements:
-- `SLACK_BOT_TOKEN` must be set in the environment. The bot must have the `channels:history` and `groups:history` OAuth scopes for the channel you're reading.
-- The `CHANNEL/TS` reference can be obtained from Slack's "Copy link to message" option — it's the last two path segments of the link.
+See [Deployment](/deployment) and [Messaging](/messaging) for gateway env vars and channel setup.
 
-The thread's messages, users, timestamps, and reactions are fetched via Slack's `conversations.replies` API and included under the `slack_thread` key in the alert payload. If fetching fails (bad token, wrong channel, network error), the investigation still proceeds with the error recorded in the payload.
+## Interactive shell
 
-## Mutual exclusion
+In the REPL (`opensre`), describe the incident in plain language or use `/investigate` with a template. Slash command `/remote` is registered for CLI parity but forwards to `opensre remote`, which is **not** on the current top-level CLI — prefer `opensre investigate` and [Deployment](/deployment) for remote workflows.
 
-`--service` cannot be combined with `--input`, `--input-json`, `--interactive`, or `--print-template`. Use `--service` on its own.
+## Local agent fleet (separate from hosted runtime)
 
-## Extending to other providers
+To discover other AI coding agents on **this machine**, use fleet scan (not a hosted OpenSRE service):
 
-The `RemoteOpsProvider` abstract class (in `infra/deployment/remote/ops.py`) defines the provider interface. To add support for another provider (EC2, ECS, Vercel, etc.), implement a new subclass with `status()`, `logs()`, `fetch_logs()`, and `restart()` methods, then register it in `resolve_remote_ops_provider()`.
+```bash
+opensre fleet scan
+opensre fleet scan --register
+```
 
-## Known limitations
+See [Local Agent Fleet](/fleet).
 
-- **Currently supports only Railway** — other providers have `status`/`logs` hooks but no `fetch_logs` implementation yet.
-- **Slack context is thread-scoped** — this initial version pulls a specific thread via `--slack-thread`. It does not search Slack history or resolve linked runbooks.
-- **`alert_source` is re-inferred by the LLM** — the LLM in the extract-alert step may infer an `alert_source` from the log text (e.g. "datadog" if the logs mention Datadog), which routes to provider-specific tools. This is the intended behavior.
+## Slack or chat context in an alert
+
+Include Slack thread text, pager links, or runbook URLs inside the alert JSON you pass to `investigate -i` (or build the payload interactively). There is no `--slack-thread` flag on the current `investigate` command.

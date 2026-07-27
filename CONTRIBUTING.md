@@ -15,7 +15,7 @@ Looking for a safe first contribution? See [Good First Issues](docs/good-first-i
 Use the path that matches the kind of contribution you want to make:
 
 1. **Bugs & small fixes** -> Open a PR. If you need to file an issue first, use the [bug report template](https://github.com/Tracer-Cloud/opensre/issues/new?template=bug_report.yml).
-2. **New features or behavioral changes** -> Start with a [feature request](https://github.com/Tracer-Cloud/opensre/issues/new?template=feature_request.yml) or ask in Discord before coding. Most feature ideas are better shipped as third-party plugins via the plugin SDK.
+2. **New features or behavioral changes** -> Start with a [feature request](https://github.com/Tracer-Cloud/opensre/issues/new?template=feature_request.yml) or ask in Discord before coding.
 3. **Improvements tied to concrete work** -> Use the [improvement template](https://github.com/Tracer-Cloud/opensre/issues/new?template=improvement.yml) when proposing a focused refactor, optimization, or quality improvement.
 4. **Refactor-only PRs** -> Do not open one unless a maintainer explicitly asked for it as part of a real fix.
 5. **Test/CI-only PRs for known `main` failures** -> Do not open one unless the change is required to validate a real fix the maintainers asked for.
@@ -144,10 +144,10 @@ All four must pass. **CI will block merging if any fail.**
 Replace the placeholders with your actual file or test name:
 
 ```bash
-pytest tests/cli/test_.py                                       # single file
-pytest tests/cli/test_.py::test_                                # single function
-pytest tests/tools/ -k "test_registry"                          # tools example
-pytest tests/synthetic/ -k "test_scenario"                      # no live infra needed
+uv run python -m pytest tests/cli/test_.py                                       # single file
+uv run python -m pytest tests/cli/test_.py::test_                                # single function
+uv run python -m pytest tests/tools/ -k "test_registry"                          # tools example
+uv run python -m pytest tests/synthetic/ -k "test_scenario"                      # no live infra needed
 ```
 
 ### 5. Open a Pull Request
@@ -261,19 +261,19 @@ Use the **[bug report template](https://github.com/Tracer-Cloud/opensre/issues/n
 
 ```
 ### Expected Behavior
-`opensre investigate --org myorg` should return investigation results
+`opensre investigate -i alert.json` should return investigation results
 
 ### Actual Behavior
 Command exits silently with no output
 Error: exit code 0
 
 ### Steps to Reproduce
-1. Run `opensre investigate --org myorg`
+1. Run `opensre investigate -i alert.json`
 2. Observe output
 
 ### Environment
 - OS: macOS 14.2
-- Python: 3.11.5
+- Python: 3.12
 - opensre version: v0.2.1
 ```
 

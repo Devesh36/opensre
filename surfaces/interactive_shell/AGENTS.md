@@ -75,7 +75,7 @@ owning area rather than adding more logic to the caller.
   or not). There is **no shell-command safety policy**: the
   read-only/mutating/restricted classification and the `deny` floor were removed
   (`shell_policy.py` deleted; parsing/policy/execution live under
-  `tools/shell/`). Mutating commands (`rm`/`mv`/`docker`), `restricted` commands
+  `tools/interactive_shell/shell/`). Mutating commands (`rm`/`mv`/`docker`), `restricted` commands
   (`sudo`, `systemctl`, `kill`, `dd`, …), shell operators (`| && ; > <`), and
   command substitution all run; the `!` prefix is honored but optional. The only
   shell input still rejected is genuinely empty input (a bare `!` or whitespace).

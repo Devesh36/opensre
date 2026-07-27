@@ -35,7 +35,7 @@ Examples:
 | "check the health of my opensre and then show connected services" | `/health`, then `/integrations list` |
 | "verify datadog" | `/verify datadog` or `/integrations verify datadog` |
 | "run the sample alert investigation" | `/investigate` with a built-in template |
-| "connect to my remote EC2 instance and send it hello world" | `/remote` subcommands, then a remote investigation |
+| "investigate this alert file" | `/investigate` or `opensre investigate -i …` after you have a payload |
 
 List-style questions map to **per-domain** commands (there is no global `/list`):
 
@@ -60,7 +60,7 @@ opensre investigate -i tests/e2e/kubernetes/fixtures/datadog_k8s_alert.json
 
 You can also use `--interactive` to pick an input file from your terminal UI.
 
-For deployed services by name, see [Remote runtime investigation](/remote-runtime-investigation).
+For hosted OpenSRE runtimes, see [Remote runtime investigation](/remote-runtime-investigation) and [Deployment](/deployment).
 
 ## 2) Review investigation artifacts
 

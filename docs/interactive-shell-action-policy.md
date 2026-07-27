@@ -66,14 +66,7 @@ Addendum — Jun 18, 2026.
 Factual questions about live state (for example "is sentry installed?") are
 answered without adding keyword/regex rules. Two complementary mechanisms:
 
-1. Context grounding (not action planning). At REPL boot, `run_repl_async`
-   (`surfaces/interactive_shell/main.py`) hydrates
-   `session.configured_integrations` from the shared
-   `configured_integration_services()` helper in `integrations/catalog.py`
-   (the same source the welcome banner uses, so they never diverge). The chat
-   assistant prompt (`build_environment_block` in
-   `core/agent_harness/prompts/assistant.py`) lists the configured set as
-   facts, letting the model answer directly when state is already known.
+1. Context grounding (not action planning). At REPL boot, `Session.hydrate_configured_integrations()` (`core/agent_harness/session/`) loads configured services via `platform.harness_ports.configured_integration_services` (same source as the welcome banner). The chat assistant prompt (`build_environment_block` in `core/agent_harness/prompts/assistant_agent_prompt.py`) lists the configured set as facts, letting the model answer directly when state is already known.
 2. LLM-driven discovery. The action-agent system prompt
    (`core/agent_harness/prompts/action_agent_prompt.py`) lets the model, at its own
    discretion, emit a read-only discovery action (for example
@@ -99,12 +92,7 @@ output:
    found on `session.agent.last_observation`
    (`_record_integrations_observation` in
    `surfaces/interactive_shell/command_registry/integrations.py`).
-2. `run_agent_prompt` resets that field at the start of every action-agent
-   turn and, when a discovery command produced an observation and succeeded,
-   calls the conversational assistant with `tool_observation=...`
-   (inside the handled-turn observation branch in `pipeline.py`). The assistant
-   summarizes the output into a direct answer and is instructed not to emit
-   further actions.
+2. `core/agent_harness/turns/orchestrator.py` resets `session.agent.last_observation` at the start of each action-agent turn and, when a discovery command produced an observation and succeeded, the conversational assistant in `surfaces/interactive_shell/runtime/answer_turn.py` summarizes the output into a direct answer (via `tool_observation=...`). The assistant is instructed not to emit further actions.
 
 This only fires when the action-agent tool path executes a read-only discovery command
 and records an observation. The pipeline no longer has a pre-agent deterministic
@@ -184,12 +172,8 @@ runs on the developer's own machine with their own privileges.
 
 What changed:
 
-- `shell_policy.py` (classification, allowlists, `classify_command`,
-  `evaluate_policy`, `PolicyDecision`) was deleted. The pure parsing helpers it
-  also contained moved to `tools/shell/parsing.py` (`parse_shell_command`,
-  `argv_for_repl_builtin_detection`, `ParsedShellCommand`), alongside the shell
-  execution policy in `tools/shell/policy.py`.
-- `tools.shell.policy.evaluate_shell_from_parsed` now returns `allow` for every
+- The pure parsing helpers moved to `tools/interactive_shell/shell/parsing.py` (`parse_shell_command`, `argv_for_repl_builtin_detection`, `ParsedShellCommand`), alongside the shell execution policy in `tools/interactive_shell/shell/policy.py`.
+- `tools.interactive_shell.shell.policy.evaluate_shell_from_parsed` now returns `allow` for every
   command — read-only, mutating, `restricted` (`sudo`, `systemctl`, `kill`,
   `dd`, …), shell operators (`| && ; > <`), and command substitution
   (`` ` ``/`$(...)`). Commands that need a shell run through one automatically;

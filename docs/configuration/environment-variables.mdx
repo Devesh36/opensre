@@ -102,7 +102,7 @@ All configuration options for OpenSRE can be set via environment variables. This
 
 | Variable | Default | Description | Module |
 |----------|---------|-------------|--------|
-| `OPENSRE_REASONING_EFFORT` | `medium` | Reasoning effort level for extended thinking models (`low`, `medium`, `high`) | `llm_reasoning_effort` |
+| `OPENSRE_REASONING_EFFORT` | `medium` | Reasoning effort for extended-thinking models (`low`, `medium`, `high`, `xhigh`; REPL `/effort` on OpenAI/Codex also supports `max`) | `llm_reasoning_effort` |
 
 ## CLI Investigation Tools
 
@@ -141,9 +141,9 @@ All configuration options for OpenSRE can be set via environment variables. This
 | Variable | Default | Description | Module |
 |----------|---------|-------------|--------|
 | `TRACER_VERBOSE` | `0` | Verbose output for tracer (`1`, `true`, `yes`) | `surfaces/interactive_shell/ui/output` |
-| `TRACER_OUTPUT_FORMAT` | | Output format for tracer results | `platform/observability/output_format` |
+| `TRACER_OUTPUT_FORMAT` | | Output format for tracer results | `platform/observability/render/output_format.py` |
 | `TRACER_API_URL` | | API URL for tracer reports | `integrations/slack/delivery.py` |
-| `NO_COLOR` | | Disable colored output (standard convention) | `platform/observability/output_format` |
+| `NO_COLOR` | | Disable colored output (standard convention) | `platform/observability/render/output_format.py` |
 | `COLUMNS` | `80` | Terminal column width for output formatting | `surfaces/interactive_shell/ui/output` |
 | `ENV` | `development` | Environment (`development`, `production`) | `config` |
 
@@ -174,16 +174,16 @@ not a Mintlify docs-site page).
 
 | Variable | Default | Description | Module |
 |----------|---------|-------------|--------|
-| `OPENSRE_NO_TELEMETRY` | `0` | Disable all telemetry, including Sentry and PostHog (covers `$ai_generation` prompt/response events) | `platform/observability/sentry_sdk.py` |
-| `OPENSRE_SENTRY_DISABLED` | `0` | Disable Sentry error reporting | `platform/observability/sentry_sdk.py` |
-| `OPENSRE_SENTRY_DSN` | | Override Sentry DSN | `platform/observability/sentry_sdk.py` |
+| `OPENSRE_NO_TELEMETRY` | `0` | Disable all telemetry, including Sentry and PostHog (covers `$ai_generation` prompt/response events) | `platform/observability/errors/sentry.py` |
+| `OPENSRE_SENTRY_DISABLED` | `0` | Disable Sentry error reporting | `platform/observability/errors/sentry.py` |
+| `OPENSRE_SENTRY_DSN` | | Override Sentry DSN | `platform/observability/errors/sentry.py` |
 | `OPENSRE_SENTRY_LOGGING_DISABLED` | `0` | Disable Sentry log integration | `.env.example` |
 | `OPENSRE_DEPLOYMENT_METHOD` | `local` | Deployment method tag for Sentry (`railway`, `ec2`, `vercel`, `local`) | `.env.example` |
 | `OPENSRE_PROMPT_LOG_DISABLED` | `0` | Disable prompt logging entirely | `.env.example` |
 | `OPENSRE_PROMPT_LOG_LOCAL_DISABLED` | `0` | Disable local prompt log file | `.env.example` |
 | `OPENSRE_PROMPT_LOG_REDACT` | `1` | Redact known token shapes from prompts/responses before local or PostHog logging | `.env.example` |
 | `OPENSRE_PROMPT_LOG_PATH` | `~/.config/opensre/prompt_log.jsonl` | Path to local prompt log file | `.env.example` |
-| `DO_NOT_TRACK` | `0` | Honor global do-not-track preference | `platform/observability/sentry_sdk.py` |
+| `DO_NOT_TRACK` | `0` | Honor global do-not-track preference | `platform/observability/errors/sentry.py` |
 | `SENTRY_TRACES_SAMPLE_RATE` | `1.0` | Trace sampling rate for Sentry | `.env.example` |
 | `SENTRY_ERROR_SAMPLE_RATE` | `1.0` | Error sampling rate for Sentry | `.env.example` |
 
@@ -295,7 +295,7 @@ not a Mintlify docs-site page).
 | `GITHUB_MCP_TOOLSETS` | `repos,issues,pull_requests,actions,search` | Enabled GitHub MCP toolsets | `integrations/_catalog_impl` |
 | `OPENSRE_GITHUB_MCP_REPO_PROBE_LIMIT` | `50` | Max repos to probe (5-500) | `.env.example` |
 | `GITLAB_BASE_URL` | | GitLab instance URL | `integrations/_catalog_impl` |
-| `GITLAB_TOKEN` | | GitLab API token | `.env.example` |
+| `GITLAB_ACCESS_TOKEN` | | GitLab API token | `.env.example` |
 | `JIRA_BASE_URL` | | Jira instance URL | `integrations/_catalog_impl` |
 | `JIRA_EMAIL` | | Jira user email | `integrations/_catalog_impl` |
 | `JIRA_API_TOKEN` | | Jira API token | `integrations/_catalog_impl` |
@@ -305,7 +305,7 @@ not a Mintlify docs-site page).
 | `BITBUCKET_APP_PASSWORD` | | Bitbucket app password | `integrations/_catalog_impl` |
 | `BITBUCKET_MAX_RESULTS` | `25` | Max results per API call | `integrations/_catalog_impl` |
 | `INCIDENT_IO_BASE_URL` | | incident.io API URL | `integrations/_catalog_impl` |
-| `INCIDENT_IO_API_TOKEN` | | incident.io API token | `.env.example` |
+| `INCIDENT_IO_API_KEY` | | incident.io API token | `.env.example` |
 | `OPSGENIE_API_KEY` | | Opsgenie API key | `integrations/_catalog_impl` |
 | `OPSGENIE_REGION` | `us` | Opsgenie region (us/eu) | `integrations/_catalog_impl` |
 | `VERCEL_API_TOKEN` | | Vercel API token | `integrations/_catalog_impl` |

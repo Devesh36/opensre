@@ -10,7 +10,7 @@ Run `/help` anytime for the live command list grouped by category. In a TTY, bar
 When you type `/` and browse completions with the arrow keys, the full description of the highlighted command appears in the hint line above the prompt.
 
 <Info>
-  Commands marked **elevated** may prompt for confirmation unless [trust mode](#trust-mode-and-confirmations) is on. Non-TTY sessions fail closed on elevated actions.
+  **Alpha execution policy:** slash commands, investigations, shell one-liners, and CLI parity actions run immediately with **no confirmation prompts**. `/trust` remains registered for a future stricter policy but does not gate commands today.
 </Info>
 
 ## How the REPL works
@@ -22,7 +22,7 @@ When you type `/` and browse completions with the arrow keys, the full descripti
 | Pasted alert JSON/text | Often starts an investigation without a slash command |
 | Shell one-liner (`kubectl get pods`) | Executed through shell policy when the action agent selects a shell action |
 
-**TTY vs non-TTY:** The full experience (interactive menus, confirmations, onboarding wizards) requires a real terminal. Piping input or running in CI sets non-interactive mode — elevated commands are rejected unless trust mode was enabled in a prior interactive session (prefer explicit CLI commands outside the REPL for automation).
+**TTY vs non-TTY:** Interactive menus and onboarding wizards work best in a real terminal. Piping input or running in CI sets non-interactive mode — prefer explicit `opensre …` CLI commands outside the REPL for automation. Under the alpha policy, actions are not blocked for lack of a confirmation TTY.
 
 **Unknown commands:** Typos suggest the closest registered command (`Did you mean /integrations?`). Run `/help` for the authoritative list — it always matches your installed OpenSRE version.
 
@@ -72,7 +72,8 @@ When you type `/` and browse completions with the arrow keys, the full descripti
 | `/investigate` | Run an RCA from a file path or sample template |
 | `/template` | Print a starter alert JSON template |
 | `/last` | Reprint the most recent investigation report |
-| `/save <path>` | Export the last investigation to a file **elevated** |
+| `/save <path>` | Export the last investigation to a file |
+| `/rca` | Browse persisted RCA reports across sessions |
 
 ### Integrations, models, and tools
 
@@ -98,16 +99,16 @@ When you type `/` and browse completions with the arrow keys, the full descripti
 | --- | --- |
 | `/background` | Run investigations async; track RCAs and completion notifications |
 | `/tasks` | List recent and in-flight background tasks |
-| `/cancel <id>` | Cancel a running task by id **elevated** |
+| `/cancel <id>` | Cancel a running task by id |
 | `/stop` | Guidance for stopping investigations and background work |
 
 ### Watchdog
 
 | Command | What it does |
 | --- | --- |
-| `/watch` | Watch a process and send Telegram threshold alarms **elevated** |
+| `/watch` | Watch a process and send Telegram threshold alarms |
 | `/watches` | List active watchdog tasks with latest samples |
-| `/unwatch <id>` | Stop a watchdog task by id **elevated** |
+| `/unwatch <id>` | Stop a watchdog task by id |
 | `/watchdog` | CLI-parity wrapper for the watchdog monitor |
 
 ### Agents and alerts
@@ -126,7 +127,10 @@ These commands delegate to the same Click CLI you would run outside the REPL.
 | `/auth` | Log in to LLM providers, show provider auth status, or clear credentials |
 | `/login` | Shortcut for `/auth login` (`/login chatgpt`, `/login claude`, `/login deepseek`) |
 | `/onboard` | Interactive onboarding wizard |
-| `/remote` | Connect to and operate remote deployed agents |
+| `/remote` | CLI parity for remote workflows (see [Remote runtime investigation](/remote-runtime-investigation)) |
+| `/gateway` | Start, stop, status, or tail logs for the gateway daemon |
+| `/misses` | List, export, or convert recorded action misses |
+| `/theme` | Switch terminal color theme |
 | `/config` | Show or edit `~/.opensre/config.yml` |
 | `/cron` | Manage scheduled delivery jobs |
 | `/sentry` | Schedule automated Sentry morning digests or uptime watches (Telegram or Slack required) |
@@ -136,7 +140,7 @@ These commands delegate to the same Click CLI you would run outside the REPL.
 | `/tests` | Browse and run inventoried tests |
 | `/update` | Check for updates and upgrade OpenSRE |
 | `/debug` | Targeted runtime diagnostics |
-| `/uninstall` | Remove OpenSRE and local data **elevated** |
+| `/uninstall` | Remove OpenSRE and local data |
 
 ### System
 
@@ -281,7 +285,7 @@ Other providers (Anthropic, Ollama, etc.) ignore `/effort`; the shell prints a h
 
 ### `/trust`
 
-Trust mode skips execution confirmation prompts for **elevated** commands (`/save`, `/watch`, `/cancel`, `/uninstall`, integration remove, etc.).
+Trust mode is a **session preference** retained for a future confirmation policy. In alpha, slash and shell actions run without prompts regardless of trust state.
 
 ```text
 /trust on
@@ -289,11 +293,7 @@ Trust mode skips execution confirmation prompts for **elevated** commands (`/sav
 /trust
 ```
 
-In a TTY, bare `/trust` opens an interactive on/off menu. Trust mode is a **session preference** — it is not restored by `/resume`.
-
-<Tip>
-  During watchdog demos or repeated `/save` exports, `/trust on` avoids confirmation fatigue. Turn it off before running destructive commands you might mistype.
-</Tip>
+In a TTY, bare `/trust` opens an interactive on/off menu. Trust mode is not restored by `/resume`.
 
 ### `/verbose`
 
@@ -916,7 +916,7 @@ First-run setup: LLM keys, integrations, Telegram, alert listener. Requires excl
 /remote trigger
 ```
 
-Operate remote deployed OpenSRE agents (EC2, Nitro, hosted runtime). See [Remote runtime investigation](/remote-runtime-investigation).
+Forwards to `opensre remote …` (not registered on the current top-level CLI). For deployed runtimes, use [Deployment](/deployment) and `opensre investigate -i` with an alert payload. See [Remote runtime investigation](/remote-runtime-investigation).
 
 ### `/config`
 
@@ -1077,20 +1077,11 @@ Clean shutdown with `/resume` hint. Prefer over killing the terminal so session 
 
 ---
 
-## Trust mode and confirmations
+## Trust mode (alpha)
 
-| Tier | Examples | Confirmation |
-| --- | --- | --- |
-| Exempt | `/help`, `/exit`, `/trust` | Never prompts |
-| Safe | `/status`, `/health`, `/investigate`, `/integrations list` | Read-only or standard risk |
-| Elevated | `/save`, `/watch`, `/cancel`, `/integrations remove`, `/fleet kill`, `/uninstall` | Prompt `[y/N]` unless trust on |
+During alpha, the REPL uses an **allow-all** execution policy: no `[y/N]` confirmation prompts for slash commands, investigations, or shell input. `/trust` still toggles a session flag for compatibility and for a possible post-alpha confirmation tier.
 
-Non-TTY: elevated commands **fail closed** (error message, no side effect).
-
-```text
-/trust on   # skip prompts for this session
-/trust off  # restore prompts
-```
+Non-TTY sessions are not blocked solely because stdin is not interactive; use headless CLI (`opensre investigate …`) when automation must avoid the REPL entirely.
 
 ---
 
@@ -1121,7 +1112,7 @@ You do not need to memorize every slash command. Examples:
 | Past REPL sessions | `/sessions` |
 | Watchdog tasks | `/watches` |
 
-When the planner is uncertain, it asks for clarification or falls back to help — it does not silently run elevated commands.
+When the planner is uncertain, it asks for clarification or falls back to help.
 
 Compound requests ("health then integrations") execute as an ordered sequence of slash actions.
 

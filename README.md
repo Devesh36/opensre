@@ -132,7 +132,7 @@ Configure once, then pick how you want to run investigations:
 opensre onboard
 ```
 
-**Interactive shell** — with no subcommand, `opensre` starts a REPL (TTY required). Describe incidents in plain language, stream investigations, and use slash commands for session control (`/help`, `/status`, `/cost`, `/sessions`, `/resume`, `/compact`, `/new`, `/exit`), integrations (`/integrations list`, `/integrations verify`), local agent fleet monitoring (`/agents`), and reasoning depth (`/effort` for **OpenAI** and **Codex** — `low` through `max`). Ctrl+C cancels an in-flight investigation without losing session state. See **[interactive shell commands](https://www.opensre.com/docs/interactive-shell-commands)** for the full reference.
+**Interactive shell** — with no subcommand, `opensre` starts a REPL (TTY required). Describe incidents in plain language, stream investigations, and use slash commands for session control (`/help`, `/status`, `/cost`, `/sessions`, `/resume`, `/compact`, `/new`, `/exit`), integrations (`/integrations list`, `/integrations verify`), local agent fleet monitoring (`/fleet`), and reasoning depth (`/effort` for **OpenAI** and **Codex** — `low` through `max`). Ctrl+C cancels an in-flight investigation without losing session state. See **[interactive shell commands](https://www.opensre.com/docs/interactive-shell-commands)** for the full reference.
 
 ```bash
 opensre
@@ -144,10 +144,11 @@ opensre
 opensre investigate -i tests/e2e/kubernetes/fixtures/datadog_k8s_alert.json
 ```
 
-**Remote runtime investigation** — investigate a deployed service by name (live health, logs, and deployment status):
+**Deployed runtime** — host OpenSRE on Railway, EC2, Docker, or another ASGI host, then run investigations with alert payloads (see [Deployment](DEPLOYMENT.md) and the docs site **Remote runtime investigation** page):
 
 ```bash
-opensre investigate --service api-backend
+opensre investigate -i alert.json
+opensre gateway start   # optional local gateway for Telegram and scheduled work
 ```
 
 **Hermes log watch** — tail a Hermes `errors.log`, classify incidents, and optionally alert on Telegram:
@@ -160,7 +161,7 @@ Other useful commands:
 
 ```bash
 opensre integrations setup
-opensre agents scan
+opensre fleet scan
 opensre update
 opensre uninstall   # remove opensre and all local data
 ```

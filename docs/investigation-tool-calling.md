@@ -18,7 +18,7 @@ The investigation agent does **not** call integration APIs through the LLM. The 
    (`tools/investigation/stages/gather_evidence/agent.py`).
 
 ```text
-investigate/agent.py  →  get_llm(LLMRole.AGENT)  →  *AgentClient.tool_schemas / invoke
+tools/investigation/stages/gather_evidence/agent.py  →  get_llm(LLMRole.AGENT)  →  *AgentClient.tool_schemas / invoke
                     ↓
               tools/*  (input_schema, extract_params, run)
 ```
@@ -91,7 +91,7 @@ Each `*AgentClient` should own:
 | ---------------- | ----- |
 | `tool_schemas(tools)` | Map `RegisteredTool` / `public_input_schema` → API payload. Never pass raw schemas if the API is strict. |
 | `invoke(..., tools=...)` | Attach schemas the API expects; handle retries and map errors to `RuntimeError` with actionable text. |
-| Message compatibility | Investigation builds history via `MessageMapper` (`core.messages`) — `to_assistant_provider_message`, `tool_results_from_execution`, and `synthetic_assistant_tool_call` — each must match your invoke parser. |
+| Message compatibility | Investigation builds history via `MessageMapper` (`core.messages`) — `to_assistant_provider_message`, `to_tool_result_provider_messages`, and `to_synthetic_assistant_provider_message` — each must match your invoke parser. |
 
 Checklist when adding or changing a client:
 
@@ -102,7 +102,7 @@ Checklist when adding or changing a client:
 - [ ] Throttling / rate limits: align with existing retry policy in sibling clients.
 
 Provider-specific modules (e.g. strict JSON Schema helpers) stay beside the client; keep investigation
-logic in `investigation.py` as dispatch only.
+message dispatch in `tools/investigation/stages/gather_evidence/` and shared helpers in `core/`.
 
 ### LiteLLM transport
 
@@ -126,7 +126,7 @@ Supported providers: `anthropic`, `openai`, `bedrock`, and OpenAI-compatible pro
 CLI-backed providers (`codex`, `claude-code`, `opencode`, `kimi`, `copilot`, etc.) always use
 their subprocess path regardless of this setting.
 
-## Investigation messages (`investigation.py`)
+## Investigation messages (gather evidence loop)
 
 - [ ] **Same `ToolCall.id`** across synthetic seed assistant message, tool results, and evidence keys.
 - [ ] **Provider-specific IDs** — Use opaque ids only when the client requires them (e.g. length/format);
