@@ -59,7 +59,8 @@ You have two equivalent paths:
     SLACK_ALLOWED_USERS=U0123ABCD
     ```
     OpenSRE reads env as a fallback when no Slack entry exists in `~/.opensre/integrations.json`.
-    For gateway tokens, env wins over the store when both are set (same as Telegram).
+    Bot / app tokens use `resolve_env_credential` (process env, then OS keyring).
+    `SLACK_WEBHOOK_URL` is store/env only — never keyring.
   </Tab>
   <Tab title="Onboarding wizard">
     ```bash
@@ -67,8 +68,15 @@ You have two equivalent paths:
     ```
     Select **Slack** and choose webhook / Socket Mode / both. The wizard validates
     the webhook when configured, then persists credentials to the integration store.
+    Socket Mode tokens are dual-written to the OS keyring; the webhook URL is not.
   </Tab>
 </Tabs>
+
+<Note>
+**Credential resolution.** Store first when present. Then:
+`SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` → env then keyring;
+`SLACK_WEBHOOK_URL` → plain env only (never keyring).
+</Note>
 
 ---
 
@@ -101,7 +109,7 @@ Findings should appear in the configured channel.
 ## Agent Slack tools
 
 Teammate tools (bot token) plus webhook blast. Credentials resolve inside the
-tools (never in tool-call traces). Shared client: `integrations/slack/bot_api.py`.
+tools (never in tool-call traces). Shared client: `integrations/slack/web_client.py`.
 
 | Tool | What it does | Needs | Approval |
 |---|---|---|---|
@@ -190,16 +198,33 @@ HTTPS URL is required — the gateway holds an outbound websocket.
 | `app_mentions:read` | Gateway `@mention` inbound |
 | `chat:write` | Gateway replies + `slack_reply_message` |
 | `im:history` | Gateway DMs + reading DM history |
-| `channels:history` | `slack_read_messages` in public channels |
+| `channels:history` | `slack_read_messages` + thread seeding in public channels |
 | `groups:history` | `slack_read_messages` in private channels |
 | `mpim:history` | `slack_read_messages` in multi-party DMs |
-| `channels:read` | Resolve `#channel-name` → ID |
 | `groups:read` | Resolve private channel names |
-| `im:read` / `mpim:read` | List DMs when resolving names |
-| `users:read` | `slack_list_team_members` |
-| `search:read` | `slack_search_messages` |
-| `channels:join` | `slack_join_channel` (public channels) |
-| `reactions:write` | Gateway ack reactions + `slack_add_reaction` |
+| `groups:write` | Manage / create private channels |
+| `files:read` | Inbound file-attachment downloads + discover Slack Lists (`files.list`) |
+| `files:write` | Upload files as the bot |
+| `lists:read` | `slack_read_list` — read Slack List rows (`slackLists.items.list`) |
+| `search:read.public` | `slack_search_messages` in public channels |
+| `search:read.private` | Search private channels |
+| `search:read.im` | Search DMs |
+| `search:read.mpim` | Search group DMs |
+| `search:read.files` | Search files |
+| `search:read.users` | Search users |
+| `usergroups:read` | View workspace user groups |
+| `users.profile:read` | Speaker profile details |
+| `users:read` | `slack_list_team_members` + user lookup |
+
+<Note>
+Add these only if you use the feature — they are not in the current app config:
+`reactions:write` (gateway ack 👀 / ✓ reactions + `slack_add_reaction`),
+`channels:read` / `im:read` / `mpim:read` (resolve `#channel-name` and DM names
+→ ID), and `channels:join` (`slack_join_channel`).
+</Note>
+
+Optional env: `SLACK_TEAM_TASKS_LIST_ID` (`F…`) so `slack_read_list` can open the
+default team-tasks List without a name search.
 
 Reinstall the app after adding scopes so the bot token picks them up.
 
@@ -281,43 +306,15 @@ message, then swaps to ✅ (`white_check_mark`) when the reply is finalized.
 If Slack is not configured the daemon still runs the other components and
 `opensre gateway status` shows `slack: not configured`.
 
-### Deploying the gateway to a remote host
+### Deploying the Slack gateway
 
-Running the gateway on a server with `make deploy` (EC2) is different from local
-use: **the remote host cannot read your local machine's integration store /
-keychain**. Deploy validates that secrets are present as **plaintext env vars**
-in `.env`:
+The Slack gateway backend is deployed and operated separately — not from this
+repo. Configure the integration here (tokens and scopes above); provisioning the
+hosted backend is out of scope for this repo.
 
-```bash
-# Telegram-only, Slack-only, or both are accepted
-TELEGRAM_BOT_TOKEN=…                 # optional if Slack is fully set
-SLACK_BOT_TOKEN=xoxb-…
-SLACK_APP_TOKEN=xapp-…
-SLACK_ALLOWED_USERS=U0123ABCD
-ANTHROPIC_API_KEY=…                  # or your provider's key env
-```
-
-`make deploy` / `make deploy-gateway` require **at least one** of Telegram or
-Slack Socket Mode. Partial Slack config (bot token without app token) aborts.
-Missing allowlists are warnings (same shape as Telegram). Deploy health waits
-for the `[gateway] ready` log line (works for Telegram-only, Slack-only, or both).
-
-To give the deployed agent access to your observability integrations (so it
-can pull Grafana, Datadog, or other data when asked in Slack), put those
-credentials in `.env` too and list the variable names in
-`OPENSRE_DEPLOY_EXTRA_ENV_KEYS`:
-
-```bash
-GRAFANA_INSTANCE_URL=…
-GRAFANA_READ_TOKEN=…
-OPENSRE_DEPLOY_EXTRA_ENV_KEYS=GRAFANA_INSTANCE_URL,GRAFANA_READ_TOKEN
-```
-
-The deploy ships every listed variable to both containers; the matching agent
-tools become available automatically.
-
-Fargate/terraform under `infra/terraform/` injects Slack secrets via SSM —
-see that README for the cloud path.
+The EC2 paths (`make deploy` / `make deploy-gateway`) are **Telegram-only** and
+ignore `SLACK_*` variables with a validation warning: Slack Socket Mode is
+single-consumer, so a second gateway holding the same tokens would split events.
 
 ---
 

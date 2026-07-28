@@ -15,6 +15,7 @@ from typing import Any
 from pydantic import Field, field_validator
 
 from config.strict_config import StrictConfigModel
+from core.tool_framework.utils.tool_availability import tool_unavailable
 from integrations._validation_helpers import report_validation_failure
 
 logger = logging.getLogger(__name__)
@@ -185,7 +186,7 @@ def get_topic_health(
     all topics up to max_results.
     """
     if not config.is_configured:
-        return {"source": "kafka", "available": False, "error": "Not configured."}
+        return tool_unavailable("kafka", "Not configured.")
 
     effective_limit = min(limit or config.max_results, config.max_results)
     try:
@@ -234,7 +235,7 @@ def get_topic_health(
             integration="kafka",
             method="get_topic_health",
         )
-        return {"source": "kafka", "available": False, "error": str(err)}
+        return tool_unavailable("kafka", str(err))
 
 
 def get_consumer_group_lag(
@@ -246,7 +247,7 @@ def get_consumer_group_lag(
     Read-only: queries committed offsets and compares to high watermarks.
     """
     if not config.is_configured:
-        return {"source": "kafka", "available": False, "error": "Not configured."}
+        return tool_unavailable("kafka", "Not configured.")
 
     try:
         from confluent_kafka import TopicPartition
@@ -258,21 +259,17 @@ def get_consumer_group_lag(
         consumer = _get_consumer(config)
 
         try:
-            # Get committed offsets for the group
             group_offsets = admin.list_consumer_group_offsets(
                 [ConsumerGroupTopicPartitions(group_id)]
             )
-            # Wait for the future to resolve
             group_result = None
             for group_future in group_offsets.values():
                 group_result = group_future.result()
 
-            # Build partition lag info
             lag_info = []
             for tp in group_result.topic_partitions if group_result else []:
                 if tp.error:
                     continue
-                # Get high watermark for this partition
                 lo, hi = consumer.get_watermark_offsets(
                     TopicPartition(tp.topic, tp.partition),
                     timeout=config.timeout_seconds,
@@ -306,4 +303,4 @@ def get_consumer_group_lag(
             integration="kafka",
             method="get_consumer_group_lag",
         )
-        return {"source": "kafka", "available": False, "error": str(err)}
+        return tool_unavailable("kafka", str(err))

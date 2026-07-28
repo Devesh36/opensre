@@ -16,12 +16,27 @@ from integrations.sentry.uptime import (
 
 
 def _sentry_available(sources: dict[str, dict]) -> bool:
-    return bool(sources.get("sentry", {}).get("connection_verified"))
+    # Local-disk rollup only — do not require live Sentry API connectivity.
+    return "sentry" in sources
 
 
 def _extract_params(sources: dict[str, dict]) -> dict[str, Any]:
-    sentry = sources["sentry"]
+    sentry = sources.get("sentry") or {}
     return {"project_slug": sentry.get("project_slug", "")}
+
+
+def _empty_rollup(*, window_hours: int, uptime_watch_active: bool, message: str) -> dict[str, Any]:
+    return {
+        "source": "sentry",
+        "available": True,
+        "uptime_watch_active": uptime_watch_active,
+        "window_hours": window_hours,
+        "still_down_count": 0,
+        "recovered_count": 0,
+        "still_down": [],
+        "recovered": [],
+        "message": message,
+    }
 
 
 def _monitor_label(*, name: str, url: str) -> str:
@@ -193,30 +208,25 @@ def get_sentry_uptime_digest(
     project_slug: str = "",
 ) -> dict[str, Any]:
     """Return structured uptime rollup from the watch transition log."""
+    hours = max(int(window_hours), 1)
     now = datetime.now(UTC)
     states = load_all_watch_states()
     if not states:
-        return {
-            "source": "sentry",
-            "available": True,
-            "uptime_watch_active": False,
-            "message": "No uptime watch history found. Schedule an uptime watch first.",
-            "still_down": [],
-            "recovered": [],
-        }
+        return _empty_rollup(
+            window_hours=hours,
+            uptime_watch_active=False,
+            message="No uptime watch history found. Schedule an uptime watch first.",
+        )
 
     transitions, open_incidents = _merge_transitions(states, project_slug=project_slug)
     if not transitions and not open_incidents:
-        return {
-            "source": "sentry",
-            "available": True,
-            "uptime_watch_active": True,
-            "message": "No uptime incidents in the requested window.",
-            "still_down": [],
-            "recovered": [],
-        }
+        return _empty_rollup(
+            window_hours=hours,
+            uptime_watch_active=True,
+            message="No uptime incidents in the requested window.",
+        )
 
-    rollup = _build_rollup(transitions, open_incidents, window_hours=window_hours, now=now)
+    rollup = _build_rollup(transitions, open_incidents, window_hours=hours, now=now)
     result: dict[str, Any] = {
         "source": "sentry",
         "available": True,

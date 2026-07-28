@@ -140,6 +140,7 @@ class TestSession:
     ) -> None:
         session = Session()
         monkeypatch.setattr(const_module, "OPENSRE_HOME_DIR", tmp_path)
+        monkeypatch.setattr("config.constants.paths.OPENSRE_HOME_DIR", tmp_path)
         session.task_registry = TaskRegistry.persistent()
         task = session.task_registry.create(
             TaskKind.SYNTHETIC_TEST, command="opensre tests synthetic"
@@ -158,7 +159,6 @@ class TestSession:
         session.accumulate_from_state(
             {
                 "service": "orders-api",
-                "pipeline_name": "events_fact",
                 "cluster_name": "prod-us-east",
                 "region": "us-east-1",
                 "environment": "production",
@@ -168,7 +168,6 @@ class TestSession:
         )
         assert session.accumulated_context == {
             "service": "orders-api",
-            "pipeline_name": "events_fact",
             "cluster_name": "prod-us-east",
             "region": "us-east-1",
             "environment": "production",

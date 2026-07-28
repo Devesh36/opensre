@@ -34,11 +34,24 @@ from core.domain.alerts.inbox import (
 ensure_project_platform_package()
 
 from gateway.http.investigations import router as investigations_router  # noqa: E402
+from integrations.harness_adapters import (  # noqa: E402
+    register_harness_adapters as _register_integration_adapters,
+)
 from platform.observability.errors.sentry import capture_exception, init_sentry  # noqa: E402
+from tools.harness_adapters import (  # noqa: E402
+    register_harness_adapters as _register_tool_adapters,
+)
 from tools.investigation.capability import (  # noqa: E402
     resolve_investigation_context,
     run_investigation_payload,
 )
+
+# Mirror shell/gateway boot: /investigate runs the full pipeline, which reads the
+# vendor registries (alert-source routing, incident anchors, taxonomy, alert
+# detail fields). Without this they stay empty and degrade silently. Registering
+# here rather than via surfaces.boundary keeps gateway off a surfaces import.
+_register_integration_adapters()
+_register_tool_adapters()
 
 init_sentry(entrypoint="webapp")
 
@@ -174,7 +187,6 @@ async def receive_alert(request: Request) -> JSONResponse:
 class InvestigateRequest(BaseModel):
     raw_alert: dict[str, Any]
     alert_name: str | None = None
-    pipeline_name: str | None = None
     severity: str | None = None
 
 
@@ -202,7 +214,6 @@ def investigate(req: InvestigateRequest, request: Request) -> InvestigateRespons
     investigation_metadata = resolve_investigation_context(
         raw_alert=req.raw_alert,
         alert_name=req.alert_name,
-        pipeline_name=req.pipeline_name,
         severity=req.severity,
     )
     try:

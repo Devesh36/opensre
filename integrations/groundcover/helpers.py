@@ -1,9 +1,14 @@
 """Shared helpers for groundcover investigation tools.
 
-All groundcover tools share one client factory, one normalized output envelope,
-and one signal-query runner so logs/traces/events/issues/apm stay consistent.
-The OpenSRE output envelope is provider-agnostic and never exposes raw MCP
-protocol frames to the investigator.
+Exports, by pipeline stage:
+
+- ``groundcover_creds``, ``make_client``, ``client_for_source``: build a
+  ``GroundcoverClient`` from a resolved source entry's credentials.
+- ``base_extract_params``: inject that client into a tool's params without
+  exposing credentials to the model.
+- ``run_signal_query``, ``build_envelope``, ``needs_query``, ``unavailable``,
+  ``compact_rows``, ``time_range``: run a gcQL query and shape the result into
+  the provider-agnostic OpenSRE envelope, never exposing raw MCP protocol frames.
 
 This module lives under ``tools/utils`` (skipped by the tool registry) so it
 is shared infrastructure, not a registered tool.
@@ -16,6 +21,7 @@ from typing import Any, cast
 
 from pydantic import ValidationError
 
+from core.tool_framework.utils.tool_availability import tool_unavailable
 from integrations._validation_helpers import report_validation_failure
 from integrations.groundcover.client import (
     GroundcoverClient,
@@ -63,7 +69,7 @@ GCQL_GUIDANCE = (
 
 
 def groundcover_creds(gc: dict[str, Any]) -> dict[str, Any]:
-    """Extract the credential subset a GroundcoverClient needs from a source entry."""
+    """Extract api_key/mcp_url/tenant_uuid/backend_id/timezone from a source entry."""
     return {
         "api_key": gc.get("api_key", ""),
         "mcp_url": gc.get("mcp_url", ""),
@@ -95,16 +101,8 @@ def make_client(creds: dict[str, Any]) -> GroundcoverClient | None:
 
 
 def unavailable(source: str, error: str, **extra: Any) -> dict[str, Any]:
-    """Standard unavailable envelope (no MCP call was made or it failed)."""
-    return {
-        "source": source,
-        "available": False,
-        "data": [],
-        "summary": {},
-        "truncated": False,
-        "error": error,
-        **extra,
-    }
+    """tool_unavailable envelope with data=[], summary={}, truncated=False defaults."""
+    return tool_unavailable(source, error, data=[], summary={}, truncated=False, **extra)
 
 
 def needs_query(source: str) -> dict[str, Any]:
@@ -162,18 +160,18 @@ def build_envelope(
     *,
     tr: dict[str, str],
 ) -> dict[str, Any]:
-    """Turn a GroundcoverToolResult into the normalized OpenSRE envelope."""
+    """Turn a GroundcoverToolResult into an envelope dict with source/available/query/
+    time_range/data/summary/truncated/error (+ notes when present)."""
     if not result.success:
-        return {
-            "source": source,
-            "available": False,
-            "query": query,
-            "time_range": tr,
-            "data": [],
-            "summary": {},
-            "truncated": False,
-            "error": result.error or "groundcover query failed",
-        }
+        return tool_unavailable(
+            source,
+            result.error or "groundcover query failed",
+            query=query,
+            time_range=tr,
+            data=[],
+            summary={},
+            truncated=False,
+        )
 
     data = result.data
     truncated = any("truncat" in note.lower() for note in result.notes)

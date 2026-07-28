@@ -228,6 +228,24 @@ def test_verify_telegram_api_not_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "unauthorized" in result["detail"].lower()
 
 
+def test_verify_telegram_exception_redacts_bot_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    """requests embeds the getMe URL — which carries the bot token — in
+    HTTPError messages; the verifier must redact it before surfacing the
+    detail (CWE-209)."""
+    token = "123456:SECRET-TOKEN-ABC"
+
+    def _raise(*_a: Any, **_kw: Any) -> None:
+        raise Exception(
+            f"401 Client Error: Unauthorized for url: https://api.telegram.org/bot{token}/getMe"
+        )
+
+    monkeypatch.setattr("integrations.telegram.verifier.requests.get", _raise)
+    result = _verify_telegram("local store", {"bot_token": token})
+    assert result["status"] == "failed"
+    assert token not in result["detail"]
+    assert "<redacted>" in result["detail"]
+
+
 def test_verify_slack_send_test_posts_to_webhook(monkeypatch: pytest.MonkeyPatch) -> None:
     """End-to-end: ``verify_integrations("slack", send_slack_test=True)`` must
     actually deliver the test message through the verifier's HTTP path.
@@ -818,6 +836,22 @@ def test_resolve_effective_integrations_includes_vercel_from_env(
     assert vercel is not None
     assert vercel["config"]["api_token"] == "tok_env"
     assert vercel["source"] == "local env"
+
+
+def test_resolve_effective_integrations_includes_railway_from_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("integrations.catalog.load_integrations", lambda: [])
+    monkeypatch.setenv("RAILWAY_PROJECT", "project_env")
+    monkeypatch.setenv("RAILWAY_SERVICE", "service_env")
+    monkeypatch.setenv("RAILWAY_ENVIRONMENT", "production")
+
+    effective = resolve_effective_integrations()
+
+    railway = effective.get("railway")
+    assert railway is not None
+    assert railway["config"]["project"] == "project_env"
+    assert railway["source"] == "local env"
 
 
 def test_resolve_effective_integrations_skips_invalid_slack_env_url(

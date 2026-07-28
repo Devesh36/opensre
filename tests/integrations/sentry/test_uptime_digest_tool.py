@@ -42,7 +42,11 @@ class TestGetSentryUptimeDigest:
         )
         result = get_sentry_uptime_digest()
         assert result["uptime_watch_active"] is False
+        assert result["window_hours"] == 24
+        assert result["still_down_count"] == 0
+        assert result["recovered_count"] == 0
         assert result["still_down"] == []
+        assert result["recovered"] == []
 
     def test_still_down_monitor(self, monkeypatch: pytest.MonkeyPatch) -> None:
         now = datetime(2026, 7, 16, 8, 0, tzinfo=UTC)

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import sqlite3
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
@@ -21,8 +20,11 @@ from gateway.slack.client import SlackWebApiClient
 from gateway.slack.dispatcher import _SlackTurnDispatcher
 from gateway.slack.events import parse_events_api_payload
 from gateway.slack.feedback import record_feedback_payload
+from gateway.slack.heartbeat import DEFAULT_HEARTBEAT_PATH, ConnectionHeartbeat
 from gateway.slack.settings import SlackGatewaySettings
-from gateway.storage import SessionBindingStore, SessionResolver, connect_gateway_db
+from gateway.storage import SessionResolver
+from gateway.storage.session.binding_store import open_binding_store
+from gateway.storage.session.bindings import SessionBindingStore
 
 _PLATFORM_SLACK = "slack"
 _EVENTS_API_REQUEST_TYPE = "events_api"
@@ -37,14 +39,17 @@ class SlackGatewayBackground:
         *,
         socket_client: SocketModeClient,
         executor: ThreadPoolExecutor,
-        db: sqlite3.Connection,
+        bindings: SessionBindingStore,
+        heartbeat: ConnectionHeartbeat,
     ) -> None:
         self._socket_client = socket_client
         self._executor = executor
-        self._db = db
+        self._bindings = bindings
+        self._heartbeat = heartbeat
 
     def stop(self, *, timeout: float = 8.0) -> bool:
         """Disconnect from Slack, wait up to ``timeout`` for in-flight turns, and clean up."""
+        self._heartbeat.stop()
         try:
             self._socket_client.close()
         except Exception:
@@ -59,9 +64,11 @@ class SlackGatewayBackground:
         waiter.join(timeout)
         stopped = not waiter.is_alive()
         try:
-            self._db.close()
+            self._bindings.close()
         except Exception:
-            logging.getLogger(__name__).debug("[slack-gateway] db close failed", exc_info=True)
+            logging.getLogger(__name__).debug(
+                "[slack-gateway] binding store close failed", exc_info=True
+            )
         return stopped
 
 
@@ -83,7 +90,6 @@ def start_slack_gateway_background(
     """Connect to Slack over Socket Mode and dispatch inbound messages until stopped."""
     web_client = WebClient(token=settings.bot_token)
     socket_client = SocketModeClient(app_token=settings.app_token, web_client=web_client)
-    db = connect_gateway_db()
     executor = ThreadPoolExecutor(
         max_workers=settings.max_concurrent_turns,
         thread_name_prefix="SlackGatewayTurn",
@@ -94,10 +100,11 @@ def start_slack_gateway_background(
     approvals = ApprovalBroker()
     messaging = SlackWebApiClient(web_client)
     greeter = ChannelIntroGreeter(messaging=messaging, bot_user_id=bot_user_id)
+    bindings = open_binding_store()
     dispatcher = _SlackTurnDispatcher(
         settings=settings,
         messaging=messaging,
-        session_resolver=SessionResolver(SessionBindingStore(db), platform=_PLATFORM_SLACK),
+        session_resolver=SessionResolver(bindings, platform=_PLATFORM_SLACK),
         handler=handler,
         logger=logger,
         bot_user_id=bot_user_id,
@@ -136,8 +143,18 @@ def start_slack_gateway_background(
         socket_client.connect()
     except Exception as exc:
         executor.shutdown(wait=False)
-        db.close()
+        bindings.close()
         raise GatewayConfigurationError(f"Slack Socket Mode connect failed: {exc}") from exc
 
     logger.info("[slack-gateway] socket mode connected")
-    return SlackGatewayBackground(socket_client=socket_client, executor=executor, db=db)
+    heartbeat = ConnectionHeartbeat(
+        path=settings.heartbeat_path or DEFAULT_HEARTBEAT_PATH,
+        is_alive=socket_client.is_connected,
+    )
+    heartbeat.start()
+    return SlackGatewayBackground(
+        socket_client=socket_client,
+        executor=executor,
+        bindings=bindings,
+        heartbeat=heartbeat,
+    )

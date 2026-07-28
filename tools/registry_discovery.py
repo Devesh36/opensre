@@ -72,6 +72,8 @@ INTEGRATION_TOOL_PACKAGES: tuple[str, ...] = (
     "integrations.rabbitmq.tools",
     "integrations.rds.tools",
     "integrations.redis.tools",
+    "integrations.railway.tools",
+    "integrations.rocketchat.tools",
     "integrations.s3.tools",
     "integrations.sentry.tools",
     "integrations.sentry_mcp.tools",

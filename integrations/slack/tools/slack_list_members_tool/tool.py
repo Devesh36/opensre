@@ -5,9 +5,15 @@ from __future__ import annotations
 from typing import Any
 
 from core.tool_framework.base import BaseTool
+from core.tool_framework.tags import SUMMARIZE_OBSERVATION_TAG
 from core.tool_framework.tool_decorator import tool
-from integrations.slack.bot_api import bot_token_configured, fetch_team_members, resolve_bot_token
+from core.tool_framework.utils.tool_availability import tool_unavailable
 from integrations.slack.tools.slack_read_messages_tool.constants import SOURCE
+from integrations.slack.web_client import (
+    bot_token_configured,
+    fetch_team_members,
+    resolve_bot_token,
+)
 
 
 class SlackListTeamMembersTool(BaseTool):
@@ -32,6 +38,7 @@ class SlackListTeamMembersTool(BaseTool):
         "Inferring teammates from recent channel messages instead of the workspace roster",
         "Looking up users in a different workspace",
     ]
+    tags = (SUMMARIZE_OBSERVATION_TAG,)
     requires = ["slack"]
     side_effect_level = "read_only"
     requires_approval = False
@@ -60,16 +67,15 @@ class SlackListTeamMembersTool(BaseTool):
     def run(self, include_bots: bool = False, **_kwargs: Any) -> dict[str, Any]:
         target, resolution_error = resolve_bot_token()
         if target is None:
-            return {
-                "source": SOURCE,
-                "available": False,
-                "status": "failed",
-                "error": resolution_error,
-                "error_type": "configuration_error",
-                "members": [],
-                "member_count": 0,
-                "truncated": False,
-            }
+            return tool_unavailable(
+                SOURCE,
+                resolution_error,
+                status="failed",
+                error_type="configuration_error",
+                members=[],
+                member_count=0,
+                truncated=False,
+            )
 
         members, error, truncated = fetch_team_members(target)
         if members is None:
