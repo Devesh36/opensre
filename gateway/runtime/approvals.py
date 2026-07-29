@@ -90,7 +90,6 @@ class ApprovalPrompter(Protocol):
         expiry_seconds: float,
     ) -> tuple[bool, str]:
         """Return (approved, id of the member who decided; empty when expired)."""
-        ...
 
 
 def approval_tool_hooks(prompter: ApprovalPrompter) -> ToolExecutionHooks:
