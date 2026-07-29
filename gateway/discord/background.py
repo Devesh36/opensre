@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import logging
-import sqlite3
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
 from gateway.discord.settings import DiscordGatewaySettings
 from gateway.discord.worker import run_discord_gateway_thread
 from gateway.runtime.sink_protocol import GatewayAgentCallback
-from gateway.storage import connect_gateway_db
+from gateway.storage.session.binding_store import BindingStore, open_binding_store
 
 
 class DiscordGatewayBackground:
@@ -22,13 +21,13 @@ class DiscordGatewayBackground:
         thread: threading.Thread,
         stop_event: threading.Event,
         ready_event: threading.Event,
-        db: sqlite3.Connection,
+        bindings: BindingStore,
         executor: ThreadPoolExecutor,
     ) -> None:
         self._thread = thread
         self._stop_event = stop_event
         self._ready_event = ready_event
-        self._db = db
+        self._bindings = bindings
         self._executor = executor
 
     def stop(self, *, timeout: float = 8.0) -> bool:
@@ -36,9 +35,11 @@ class DiscordGatewayBackground:
         self._thread.join(timeout=timeout)
         self._executor.shutdown(wait=False, cancel_futures=False)
         try:
-            self._db.close()
+            self._bindings.close()
         except Exception:
-            logging.getLogger(__name__).debug("[discord-gateway] db close failed", exc_info=True)
+            logging.getLogger(__name__).debug(
+                "[discord-gateway] binding store close failed", exc_info=True
+            )
         return not self._thread.is_alive()
 
     def wait_until_ready(self, *, timeout: float) -> bool:
@@ -52,7 +53,7 @@ def start_discord_gateway_background(
     handler: GatewayAgentCallback,
 ) -> DiscordGatewayBackground:
     """Connect to Discord and dispatch inbound messages until stopped."""
-    db = connect_gateway_db()
+    bindings = open_binding_store()
     executor = ThreadPoolExecutor(
         max_workers=settings.max_concurrent_turns,
         thread_name_prefix="DiscordGatewayTurn",
@@ -65,7 +66,7 @@ def start_discord_gateway_background(
             "settings": settings,
             "logger": logger,
             "handler": handler,
-            "db": db,
+            "bindings": bindings,
             "executor": executor,
             "stop_event": stop_event,
             "ready_event": ready_event,
@@ -78,7 +79,7 @@ def start_discord_gateway_background(
         thread=thread,
         stop_event=stop_event,
         ready_event=ready_event,
-        db=db,
+        bindings=bindings,
         executor=executor,
     )
 

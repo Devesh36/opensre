@@ -6,7 +6,6 @@ import asyncio
 import contextlib
 import logging
 import re
-import sqlite3
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -23,9 +22,10 @@ from gateway.discord.events import (
 )
 from gateway.discord.feedback import record_feedback_interaction
 from gateway.discord.settings import DiscordGatewaySettings
+from gateway.runtime.approvals import ApprovalBroker
 from gateway.runtime.sink_protocol import GatewayAgentCallback
-from gateway.slack.approvals import ApprovalBroker
-from gateway.storage import SessionBindingStore, SessionResolver
+from gateway.storage import SessionResolver
+from gateway.storage.session.binding_store import BindingStore
 
 _PLATFORM_DISCORD = "discord"
 _THREAD_HISTORY_LIMIT = 40
@@ -86,7 +86,7 @@ def run_discord_gateway_thread(
     settings: DiscordGatewaySettings,
     logger: logging.Logger,
     handler: GatewayAgentCallback,
-    db: sqlite3.Connection,
+    bindings: BindingStore,
     executor: ThreadPoolExecutor,
     stop_event: threading.Event,
     ready_event: threading.Event,
@@ -97,7 +97,7 @@ def run_discord_gateway_thread(
                 settings=settings,
                 logger=logger,
                 handler=handler,
-                db=db,
+                bindings=bindings,
                 executor=executor,
                 stop_event=stop_event,
                 ready_event=ready_event,
@@ -112,7 +112,7 @@ async def _discord_gateway_main(
     settings: DiscordGatewaySettings,
     logger: logging.Logger,
     handler: GatewayAgentCallback,
-    db: sqlite3.Connection,
+    bindings: BindingStore,
     executor: ThreadPoolExecutor,
     stop_event: threading.Event,
     ready_event: threading.Event,
@@ -123,7 +123,7 @@ async def _discord_gateway_main(
     intents.guild_messages = True
     intents.dm_messages = True
 
-    session_resolver = SessionResolver(SessionBindingStore(db), platform=_PLATFORM_DISCORD)
+    session_resolver = SessionResolver(bindings, platform=_PLATFORM_DISCORD)
     approvals = ApprovalBroker()
     dispatcher = DiscordTurnDispatcher(
         settings=settings,
@@ -168,10 +168,6 @@ async def _discord_gateway_main(
                     interaction,
                     broker=approvals,
                     allowed_user_ids=settings.allowed_user_ids,
-                    # Open-guild trust never extends to DMs.
-                    allow_open_guild=(
-                        settings.allow_open_guild and interaction.guild_id is not None
-                    ),
                 ):
                     with contextlib.suppress(discord.HTTPException):
                         await interaction.response.send_message("Recorded.", ephemeral=True)

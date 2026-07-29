@@ -93,6 +93,7 @@ def _merge_env_allowlist(
     if env_allowed_user_ids and not policy.allowed_user_ids:
         policy.allowed_user_ids = list(env_allowed_user_ids)
         policy.inbound_enabled = True
+        policy._invalidate_allowed_user_id_cache()
     return policy
 
 

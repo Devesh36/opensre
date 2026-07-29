@@ -9,12 +9,15 @@ from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 
+from config.principal import StorageScope
+from config.scope_context import bound_storage_scope
 from core.agent_harness.session import SessionCore
 from gateway.billing.credits_client import CreditsOutcome, consume_credits
-from gateway.discord.approvals import DiscordApprovalPrompter, approval_tool_hooks
+from gateway.discord.approvals import DiscordApprovalPrompter
 from gateway.discord.client import add_reaction, remove_reaction
 from gateway.discord.events import DiscordInboundMessage
 from gateway.discord.output_sink import DiscordOutputSink
+from gateway.discord.principal import PrincipalResolutionError, resolve_discord_scope
 from gateway.discord.security import (
     _ROTATE_SESSION,
     DiscordInboundDecision,
@@ -26,9 +29,9 @@ from gateway.discord.thread_history import (
     seed_session_from_discord_thread,
     session_needs_thread_seed,
 )
+from gateway.runtime.approvals import ApprovalBroker, approval_tool_hooks
+from gateway.runtime.attention import GateDecision, ThreadAttentionGate
 from gateway.runtime.sink_protocol import GatewayAgentCallback
-from gateway.slack.approvals import ApprovalBroker
-from gateway.slack.attention import GateDecision, ThreadAttentionGate
 from gateway.storage import SessionResolver
 from platform.analytics.usage_context import SURFACE_DISCORD, bound_usage_context
 
@@ -84,17 +87,30 @@ class DiscordTurnDispatcher:
 
     def dispatch(self, inbound: DiscordInboundMessage) -> None:
         try:
-            if not self._admit(inbound):
-                return
-            self._run_turn(inbound)
+            scope = resolve_discord_scope(guild_id=inbound.guild_id, user_id=inbound.user_id)
+        except PrincipalResolutionError:
+            self._logger.error(
+                "[discord-gateway] turn refused: unresolved principal channel=%s",
+                inbound.channel_id,
+                exc_info=True,
+            )
+            return
+        try:
+            with bound_storage_scope(scope):
+                if not self._admit(inbound, scope):
+                    return
+                self._run_turn(inbound, scope)
         except Exception:
             self._logger.error("[discord-gateway] turn failed", exc_info=True)
 
-    def _admit(self, inbound: DiscordInboundMessage) -> bool:
+    def _admit(self, inbound: DiscordInboundMessage, scope: StorageScope) -> bool:
         if inbound.addressed:
             self._attention.note_addressed_turn(inbound.conversation_key, user_id=inbound.user_id)
             return True
-        if not self._session_resolver.has_session(user_id=inbound.conversation_key):
+        if not self._session_resolver.has_conversation(
+            conversation_key=inbound.conversation_key,
+            principal=scope.principal,
+        ):
             return False
         if not self._bot_user_id:
             return False
@@ -154,6 +170,7 @@ class DiscordTurnDispatcher:
         self,
         inbound: DiscordInboundMessage,
         decision: DiscordInboundDecision,
+        scope: StorageScope,
     ) -> SessionCore | None:
         persist_policy_if_needed(decision)
 
@@ -175,6 +192,8 @@ class DiscordTurnDispatcher:
                 session = self._session_resolver.rotate(
                     user_id=inbound.conversation_key,
                     chat_id=inbound.channel_id,
+                    principal=scope.principal,
+                    actor=scope.actor,
                 )
                 self._post(inbound, _NEW_SESSION_REPLY)
                 if inbound.text.strip().lower() == "/new":
@@ -183,9 +202,11 @@ class DiscordTurnDispatcher:
             return self._session_resolver.resolve(
                 user_id=inbound.conversation_key,
                 chat_id=inbound.channel_id,
+                principal=scope.principal,
+                actor=scope.actor,
             )
 
-    def _run_turn(self, inbound: DiscordInboundMessage) -> None:
+    def _run_turn(self, inbound: DiscordInboundMessage, scope: StorageScope) -> None:
         with self._conversation_turn(inbound.conversation_key):
             decision = enforce_inbound_discord_message_security(
                 user_id=inbound.user_id,
@@ -195,17 +216,22 @@ class DiscordTurnDispatcher:
                 allow_open_guild=self._settings.allow_open_guild,
                 is_guild_message=inbound.is_guild_message,
             )
-            session = self._apply_inbound_decision(inbound, decision)
+            session = self._apply_inbound_decision(inbound, decision, scope)
             if session is None:
                 return
 
-            if consume_credits(reason="discord_turn") is CreditsOutcome.DENIED:
+            if consume_credits(scope.principal.id, reason="discord_turn") is CreditsOutcome.DENIED:
+                self._logger.info(
+                    "[discord-gateway] turn denied: out of credits channel=%s",
+                    inbound.channel_id,
+                )
                 self._post(inbound, _CREDITS_DENIED_MESSAGE)
                 return
 
             is_reply = not inbound.addressed
             self._logger.info(
-                "inbound platform=discord user=%s channel=%s thread=%s reply=%s session=%s chars=%d",
+                "inbound platform=discord user=%s channel=%s thread=%s reply=%s "
+                "session=%s chars=%d",
                 inbound.user_id,
                 inbound.channel_id,
                 inbound.thread_id,

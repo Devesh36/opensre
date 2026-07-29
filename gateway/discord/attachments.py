@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import urlparse
 
 import httpx
 
+from config.constants.discord import DISCORD_ATTACHMENT_HOST_SUFFIXES
 from core.llm.image_description import describe_image_via_provider, is_supported_image
 from gateway.attachments.inline import (
     _MAX_FILE_CHARS,
@@ -22,13 +24,31 @@ logger = logging.getLogger(__name__)
 _MAX_BYTES = 256 * 1024
 
 
-def _download(url: str, bot_token: str) -> bytes | None:
+def is_allowed_attachment_url(url: str) -> bool:
+    """Reject non-Discord hosts so the bot token never leaves Discord CDN."""
     try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    if parsed.scheme != "https":
+        return False
+    host = (parsed.hostname or "").lower()
+    return any(
+        host == suffix or host.endswith(f".{suffix}") for suffix in DISCORD_ATTACHMENT_HOST_SUFFIXES
+    )
+
+
+def _download(url: str, bot_token: str) -> bytes | None:
+    if not is_allowed_attachment_url(url):
+        logger.warning("[discord-gateway] attachment URL host rejected")
+        return None
+    try:
+        # No follow_redirects: a CDN redirect off Discord must not carry the bot token.
         with httpx.stream(
             "GET",
             url,
             headers={"Authorization": f"Bot {bot_token}"},
-            follow_redirects=True,
+            follow_redirects=False,
             timeout=10.0,
         ) as response:
             if response.status_code != httpx.codes.OK:
@@ -90,3 +110,6 @@ def build_discord_attachments_context(
             continue
         sections.append(f"- {label} ({item.content_type}) — not readable")
     return join_attachment_sections(sections)
+
+
+__all__ = ["build_discord_attachments_context", "is_allowed_attachment_url"]

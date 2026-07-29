@@ -1,22 +1,28 @@
-"""Discord button approval gate for write tools."""
+"""Discord button approval prompt for write tools.
+
+The transport-neutral half — broker, button identifiers, harness hooks — lives
+in :mod:`gateway.runtime.approvals`. This module renders the Discord side:
+message components on the prompt, and click routing back to the broker.
+"""
 
 from __future__ import annotations
 
-import json
 import logging
 from collections.abc import Mapping
 from typing import Any
 
 import discord
 
-from core.execution import BeforeToolCallResult, ToolExecutionHooks, ToolExecutionRequest
 from gateway.discord.client import edit_message, send_message_with_components
-from gateway.slack.approvals import APPROVE_ACTION_ID, DENY_ACTION_ID, ApprovalBroker
+from gateway.runtime.approvals import (
+    APPROVE_ACTION_ID,
+    DENY_ACTION_ID,
+    MAX_APPROVAL_WAIT_SECONDS,
+    ApprovalBroker,
+    arguments_preview,
+)
 
 logger = logging.getLogger("gateway")
-
-_MAX_APPROVAL_WAIT_SECONDS = 180.0
-_ARGS_PREVIEW_LIMIT = 400
 
 
 class DiscordApprovalPrompter:
@@ -42,7 +48,7 @@ class DiscordApprovalPrompter:
         expiry_seconds: float,
     ) -> tuple[bool, str]:
         approval_id = self._broker.create()
-        preview = _arguments_preview(arguments)
+        preview = arguments_preview(arguments)
         body = f"**Approval needed — `{tool_name}`**"
         if reason.strip():
             body += f"\n{reason.strip()}"
@@ -62,7 +68,7 @@ class DiscordApprovalPrompter:
                 self._channel_id,
             )
             return (False, "")
-        timeout = min(float(expiry_seconds), _MAX_APPROVAL_WAIT_SECONDS)
+        timeout = min(float(expiry_seconds), MAX_APPROVAL_WAIT_SECONDS)
         approved, decided_by = self._broker.wait(approval_id, timeout=timeout)
         outcome = _outcome_text(tool_name, approved=approved, decided_by=decided_by)
         edit_message(
@@ -74,39 +80,17 @@ class DiscordApprovalPrompter:
         return (approved, decided_by)
 
 
-def approval_tool_hooks(prompter: DiscordApprovalPrompter) -> ToolExecutionHooks:
-    def before_tool_call(request: ToolExecutionRequest) -> BeforeToolCallResult | None:
-        tool = request.tool
-        if not bool(getattr(tool, "requires_approval", False)):
-            return None
-        approved, decided_by = prompter.request(
-            tool_name=request.tool_call.name,
-            reason=str(getattr(tool, "approval_reason", "") or ""),
-            arguments=request.arguments,
-            expiry_seconds=float(getattr(tool, "approval_expiry_seconds", 300)),
-        )
-        if approved:
-            return BeforeToolCallResult(approved=True)
-        who = f"<@{decided_by}>" if decided_by else "nobody (request expired)"
-        return BeforeToolCallResult(
-            blocked=True,
-            reason=(
-                f"The user denied approval for {request.tool_call.name} "
-                f"(decision by {who}). Do not retry; tell the user what you "
-                "wanted to do and why."
-            ),
-        )
-
-    return ToolExecutionHooks(before_tool_call=before_tool_call)
-
-
 def handle_component_interaction(
     interaction: discord.Interaction,
     *,
     broker: ApprovalBroker,
     allowed_user_ids: list[str],
-    allow_open_guild: bool,
 ) -> bool:
+    """Resolve Approve/Deny clicks.
+
+    Write-tool approvals always require an explicit allowlist — open-guild chat
+    trust must not extend to approving side-effecting tools.
+    """
     data = interaction.data
     if not isinstance(data, dict):
         return False
@@ -120,10 +104,8 @@ def handle_component_interaction(
     else:
         return False
     user_id = str(interaction.user.id)
-    if allowed_user_ids and user_id not in allowed_user_ids:
+    if not allowed_user_ids or user_id not in allowed_user_ids:
         logger.info("[discord-gateway] approval click from unauthorized user=%s ignored", user_id)
-        return False
-    if not allowed_user_ids and not allow_open_guild:
         return False
     return broker.resolve(approval_id, approved=approved, decided_by=user_id)
 
@@ -150,18 +132,6 @@ def _approval_components(approval_id: str) -> list[dict[str, Any]]:
     ]
 
 
-def _arguments_preview(arguments: Mapping[str, Any]) -> str:
-    if not arguments:
-        return ""
-    try:
-        preview = json.dumps(dict(arguments), ensure_ascii=False, default=str)
-    except Exception:
-        preview = str(dict(arguments))
-    if len(preview) > _ARGS_PREVIEW_LIMIT:
-        preview = preview[: _ARGS_PREVIEW_LIMIT - 1] + "…"
-    return preview
-
-
 def _outcome_text(tool_name: str, *, approved: bool, decided_by: str) -> str:
     if approved:
         return f"✅ `{tool_name}` approved by <@{decided_by}>"
@@ -172,6 +142,5 @@ def _outcome_text(tool_name: str, *, approved: bool, decided_by: str) -> str:
 
 __all__ = [
     "DiscordApprovalPrompter",
-    "approval_tool_hooks",
     "handle_component_interaction",
 ]

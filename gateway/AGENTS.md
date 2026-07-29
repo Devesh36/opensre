@@ -31,12 +31,19 @@ changes.
   `HeadlessAgent` per turn and calls `agent.dispatch(text)`.
   `runtime/sink_protocol.py` holds `GatewaySink` + `GatewayAgentCallback`;
   `runtime/errors.py` holds `GatewayConfigurationError`.
+  `runtime/approvals.py` holds the transport-neutral write-tool approval gate
+  (`ApprovalBroker`, the button ids, `approval_tool_hooks`); each transport
+  supplies its own `ApprovalPrompter` for rendering. `runtime/attention.py`
+  holds the thread attention gate for un-tagged replies.
 - `http/` — everything served over HTTP: `http/webapp.py` (FastAPI app),
   `http/web_server.py`, the `/api/investigations` routes, and the
   investigation store / worker / artifacts.
 - `telegram/`, `slack/`, and `discord/` — one package per transport, each owning settings,
   the inbound worker, inbound security, the output sink, and `wiring.py`
   (e.g. `telegram/wiring.py` wires the handler into the polling worker).
+  Transport packages are peers: none imports another. Anything two of them
+  need belongs in `runtime/`. Pinned by
+  `tests/discord/test_transport_borders.py`.
 - `storage/session/resolver.py` — per-conversation session binding keyed by
   platform; delegates create / resolve / rotate to `SessionManager`.
 
