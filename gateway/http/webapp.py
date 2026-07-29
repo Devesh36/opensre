@@ -34,11 +34,25 @@ from core.domain.alerts.inbox import (
 ensure_project_platform_package()
 
 from gateway.http.investigations import router as investigations_router  # noqa: E402
+from gateway.runtime.readiness import is_gateway_ready  # noqa: E402
+from integrations.harness_adapters import (  # noqa: E402
+    register_harness_adapters as _register_integration_adapters,
+)
 from platform.observability.errors.sentry import capture_exception, init_sentry  # noqa: E402
+from tools.harness_adapters import (  # noqa: E402
+    register_harness_adapters as _register_tool_adapters,
+)
 from tools.investigation.capability import (  # noqa: E402
     resolve_investigation_context,
     run_investigation_payload,
 )
+
+# Mirror shell/gateway boot: /investigate runs the full pipeline, which reads the
+# vendor registries (alert-source routing, incident anchors, taxonomy, alert
+# detail fields). Without this they stay empty and degrade silently. Registering
+# here rather than via surfaces.boundary keeps gateway off a surfaces import.
+_register_integration_adapters()
+_register_tool_adapters()
 
 init_sentry(entrypoint="webapp")
 
@@ -91,6 +105,14 @@ def health(response: Response) -> HealthResponse:
 @app.get("/healthz")
 def healthz() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/readyz")
+def readyz() -> JSONResponse:
+    """Report mandatory startup readiness separately from process liveness."""
+    if is_gateway_ready():
+        return JSONResponse({"status": "ready"}, status_code=200)
+    return JSONResponse({"status": "not_ready"}, status_code=503)
 
 
 def _alert_inbox() -> AlertInbox:

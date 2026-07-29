@@ -104,6 +104,8 @@
               "masking",
               "interactive-shell-privacy",
               "sessions",
+              "principal-scoped-storage",
+              "memory",
               "fleet",
               "cron",
               "closed-loop-learning",
@@ -153,6 +155,8 @@
             "pages": [
               "argocd",
               "aws",
+              "aws_lambda",
+              "s3",
               "kubernetes",
               "cloudtrail_events",
               "bitbucket",
@@ -168,6 +172,7 @@
               "integrations/trello",
               "pi-coding",
               "fix-sentry-issue",
+              "railway",
               "vercel"
             ]
           },
@@ -193,6 +198,7 @@
               "azure-sql",
               "clickhouse",
               "dagster",
+              "elasticsearch",
               "kafka",
               "mariadb",
               "mongodb",
