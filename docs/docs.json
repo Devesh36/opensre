@@ -67,12 +67,6 @@
             ]
           },
           {
-            "group": "Enterprise",
-            "pages": [
-              "install-enterprise"
-            ]
-          },
-          {
             "group": "Environment guides",
             "pages": [
               "environments/macos",

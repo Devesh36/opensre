@@ -696,18 +696,50 @@ summary {
     font-family: "Britti Sans Trial", sans-serif !important;
 }
 
-/* Transparent table borders */
-table,
+/* Reference tables: light row rules so columns stay scannable */
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
 table th,
-table td,
-table tr,
-table thead,
-table tbody,
-thead th,
-thead td {
+table td {
     border-color: transparent !important;
     border-top: none !important;
+    border-left: none !important;
+    border-right: none !important;
+    vertical-align: top;
+}
+
+table thead th {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+html.dark table thead th {
+    border-bottom-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+table tbody tr {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+}
+
+html.dark table tbody tr {
+    border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+table tbody tr:last-child {
     border-bottom: none !important;
+}
+
+/* Keep env-var / default chips from mid-word wrapping */
+table td:first-child code,
+table td:nth-child(2) code {
+    white-space: nowrap;
+    word-break: keep-all;
+}
+
+table td code {
+    font-size: 0.8125rem;
 }
 
 /* Larger bold text in features table only */
