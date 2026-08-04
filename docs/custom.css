@@ -413,26 +413,11 @@ html.dark span:not(code span):not(pre span) {
     color: #d4d4d4 !important;
 }
 
-/* Dark mode sidebar text */
-html.dark #sidebar *:not(svg):not(path):not(img):not(code):not(pre),
-html.dark #sidebar-content *:not(svg):not(path):not(img):not(code):not(pre),
-html.dark #navigation-items *:not(svg):not(path):not(img):not(code):not(pre) {
-    color: #d4d4d4 !important;
-}
-
-/* Dark mode sidebar group headers: white like headings */
-html.dark #sidebar .sidebar-group-header,
-html.dark #sidebar .sidebar-group-header h5,
-html.dark #navigation-items .sidebar-group-header,
-html.dark #navigation-items .sidebar-group-header h5 {
-    color: #ffffff !important;
-}
-
-/* Dark mode sidebar child links: neutral-500 */
-html.dark #sidebar a:not([href*="sign-up"]),
+/* Dark mode sidebar base color — group/link specifics live in sidebar.css */
 html.dark #sidebar button,
 html.dark #sidebar li,
-html.dark #navigation-items a:not([href*="sign-up"]),
+html.dark #sidebar-content button,
+html.dark #sidebar-content li,
 html.dark #navigation-items button,
 html.dark #navigation-items li {
     color: #a3a3a3 !important;
@@ -731,49 +716,11 @@ thead td {
     font-size: 1.1rem !important;
 }
 
-/* Sidebar/nav: consistent Britti Sans 14.5px for ALL text elements.
-   Uses #sidebar ID for maximum specificity to override Mintlify's
-   Tailwind classes (text-sm, font-medium, etc.) on nested group
-   buttons (e.g. "Getting started ›" under Monitoring). */
+/* Sidebar font family only — size/weight/color for groups vs links in sidebar.css */
 #sidebar *:not(svg):not(path):not(img):not(code):not(pre),
 #sidebar-content *:not(svg):not(path):not(img):not(code):not(pre),
 #navigation-items *:not(svg):not(path):not(img):not(code):not(pre) {
     font-family: "Britti Sans Trial", sans-serif !important;
-    font-size: 14.5px !important;
-    font-weight: 400 !important;
-    letter-spacing: normal !important;
-    line-height: 1.5 !important;
-}
-
-/* Sidebar group headers: override Mintlify's font-medium (500) */
-#sidebar .sidebar-group-header,
-#sidebar [class*="sidebar-group"],
-#sidebar h5,
-#sidebar button,
-#sidebar a {
-    font-family: "Britti Sans Trial", sans-serif !important;
-    font-size: 14.5px !important;
-    font-weight: 400 !important;
-    letter-spacing: normal !important;
-    line-height: 1.5 !important;
-}
-
-/* Sidebar top-level group titles: dark black like headings */
-#sidebar .sidebar-group-header,
-#sidebar .sidebar-group-header h5,
-#navigation-items .sidebar-group-header,
-#navigation-items .sidebar-group-header h5 {
-    color: #171717 !important;
-}
-
-/* Sidebar child links: grey like body copy meta */
-#sidebar a:not([href*="sign-up"]),
-#sidebar button,
-#sidebar li,
-#navigation-items a:not([href*="sign-up"]),
-#navigation-items button,
-#navigation-items li {
-    color: #737373 !important;
 }
 
 body {
@@ -1641,4 +1588,106 @@ aside ul > li,
     padding-left: 0 !important;
     position: static !important;
     list-style: none !important;
+}
+
+/* ========================================
+   Sidebar hierarchy (must load last)
+   Group labels: small uppercase muted
+   Page links: quieter body text
+   ======================================== */
+#sidebar .sidebar-group {
+    margin-bottom: 0.75rem !important;
+}
+
+#sidebar .sidebar-group-header,
+#sidebar .sidebar-group-header .sidebar-title,
+#sidebar .sidebar-group-header h5,
+#navigation-items .sidebar-group-header,
+#navigation-items .sidebar-group-header .sidebar-title,
+#navigation-items .sidebar-group-header h5 {
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.08em !important;
+    text-transform: uppercase !important;
+    line-height: 1.4 !important;
+    color: #737373 !important;
+}
+
+html:not(.dark) #sidebar .sidebar-group-header,
+html:not(.dark) #sidebar .sidebar-group-header .sidebar-title,
+html:not(.dark) #sidebar .sidebar-group-header h5,
+html:not(.dark) #navigation-items .sidebar-group-header,
+html:not(.dark) #navigation-items .sidebar-group-header .sidebar-title,
+html:not(.dark) #navigation-items .sidebar-group-header h5 {
+    color: #a3a3a3 !important;
+}
+
+#sidebar .sidebar-group a,
+#navigation-items .sidebar-group a {
+    font-size: 14px !important;
+    font-weight: 400 !important;
+    letter-spacing: normal !important;
+    text-transform: none !important;
+}
+
+html.dark #sidebar .sidebar-group a:not([aria-current="page"]):not([data-active="true"]),
+html.dark #navigation-items .sidebar-group a:not([aria-current="page"]):not([data-active="true"]) {
+    color: #a3a3a3 !important;
+}
+
+html:not(.dark) #sidebar .sidebar-group a:not([aria-current="page"]):not([data-active="true"]),
+html:not(.dark) #navigation-items .sidebar-group a:not([aria-current="page"]):not([data-active="true"]) {
+    color: #525252 !important;
+}
+
+/* Nested collapsible groups (Integrations dropdowns): spacing + chevron on right */
+#sidebar li[data-title] > button[aria-expanded],
+#navigation-items li[data-title] > button[aria-expanded] {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+    gap: 0.75rem !important;
+    margin: 0.35rem 0 !important;
+    padding-top: 0.55rem !important;
+    padding-bottom: 0.55rem !important;
+    padding-right: 0.75rem !important;
+}
+
+#sidebar li[data-title] + li[data-title],
+#navigation-items li[data-title] + li[data-title] {
+    margin-top: 0.35rem !important;
+}
+
+#sidebar li[data-title] > button[aria-expanded] > div:first-child,
+#navigation-items li[data-title] > button[aria-expanded] > div:first-child {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    text-align: left !important;
+}
+
+#sidebar li[data-title] > button[aria-expanded] > div:last-child,
+#navigation-items li[data-title] > button[aria-expanded] > div:last-child {
+    margin-left: auto !important;
+    order: 2 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    flex: 0 0 auto !important;
+}
+
+#sidebar li[data-title] > button[aria-expanded] > div:last-child svg,
+#navigation-items li[data-title] > button[aria-expanded] > div:last-child svg {
+    margin-right: 0 !important;
+    width: 0.65rem !important;
+    height: 1lh !important;
+}
+
+/* Space between nested pages under an open dropdown */
+#sidebar li[data-title] > ul,
+#sidebar li[data-title] > div,
+#navigation-items li[data-title] > ul,
+#navigation-items li[data-title] > div {
+    margin-top: 0.25rem !important;
+    margin-bottom: 0.5rem !important;
 }
