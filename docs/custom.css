@@ -742,6 +742,31 @@ table td code {
     font-size: 0.8125rem;
 }
 
+/* LLM providers quick-ref: scroll wide tables; allow multi-line cells */
+.llm-provider-ref {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0.25rem 0 1.25rem;
+}
+
+.llm-provider-ref table {
+    min-width: 36rem;
+}
+
+.llm-provider-ref table td:first-child {
+    white-space: nowrap;
+}
+
+.llm-provider-ref table td:nth-child(2) code,
+.llm-provider-ref table td:nth-child(3) {
+    white-space: normal;
+    word-break: break-word;
+}
+
+.llm-provider-ref table td:nth-child(3) code {
+    white-space: nowrap;
+}
+
 /* Command / env reference tables: tighter rows, clearer first column */
 table td:first-child {
     width: 1%;
