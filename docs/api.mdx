@@ -4,9 +4,11 @@ slug: "api"
 description: "Health checks, alert intake, and investigations over HTTP."
 ---
 
-OpenSRE exposes a single FastAPI application (`gateway/http/webapp.py`) on one
-port (default `8000`). Use these endpoints to invoke OpenSRE over the network.
-For in-process use from Python, see the [Python API](/python-api).
+The OpenSRE backend serves one HTTP API (FastAPI, `gateway/web/webapp.py`). All
+routes live on a single port (default `8000`). To drive the agent in-process
+from your own code instead, see the [Python API](/python-api). In production, always call the
+API over HTTPS — deploy behind a TLS-terminating load balancer (the backend is
+Terraform-managed, separately from this repo).
 
 In production, terminate TLS at a load balancer or reverse proxy in front of
 the application.
