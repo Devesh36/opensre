@@ -634,6 +634,27 @@ Shows up to **50** recent tasks, newest first. Use the **id** column (short pref
 
 </Accordion>
 
+<Accordion title="/work">
+
+```text
+/work
+/work add &lt;title&gt;
+/work done &lt;id-or-title&gt;
+/work next
+/work path
+```
+
+Human todos, reminders, and follow-ups — separate from `/tasks` (runtime jobs). See [Work Management](/work-management).
+
+You can also ask naturally:
+
+```text
+Add task "finish Slack reminder smoke test" for the hackathon, priority high.
+What should I focus on next?
+```
+
+</Accordion>
+
 <Accordion title="/cancel">
 
 ```text
@@ -884,6 +905,33 @@ Read/write `~/.opensre/config.yml`. Prefer env vars for secrets; use config for 
 ```
 
 Scheduled investigation or report delivery. See [Cron](/cron).
+
+</Accordion>
+
+<Accordion title="/loops">
+
+```text
+/loops
+/loops active
+/loops all
+/loops add --name "Morning ops" --time 08:30 --prompt "Check open incidents and summarize production risk" --run-now
+/loops run &lt;loop_id&gt;
+/loops stop &lt;loop_id&gt;
+/loops start &lt;loop_id&gt;
+/loops delete &lt;loop_id&gt;
+/loops next &lt;loop_id&gt;
+/loops messages
+```
+
+List recurring loops from the scheduler store, create manual prompt loops, run a loop once immediately, stop or restart a loop, delete a loop, and debug the next fire time. Onboarding creates draft examples such as a weekday morning report; active loops run through the cron scheduler when the gateway or `opensre cron start` is running.
+
+You can also ask naturally:
+
+```text
+Set up a manual loop called Morning ops at 08:30 UTC to check open incidents and summarize production risk, and run it once now.
+```
+
+By default, new loops send to every configured default handle OpenSRE can reach: Telegram, Slack, and the local interactive-shell inbox.
 
 </Accordion>
 

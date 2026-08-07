@@ -128,6 +128,7 @@
                   "sessions",
                   "principal-scoped-storage",
                   "memory",
+                  "work-management",
                   "fleet",
                   "cron",
                   "closed-loop-learning"
@@ -195,6 +196,8 @@
                   "architecture-audit-tool",
                   "bitbucket",
                   "github",
+                  "github-ci-fix",
+                  "github-security-fix",
                   "github-workflow-tools",
                   "integrations/github-actions",
                   "gitlab",
@@ -217,6 +220,7 @@
                 "pages": [
                   "messaging/index",
                   "smtp",
+                  "messaging/buzz",
                   "messaging/slack",
                   "messaging/discord",
                   "messaging/telegram",
