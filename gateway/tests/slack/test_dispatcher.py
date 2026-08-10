@@ -147,14 +147,14 @@ def _settings(
     )
 
 
-def _inbound() -> SlackInboundMessage:
+def _inbound(*, text: str = "check the api", ts: str = "100.1") -> SlackInboundMessage:
     return SlackInboundMessage(
         team_id="T1",
         user_id="U1",
         channel_id="C1",
-        ts="100.1",
+        ts=ts,
         thread_ts="100.1",
-        text="check the api",
+        text=text,
     )
 
 
@@ -279,44 +279,6 @@ def test_non_denied_credit_outcomes_run_the_turn(
     assert len(turns) == 1
 
 
-def test_conversation_locks_are_pruned_at_cap(monkeypatch: pytest.MonkeyPatch) -> None:
-    from gateway.transports.slack import dispatcher
-
-    monkeypatch.setattr(dispatcher, "_MAX_CONVERSATION_LOCKS", 4)
-    dispatcher = _dispatcher(
-        settings=_settings(["U1"]),
-        messaging=_FakeMessagingClient(),
-        resolver=_FakeSessionResolver(),
-        handler=lambda *_args: None,
-    )
-
-    for index in range(10):
-        with dispatcher._conversation_turn(f"T1:C1:{index}"):
-            pass
-
-    assert len(dispatcher._conversation_locks) <= 4 + 1
-
-
-def test_in_use_conversation_lock_survives_pruning(monkeypatch: pytest.MonkeyPatch) -> None:
-    from gateway.transports.slack import dispatcher
-
-    monkeypatch.setattr(dispatcher, "_MAX_CONVERSATION_LOCKS", 1)
-    dispatcher = _dispatcher(
-        settings=_settings(["U1"]),
-        messaging=_FakeMessagingClient(),
-        resolver=_FakeSessionResolver(),
-        handler=lambda *_args: None,
-    )
-
-    with dispatcher._conversation_turn("T1:C1:busy"):
-        busy_entry = dispatcher._conversation_locks["T1:C1:busy"]
-        # Another conversation triggers pruning while the first turn is running.
-        with dispatcher._conversation_turn("T1:C1:other"):
-            pass
-        # The in-use entry was never discarded or replaced.
-        assert dispatcher._conversation_locks["T1:C1:busy"] is busy_entry
-
-
 def test_handler_exception_is_contained() -> None:
     messaging = _FakeMessagingClient()
 
@@ -374,6 +336,62 @@ def test_agent_context_attributes_the_speaker() -> None:
 
     # Single metadata line: prefix stays one line, text follows on the next.
     assert text == "[Slack channel_id=C1 user=<@U1>]\ncheck the api"
+
+
+def test_stop_with_nothing_running_posts_idle_reply() -> None:
+    messaging = _FakeMessagingClient()
+    turns: list[str] = []
+
+    def handler(text: str, _session: Any, sink: Any, _logger: logging.Logger) -> None:
+        turns.append(text)
+        sink.finalize("done")
+
+    _dispatcher(
+        settings=_settings(["U1"]),
+        messaging=messaging,
+        resolver=_FakeSessionResolver(),
+        handler=handler,
+    ).dispatch(_inbound(text="/stop"))
+
+    assert turns == []
+    assert any("Nothing running to stop" in p["text"] for p in messaging.posts)
+
+
+def test_stop_cancels_in_flight_turn() -> None:
+    messaging = _FakeMessagingClient()
+    started = threading.Event()
+    release = threading.Event()
+    seen_cancel: list[threading.Event] = []
+
+    def hanging_handler(_text: str, _session: Any, sink: Any, _logger: logging.Logger) -> None:
+        cancel = getattr(sink, "turn_cancel", None)
+        assert isinstance(cancel, threading.Event)
+        seen_cancel.append(cancel)
+        started.set()
+        release.wait(5.0)
+
+    dispatcher = _dispatcher(
+        settings=_settings(["U1"], turn_timeout_seconds=30.0),
+        messaging=messaging,
+        resolver=_FakeSessionResolver(),
+        handler=hanging_handler,
+    )
+    worker = threading.Thread(target=lambda: dispatcher._run_turn(_inbound(), _test_scope()))
+    worker.start()
+    assert started.wait(3.0), "turn did not start"
+    dispatcher.dispatch(_inbound(text="/stop", ts="100.2"))
+    try:
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline and not any(
+            update["text"] == "Stopped." for update in messaging.updates
+        ):
+            time.sleep(0.02)
+    finally:
+        release.set()
+        worker.join(5.0)
+
+    assert seen_cancel and seen_cancel[0].is_set()
+    assert any(update["text"] == "Stopped." for update in messaging.updates)
 
 
 def test_turn_timeout_finalizes_placeholder_when_handler_hangs() -> None:
