@@ -23,6 +23,7 @@ on:
       - ".importlinter.strict"
       - ".github/ci/**"
       - ".github/workflows/ci.yml"
+      - ".github/workflows/release.yml"
 
   # No path filter: a filtered workflow never starts, so its gate never
   # reports and a PR that needs it can wait forever. The `changes` job
@@ -75,6 +76,7 @@ jobs:
               - ".importlinter.strict"
               - ".github/ci/**"
               - ".github/workflows/ci.yml"
+              - ".github/workflows/release.yml"
 
   quality:
     needs: [changes]
