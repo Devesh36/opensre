@@ -320,6 +320,7 @@ from config.constants.signoz import SIGNOZ_API_KEY_ENV, SIGNOZ_URL_ENV
 from config.constants.slack import (
     SLACK_APP_TOKEN_ENV,
     SLACK_BOT_TOKEN_ENV,
+    SLACK_DEFAULT_CHAT_ID_ENV,
     SLACK_FILE_HOST_SUFFIXES,
 )
 from config.constants.slash_commands import (
@@ -627,6 +628,7 @@ __all__ = [
     "SIGNOZ_URL_ENV",
     "SLACK_APP_TOKEN_ENV",
     "SLACK_BOT_TOKEN_ENV",
+    "SLACK_DEFAULT_CHAT_ID_ENV",
     "SLACK_FILE_HOST_SUFFIXES",
     "SLACK_LINK_RE",
     "SMTP_DEFAULT_TO_ENV",

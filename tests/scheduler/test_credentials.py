@@ -5,11 +5,14 @@ from __future__ import annotations
 import pytest
 
 from platform.scheduler.credentials import (
+    requires_explicit_chat_id,
     resolve_discord_credentials,
     resolve_rocketchat_credentials,
     resolve_slack_credentials,
+    resolve_slack_default_chat_id,
     resolve_telegram_credentials,
 )
+from platform.scheduler.loop_constants import LOOP_SLACK_CHAT_ID_PARAM
 
 _ROCKETCHAT_ENV_VARS = (
     "ROCKETCHAT_SERVER_URL",
@@ -171,6 +174,66 @@ class TestSlackCredentials:
         )
         creds = resolve_slack_credentials({})
         assert creds == {"access_token": "xoxb-from-env"}
+
+
+class TestSlackDefaultChatId:
+    def test_from_params_chat_id(self) -> None:
+        assert resolve_slack_default_chat_id({"chat_id": "C111"}) == "C111"
+
+    def test_from_loop_param(self) -> None:
+        assert resolve_slack_default_chat_id({LOOP_SLACK_CHAT_ID_PARAM: "C222"}) == "C222"
+
+    def test_from_integration_store(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "platform.scheduler.credentials._get_integration_credential",
+            lambda service, key: "C333" if service == "slack" and key == "default_chat_id" else "",
+        )
+        monkeypatch.delenv("SLACK_DEFAULT_CHAT_ID", raising=False)
+        assert resolve_slack_default_chat_id({}) == "C333"
+
+    def test_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "platform.scheduler.credentials._get_integration_credential",
+            lambda *_: "",
+        )
+        monkeypatch.setenv("SLACK_DEFAULT_CHAT_ID", "C444")
+        assert resolve_slack_default_chat_id({}) == "C444"
+
+    def test_empty_when_nothing_configured(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "platform.scheduler.credentials._get_integration_credential",
+            lambda *_: "",
+        )
+        monkeypatch.delenv("SLACK_DEFAULT_CHAT_ID", raising=False)
+        assert resolve_slack_default_chat_id({}) == ""
+
+
+class TestRequiresExplicitChatId:
+    def test_slack_allows_default_channel_without_webhook(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "platform.scheduler.credentials.resolve_slack_credentials",
+            lambda _params: {"access_token": "xoxb-test"},
+        )
+        monkeypatch.setattr(
+            "platform.scheduler.credentials.resolve_slack_default_chat_id",
+            lambda _params: "C0123ABCD",
+        )
+        assert requires_explicit_chat_id("slack") is False
+
+    def test_slack_requires_destination_without_webhook_or_default(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "platform.scheduler.credentials.resolve_slack_credentials",
+            lambda _params: {"access_token": "xoxb-test"},
+        )
+        monkeypatch.setattr(
+            "platform.scheduler.credentials.resolve_slack_default_chat_id",
+            lambda _params: "",
+        )
+        assert requires_explicit_chat_id("slack") is True
 
 
 class TestDiscordCredentials:

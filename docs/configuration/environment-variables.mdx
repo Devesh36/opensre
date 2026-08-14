@@ -299,6 +299,7 @@ not a Mintlify docs-site page).
 |----------|---------|-------------|--------|
 | `SLACK_WEBHOOK_URL` | | Slack incoming webhook URL | `interactive_shell/ui/output`, `integrations/slack/delivery.py` |
 | `SLACK_BOT_TOKEN` | | Slack bot token | `scheduler/credentials`, `.env.example` |
+| `SLACK_DEFAULT_CHAT_ID` | | Default Slack channel for scheduled delivery (bot-token path) | `platform/scheduler/credentials`, `integrations/slack/setup` |
 | `SLACK_ACCESS_TOKEN` | | Slack user token | `scheduler/credentials` |
 | `SLACK_GATEWAY_INBOUND_TRANSPORT` | `socket_mode` | How Slack delivers events: `socket_mode` or `events_api_http` | `transports/slack/settings` |
 | `SLACK_APP_TOKEN` | | App-level token (`xapp-…`). Required for `socket_mode` | `transports/slack/settings` |

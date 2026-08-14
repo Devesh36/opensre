@@ -781,12 +781,14 @@ def test_run_wizard_configures_slack_persists_webhook(monkeypatch, tmp_path) -> 
                     "webhook_url": "https://hooks.slack.com/services/T0/B0/XXXXX",
                     "bot_token": None,
                     "app_token": None,
+                    "default_chat_id": None,
                 }
             },
         )
     ]
     # Webhook is store-only; blank Socket Mode tokens still clear keyring slots.
-    assert synced_env_values == [{}]
+    # Unchosen default_chat_id is a non-secret env field, so it is cleared in .env.
+    assert synced_env_values == [{"SLACK_DEFAULT_CHAT_ID": ""}]
     assert synced_env_secrets == [("SLACK_BOT_TOKEN", ""), ("SLACK_APP_TOKEN", "")]
 
 

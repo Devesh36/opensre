@@ -145,8 +145,19 @@ channels it should read or post in.
 
 ## Production Engineer schedules (Slack)
 
-Wire morning digests and PR sweeps to a Slack channel (`C…` id from channel
-details). The gateway daemon must be running so the scheduler can deliver.
+Wire morning digests, PR sweeps, and `/loops` prompt loops to Slack. The gateway
+daemon (or `opensre cron start`) must be running so the scheduler can deliver
+when a tick finishes — the report arrives proactively; you do not need to ask
+in chat.
+
+**Destination options:**
+
+| Setup | How to target Slack |
+|-------|---------------------|
+| Incoming webhook | Omit `--chat-id` — the webhook URL is bound to one channel |
+| Bot token (Socket Mode) | Set `SLACK_DEFAULT_CHAT_ID` (or pass `--chat-id` / `/loops add --slack-chat-id`) |
+
+Copy the channel id (`C…`) from Slack channel details. During `opensre integrations setup slack` (Socket Mode or Both), you can persist a default channel id for scheduled delivery.
 
 **Sentry morning digest** (unresolved issues → Slack):
 
@@ -162,8 +173,14 @@ opensre sentry digest schedule run <task_id>   # dogfood once
 **Daily ops summary** (investigation pipeline → Slack):
 
 ```bash
+# Webhook: omit --chat-id
 opensre cron add --kind daily_summary --cron "0 9 * * 1-5" \
-  --tz Europe/London --provider slack --chat-id C0123ABCD
+  --tz Europe/London --provider slack
+
+# Bot token: default channel or explicit --chat-id
+export SLACK_DEFAULT_CHAT_ID=C0123ABCD
+opensre cron add --kind daily_summary --cron "0 9 * * 1-5" \
+  --tz Europe/London --provider slack
 opensre cron run <task_id>
 ```
 
