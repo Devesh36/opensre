@@ -61,6 +61,7 @@ def _sanitized_install_env(home: Path, *, extra_path: str = "") -> dict[str, str
     env["HOME"] = str(home)
     env["OPENSRE_AUTO_LAUNCH"] = "0"
     env["OPENSRE_SKIP_GH_INSTALL"] = "1"
+    env["OPENSRE_SKIP_BUZZ_INSTALL"] = "1"
     env["OPENSRE_INSTALL_VERBOSE"] = "1"
     env["TERM"] = "dumb"
     path_parts = [

@@ -48,6 +48,14 @@ The curl installer also soft-installs the [GitHub CLI](https://cli.github.com/) 
 curl -fsSL https://install.opensre.com | OPENSRE_SKIP_GH_INSTALL=1 bash
 ```
 
+The same installers also soft-install the Buzz CLI (`buzz`) when `cargo` and `git` are already on `PATH` — a shallow clone of [block/buzz](https://github.com/block/buzz) plus `cargo install --path crates/buzz-cli`. This step is optional and the compile can take a few minutes. Skip it with:
+
+```bash
+curl -fsSL https://install.opensre.com | OPENSRE_SKIP_BUZZ_INSTALL=1 bash
+```
+
+On Windows, set `$env:OPENSRE_SKIP_BUZZ_INSTALL=1` before running `install.ps1` (or pipe `irm https://install.opensre.com | iex` with that env var set in the session).
+
 Homebrew installs pull `gh` automatically via `depends_on "gh"` in the OpenSRE formula.
 
 ### 2) Enter the OpenSRE shell

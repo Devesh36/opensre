@@ -215,6 +215,7 @@ def _run_install_sh(
     env["PATH"] = f"{shim_bin}{os.pathsep}{env.get('PATH', '')}"
     env["OPENSRE_AUTO_LAUNCH"] = "0"
     env["OPENSRE_SKIP_GH_INSTALL"] = "1"
+    env["OPENSRE_SKIP_BUZZ_INSTALL"] = "1"
     env["OPENSRE_INSTALL_VERBOSE"] = "1"
     env["TERM"] = "dumb"
     if env_extra:
@@ -272,6 +273,7 @@ def _run_install_sh(
                 "curl -fsSL https://install.opensre.com | bash",
                 "OPENSRE_AUTO_LAUNCH=0",
                 "OPENSRE_SKIP_GH_INSTALL=1",
+                "OPENSRE_SKIP_BUZZ_INSTALL=1",
                 'depends_on "gh"',
             ),
         ),
@@ -317,6 +319,7 @@ def test_install_sh_source_exposes_env_knobs() -> None:
     for needle in (
         "OPENSRE_AUTO_LAUNCH",
         "OPENSRE_SKIP_GH_INSTALL",
+        "OPENSRE_SKIP_BUZZ_INSTALL",
         "OPENSRE_INSTALL_CHANNEL",
         "OPENSRE_INSTALL_DIR",
         "OPENSRE_VERSION",
@@ -326,6 +329,7 @@ def test_install_sh_source_exposes_env_knobs() -> None:
         'INSTALL_CHANNEL="${OPENSRE_INSTALL_CHANNEL:-main}"',
         "launch_onboarding_after_install",
         "ensure_github_cli",
+        "ensure_buzz_cli",
     ):
         assert needle in source, f"install.sh missing {needle!r}"
 
@@ -339,6 +343,7 @@ def test_install_ps1_source_exposes_all_windows_install_knobs() -> None:
         "OPENSRE_INSTALL_CHANNEL",
         "OPENSRE_AUTO_LAUNCH",
         "OPENSRE_SKIP_GH_INSTALL",
+        "OPENSRE_SKIP_BUZZ_INSTALL",
         "OPENSRE_VERSION",
         "OPENSRE_MAIN_RELEASE_TAG",
         "OPENSRE_INSTALL_VERBOSE",
@@ -444,13 +449,18 @@ def test_install_sh_skip_gh_and_no_auto_launch_env(tmp_path: Path) -> None:
         env_extra={
             "OPENSRE_AUTO_LAUNCH": "0",
             "OPENSRE_SKIP_GH_INSTALL": "1",
+            "OPENSRE_SKIP_BUZZ_INSTALL": "1",
         },
     )
     combined = result.stdout + result.stderr
     assert result.returncode == 0, combined
     assert "Launching" not in combined
-    # With gh missing and SKIP set, installer warns rather than failing.
-    assert "OPENSRE_SKIP_GH_INSTALL" in combined or (tmp_path / "opt" / "bin" / "opensre").is_file()
+    # With gh/buzz missing and SKIP set, installer warns rather than failing.
+    assert (
+        "OPENSRE_SKIP_GH_INSTALL" in combined
+        or "OPENSRE_SKIP_BUZZ_INSTALL" in combined
+        or (tmp_path / "opt" / "bin" / "opensre").is_file()
+    )
 
 
 @pytest.mark.skipif(shutil.which("brew") is None, reason="Homebrew not installed on this host")

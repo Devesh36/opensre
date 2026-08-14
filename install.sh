@@ -547,6 +547,68 @@ ensure_github_cli() {
   warn "Install from https://cli.github.com/ for OpenSRE GitHub chat tools."
 }
 
+skip_buzz_cli_install() {
+  case "${OPENSRE_SKIP_BUZZ_INSTALL:-}" in
+    1|true|TRUE|yes|YES|on|ON)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+buzz_cli_manual_install_hint() {
+  warn "Install the Buzz CLI manually from https://github.com/block/buzz:"
+  warn "  git clone https://github.com/block/buzz.git && cd buzz"
+  warn "  cargo install --path crates/buzz-cli"
+}
+
+ensure_buzz_cli() {
+  # Soft dependency for Buzz integration. Never fails the OpenSRE install.
+  if command -v buzz >/dev/null 2>&1; then
+    if install_verbose; then
+      log "Buzz CLI (buzz) already on PATH: $(command -v buzz)"
+    fi
+    return 0
+  fi
+
+  if skip_buzz_cli_install; then
+    warn "Buzz CLI (buzz) is not on PATH; skipped install because OPENSRE_SKIP_BUZZ_INSTALL is set."
+    buzz_cli_manual_install_hint
+    return 0
+  fi
+
+  if ! command -v cargo >/dev/null 2>&1 || ! command -v git >/dev/null 2>&1; then
+    warn "Buzz CLI (buzz) is not on PATH and cargo/git were not found for auto-install."
+    buzz_cli_manual_install_hint
+    return 0
+  fi
+
+  step "Installing Buzz CLI (buzz) for OpenSRE Buzz integration (optional; cargo build may take a few minutes)"
+
+  local buzz_clone_dir=""
+  buzz_clone_dir="$(mktemp -d "${TMPDIR:-/tmp}/opensre-buzz-clone.XXXXXX")"
+
+  if git clone --depth 1 https://github.com/block/buzz.git "$buzz_clone_dir"; then
+    if cargo install --path "${buzz_clone_dir}/crates/buzz-cli"; then
+      success "Installed Buzz CLI (buzz) via cargo"
+      if ! command -v buzz >/dev/null 2>&1; then
+        warn "buzz was installed but is not on PATH yet."
+        warn "Add \$HOME/.cargo/bin to your PATH, or set BUZZ_PATH to the binary location."
+      fi
+    else
+      warn "cargo install of buzz-cli failed."
+      buzz_cli_manual_install_hint
+    fi
+  else
+    warn "Failed to clone https://github.com/block/buzz for buzz-cli install."
+    buzz_cli_manual_install_hint
+  fi
+
+  rm -rf "$buzz_clone_dir"
+}
+
 require_prerequisites() {
   need_cmd curl
   need_cmd grep
@@ -1466,6 +1528,7 @@ finish_install() {
   print_install_confirmation
   ensure_on_path
   ensure_github_cli
+  ensure_buzz_cli
   print_success_screen "$installed_version"
   launch_onboarding_after_install
 }

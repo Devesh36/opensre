@@ -916,3 +916,130 @@ def test_ensure_github_cli_respects_skip_env(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert "OPENSRE_SKIP_GH_INSTALL" in result.stderr
     assert "OpenSRE GitHub chat tools" in result.stderr
+
+
+def _run_ensure_buzz_cli(
+    *,
+    path_dirs: list[Path],
+    env_extra: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Drive ``ensure_buzz_cli`` with a controlled PATH (no real git/cargo clone)."""
+    install_sh = _INSTALL_SH_SHELL
+    path_parts = [str(p) for p in path_dirs]
+    for system_bin in ("/usr/bin", "/bin"):
+        if system_bin not in path_parts:
+            path_parts.append(system_bin)
+    path_value = ":".join(path_parts)
+    env_exports = " ".join(
+        f"{key}={shlex.quote(value)}" for key, value in (env_extra or {}).items()
+    )
+    script = textwrap.dedent(f"""\
+        eval "$(awk '
+            /^[a-z_][a-z_]*\\(\\)/ {{ in_fn=1 }}
+            in_fn {{ print }}
+            in_fn && /^\\}}$/ {{ in_fn=0 }}
+        ' {install_sh})"
+        export PATH={shlex.quote(path_value)}
+        {env_exports} ensure_buzz_cli
+    """)
+    return subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+
+
+def _write_stub_git(bin_dir: Path, *, succeed: bool) -> None:
+    git = bin_dir / "git"
+    if succeed:
+        git.write_text(
+            textwrap.dedent(
+                """\
+                #!/bin/sh
+                if [ "$1" = "clone" ]; then
+                  dest="$5"
+                  mkdir -p "$dest/crates/buzz-cli"
+                  exit 0
+                fi
+                exit 1
+                """
+            )
+        )
+    else:
+        git.write_text("#!/bin/sh\nexit 1\n")
+    git.chmod(0o755)
+
+
+def _write_stub_cargo(bin_dir: Path, *, succeed: bool) -> None:
+    cargo = bin_dir / "cargo"
+    cargo.write_text(f"#!/bin/sh\nexit {0 if succeed else 1}\n")
+    cargo.chmod(0o755)
+
+
+def test_ensure_buzz_cli_skips_when_buzz_present(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    buzz = bin_dir / "buzz"
+    buzz.write_text("#!/bin/sh\necho buzz\n")
+    buzz.chmod(0o755)
+
+    result = _run_ensure_buzz_cli(path_dirs=[bin_dir])
+    assert result.returncode == 0, result.stderr
+    assert "Installing Buzz CLI" not in result.stdout
+    assert "github.com/block/buzz" not in result.stderr
+
+
+def test_ensure_buzz_cli_respects_skip_env(tmp_path: Path) -> None:
+    empty_bin = tmp_path / "empty-bin"
+    empty_bin.mkdir()
+
+    result = _run_ensure_buzz_cli(
+        path_dirs=[empty_bin],
+        env_extra={"OPENSRE_SKIP_BUZZ_INSTALL": "1"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert "OPENSRE_SKIP_BUZZ_INSTALL" in result.stderr
+    assert "github.com/block/buzz" in result.stderr
+
+
+def test_ensure_buzz_cli_warns_when_cargo_missing(tmp_path: Path) -> None:
+    empty_bin = tmp_path / "empty-bin"
+    empty_bin.mkdir()
+
+    result = _run_ensure_buzz_cli(path_dirs=[empty_bin])
+    assert result.returncode == 0, result.stderr
+    assert "cargo/git were not found" in result.stderr
+    assert "github.com/block/buzz" in result.stderr
+    assert "Installing Buzz CLI" not in result.stdout
+
+
+def test_ensure_buzz_cli_stubbed_git_and_cargo_success(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_stub_git(bin_dir, succeed=True)
+    _write_stub_cargo(bin_dir, succeed=True)
+
+    result = _run_ensure_buzz_cli(path_dirs=[bin_dir])
+    assert result.returncode == 0, result.stderr
+    assert "Installed Buzz CLI (buzz) via cargo" in result.stdout
+    assert "Installing Buzz CLI" in result.stdout
+
+
+def test_ensure_buzz_cli_stubbed_git_failure_does_not_fail_install(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_stub_git(bin_dir, succeed=False)
+    _write_stub_cargo(bin_dir, succeed=True)
+
+    result = _run_ensure_buzz_cli(path_dirs=[bin_dir])
+    assert result.returncode == 0, result.stderr
+    assert "Failed to clone" in result.stderr
+    assert "github.com/block/buzz" in result.stderr
+
+
+def test_ensure_buzz_cli_stubbed_cargo_failure_does_not_fail_install(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_stub_git(bin_dir, succeed=True)
+    _write_stub_cargo(bin_dir, succeed=False)
+
+    result = _run_ensure_buzz_cli(path_dirs=[bin_dir])
+    assert result.returncode == 0, result.stderr
+    assert "cargo install of buzz-cli failed" in result.stderr
+    assert "github.com/block/buzz" in result.stderr

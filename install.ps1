@@ -968,6 +968,67 @@ function Ensure-OpenSreGithubCli {
     Write-Warning "Install manually: winget install --id GitHub.cli  (or https://cli.github.com/) for OpenSRE GitHub chat tools."
 }
 
+function Write-OpenSreBuzzCliManualInstallHint {
+    Write-Warning "Install the Buzz CLI manually from https://github.com/block/buzz:"
+    Write-Warning "  git clone https://github.com/block/buzz.git; cd buzz"
+    Write-Warning "  cargo install --path crates/buzz-cli"
+}
+
+function Ensure-OpenSreBuzzCli {
+    # Soft dependency for Buzz integration. Never fails the OpenSRE install.
+    if (Get-Command buzz -ErrorAction SilentlyContinue) {
+        return
+    }
+
+    $skip = [string]$env:OPENSRE_SKIP_BUZZ_INSTALL
+    if ($skip -eq "1" -or $skip -eq "true" -or $skip -eq "TRUE" -or $skip -eq "yes" -or $skip -eq "YES" -or $skip -eq "on" -or $skip -eq "ON") {
+        Write-Warning "Buzz CLI (buzz) is not on PATH; skipped install because OPENSRE_SKIP_BUZZ_INSTALL is set."
+        Write-OpenSreBuzzCliManualInstallHint
+        return
+    }
+
+    $cargo = Get-Command cargo -ErrorAction SilentlyContinue
+    $git = Get-Command git -ErrorAction SilentlyContinue
+    if (-not $cargo -or -not $git) {
+        Write-Warning "Buzz CLI (buzz) is not on PATH and cargo/git were not found for auto-install."
+        Write-OpenSreBuzzCliManualInstallHint
+        return
+    }
+
+    Write-OpenSreLine -Message "Installing Buzz CLI (buzz) for OpenSRE Buzz integration (optional; cargo build may take a few minutes)" -Color "Cyan"
+
+    $buzzCloneDir = Join-Path ([System.IO.Path]::GetTempPath()) ("opensre-buzz-clone-" + [System.Guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $buzzCloneDir -Force | Out-Null
+
+    try {
+        & git clone --depth 1 https://github.com/block/buzz.git $buzzCloneDir
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Failed to clone https://github.com/block/buzz for buzz-cli install."
+            Write-OpenSreBuzzCliManualInstallHint
+            return
+        }
+
+        $buzzCliPath = Join-Path $buzzCloneDir "crates/buzz-cli"
+        & cargo install --path $buzzCliPath
+        if ($LASTEXITCODE -eq 0) {
+            Write-OpenSreLine -Message "  OK Installed Buzz CLI (buzz) via cargo" -Color "Green"
+            if (-not (Get-Command buzz -ErrorAction SilentlyContinue)) {
+                Write-Warning "buzz was installed but is not on PATH yet."
+                Write-Warning "Add $HOME\.cargo\bin to your PATH, or set BUZZ_PATH to the binary location."
+            }
+        }
+        else {
+            Write-Warning "cargo install of buzz-cli failed."
+            Write-OpenSreBuzzCliManualInstallHint
+        }
+    }
+    finally {
+        if (Test-Path -LiteralPath $buzzCloneDir) {
+            Remove-Item -LiteralPath $buzzCloneDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 function Test-OpenSreAutoLaunchEnabled {
     $value = [string]$env:OPENSRE_AUTO_LAUNCH
     return -not ($value -eq "0" -or $value -eq "false" -or $value -eq "FALSE" -or $value -eq "no" -or $value -eq "NO" -or $value -eq "off" -or $value -eq "OFF")
@@ -1152,6 +1213,7 @@ function Install-OpenSre {
     }
 
     Ensure-OpenSreGithubCli
+    Ensure-OpenSreBuzzCli
 
     $exe = $binaryName.TrimEnd(".exe")
     $sep = "────────────────────────────────────────────"

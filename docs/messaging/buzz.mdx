@@ -22,6 +22,8 @@ Steps 1–3 give you **outbound delivery** (investigation reports, watchdog alar
   cargo install --path crates/buzz-cli
   ```
 
+  The OpenSRE curl and PowerShell installers run this automatically when `cargo` and `git` are already installed (skip with `OPENSRE_SKIP_BUZZ_INSTALL=1`).
+
   If you can't put it on `PATH`, point OpenSRE at the binary with `BUZZ_PATH=/path/to/buzz` or the `buzz_path` field during setup.
 - An agent identity (a Nostr keypair). Generate one with the relay's admin tool:
 
