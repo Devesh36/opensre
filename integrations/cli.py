@@ -196,6 +196,12 @@ def _setup_coralogix() -> None:
     _run_spec_setup(CORALOGIX_SETUP)
 
 
+def _setup_new_relic() -> None:
+    from integrations.new_relic.setup import NEW_RELIC_SETUP
+
+    _run_spec_setup(NEW_RELIC_SETUP)
+
+
 def _setup_aws() -> None:
     from integrations.aws.setup import AWS_SETUP
 
@@ -702,6 +708,15 @@ def _setup_kubernetes() -> None:
     _run_spec_setup(KUBERNETES_SETUP)
 
 
+def _setup_yandex_cloud() -> None:
+    from integrations.yandex_cloud.setup import setup_spec_for_this_host
+
+    # Built per call rather than imported as a constant: on a Yandex Cloud VM the
+    # folder and cloud ids come from the instance metadata service, and asking
+    # for them at import time would cost a timeout on every start elsewhere.
+    _run_spec_setup(setup_spec_for_this_host())
+
+
 _HANDLERS: dict[str, Any] = {
     "alertmanager": _setup_alertmanager,
     "aws": _setup_aws,
@@ -746,6 +761,8 @@ _HANDLERS: dict[str, Any] = {
     "pagerduty": _setup_pagerduty,
     "kubernetes": _setup_kubernetes,
     "servicenow": _setup_servicenow,
+    "new_relic": _setup_new_relic,
+    "yandex_cloud": _setup_yandex_cloud,
 }
 
 
@@ -775,19 +792,25 @@ def _setup_azure_sql() -> None:
 
 _HANDLERS["azure_sql"] = _setup_azure_sql
 
-_SETUP_SERVICES = tuple(service for service in SUPPORTED_SETUP_SERVICES if service in _HANDLERS)
 
+def setup_services() -> tuple[str, ...]:
+    """Return the services that both declare a setup order and have a handler.
 
-SUPPORTED = ", ".join(_SETUP_SERVICES)
-SUPPORTED_VERIFY = ", ".join(SUPPORTED_VERIFY_SERVICES)
+    Computed per call rather than once at import: a plugin registers its spec
+    and adds its ``_HANDLERS`` entry after this module has been imported, and a
+    snapshot taken here would reject it as unsupported for the rest of the
+    process.
+    """
+    return tuple(service for service in SUPPORTED_SETUP_SERVICES if service in _HANDLERS)
 
 
 def cmd_setup(service: str | None) -> str:
+    available = setup_services()
     if not service:
         try:
             service = _select(
                 "Which service would you like to set up?",
-                choices=list(_SETUP_SERVICES),
+                choices=list(available),
                 instruction="(use arrow keys)",
             )
         except (EOFError, KeyboardInterrupt):
@@ -795,8 +818,8 @@ def cmd_setup(service: str | None) -> str:
             sys.exit(1)
     if service:
         service = resolve_management_service(service)
-    if not service or service not in _SETUP_SERVICES:
-        _die(f"Usage: setup <service>. Supported: {SUPPORTED}")
+    if not service or service not in available:
+        _die(f"Usage: setup <service>. Supported: {', '.join(available)}")
     print(f"\n  Setting up {_B}{service}{_R}\n")
     _HANDLERS[service]()
     print(f"\n  ✓ Saved → {STORE_PATH}\n")
@@ -880,7 +903,7 @@ def cmd_verify(service: str | None, *, send_slack_test: bool = False) -> int:
     if service:
         service = resolve_management_service(service)
     if service and service not in SUPPORTED_VERIFY_SERVICES:
-        _die(f"Usage: verify [service]. Supported: {SUPPORTED_VERIFY}")
+        _die(f"Usage: verify [service]. Supported: {', '.join(SUPPORTED_VERIFY_SERVICES)}")
 
     results = verify_integrations(service=service, send_slack_test=send_slack_test)
 

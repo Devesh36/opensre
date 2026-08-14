@@ -22,14 +22,26 @@ from typing import Any, Protocol
 
 from core.agent import Agent
 from core.agent_harness.agent_builder import AgentConfig, build_agent
-from core.agent_harness.ports import ErrorReporter, SessionStore, ToolEventObserver
+from core.agent_harness.ports import ErrorReporter, SessionState, ToolEventObserver
 from core.agent_harness.prompts.gather import build_gather_system_prompt
 from core.agent_harness.prompts.memory.conversation import (
     NO_HISTORY_PLACEHOLDER,
     format_recent_conversation,
 )
 from core.agent_harness.session.integration_resolution import resolve_and_cache_integrations
-from core.agent_harness.turns.goal_review import build_gather_goal_reviewer
+from core.agent_harness.turns.gather_discovery_budget import with_gather_discovery_budget
+from core.agent_harness.turns.gather_observation import (
+    GatheredEvidence,
+    tool_results_from_executed,
+)
+from core.agent_harness.turns.gather_unreachable import (
+    load_gather_unreachable,
+    store_gather_unreachable,
+)
+from core.agent_harness.turns.goal_review import (
+    build_gather_goal_reviewer,
+    tap_executed_tool_calls,
+)
 from core.agent_harness.turns.source_circuit_breaker import SourceCircuitBreaker
 from core.domain.alerts.alert_source import secondary_tool_sources
 from core.events import runtime_event_callback_from_observer
@@ -45,9 +57,10 @@ log = logging.getLogger(__name__)
 # responsive. The budget must still fit an MCP-bridged source's full path —
 # list tools -> fetch a schema -> call the real tool -> conclude — plus one
 # goal-review nudge; 4 was observed live to cap out on discovery alone, so the
-# PostHog count query never ran. The full multi-stage ReAct budget belongs to
-# investigations. Headless metric reports (PostHog / digests) may raise this
-# via ``max_iterations``.
+# PostHog count query never ran. Pair with :func:`with_gather_discovery_budget`
+# so successful schema thrash cannot burn the iteration cap. The full
+# multi-stage ReAct budget belongs to investigations. Headless metric reports
+# (PostHog / digests) may raise this via ``max_iterations``.
 _MAX_GATHER_ITERATIONS = 6
 MAX_REPORT_GATHER_ITERATIONS = 12
 
@@ -68,7 +81,7 @@ class GatherAgentFactory(Protocol):
         self,
         *,
         llm: Any,
-        session: SessionStore,
+        session: SessionState,
         gather_tools: list[Any],
         resolved: dict[str, Any],
         on_progress: ToolEventObserver | None,
@@ -120,9 +133,15 @@ def _truncate(text: str, limit: int) -> str:
 
 
 def _format_observation(executed: list[tuple[Any, Any]]) -> str:
-    """Render executed (tool_call, output) pairs into a compact prompt block."""
+    """Render executed (tool_call, output) pairs into a compact prompt block.
+
+    Newest tools first so head truncation at ``_MAX_OBSERVATION_CHARS`` keeps
+    late results (e.g. ``execute-sql`` after bulky schema discovery).
+    """
     blocks: list[str] = []
-    for tc, output in executed:
+    # Chronological ``executed`` → reverse so the answer prompt sees the last
+    # tool first; ``text[:limit]`` then drops the oldest discovery noise.
+    for tc, output in reversed(executed):
         args = json.dumps(tc.input, default=str, sort_keys=True)
         body = output if isinstance(output, str) else json.dumps(output, default=str)
         blocks.append(
@@ -132,7 +151,7 @@ def _format_observation(executed: list[tuple[Any, Any]]) -> str:
 
 
 def _resolve_gather_integrations(
-    session: SessionStore,
+    session: SessionState,
     message: str,
     resolved_integrations: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -168,7 +187,7 @@ def _resolve_gather_integrations(
     )
 
 
-def _build_gather_user_message(session: SessionStore, message: str) -> str:
+def _build_gather_user_message(session: SessionState, message: str) -> str:
     messages = session.cli_agent_messages[-MAX_CONVERSATION_MESSAGES:]
     history = format_recent_conversation(messages, max_turns=3)
     if history == NO_HISTORY_PLACEHOLDER:
@@ -212,13 +231,14 @@ def _load_gather_llm_or_none(error_reporter: ErrorReporter | None) -> Any | None
 def _build_evidence_agent(
     *,
     llm: Any,
-    session: SessionStore,
+    session: SessionState,
     gather_tools: list[Any],
     resolved: dict[str, Any],
     on_progress: ToolEventObserver | None,
     message: str,
     max_iterations: int = _MAX_GATHER_ITERATIONS,
     tool_resources: dict[str, Any] | None = None,
+    tool_hooks: Any | None = None,
 ) -> Agent[Any]:
     """Build the Agent for one evidence-gather turn.
 
@@ -229,16 +249,30 @@ def _build_evidence_agent(
     reviewer would accept those conclusions — its prompt treats an honest
     report of findings as reached — so the gather flavor reviews against
     "did the data actually get fetched" instead.
+
+    Discovery-only stops are rejected deterministically via the args-aware
+    tool tap (``call_*_tool`` is used for both schema probes and metric
+    queries, so names alone are not enough).
     """
+    if tool_hooks is None:
+        seed_tools, seed_sources = load_gather_unreachable(session)
+        tool_hooks = with_gather_discovery_budget(
+            SourceCircuitBreaker(seed_tools=seed_tools, seed_sources=seed_sources).hooks()
+        )
+    executed_tool_calls: list[tuple[str, dict[str, Any]]] = []
+    on_runtime_event = tap_executed_tool_calls(
+        runtime_event_callback_from_observer(on_progress),
+        executed_tool_calls,
+    )
     config = AgentConfig(
         llm=llm,
         system=build_gather_system_prompt(session),
         tools=tuple(gather_tools),
         resolved_integrations=resolved,
         max_iterations=max_iterations,
-        tool_hooks=SourceCircuitBreaker().hooks(),
-        on_runtime_event=runtime_event_callback_from_observer(on_progress),
-        goal=build_gather_goal_reviewer(llm, message),
+        tool_hooks=tool_hooks,
+        on_runtime_event=on_runtime_event,
+        goal=build_gather_goal_reviewer(llm, message, executed_tool_calls),
         tool_resources=dict(tool_resources or {}),
     )
     return build_agent(config)
@@ -246,7 +280,7 @@ def _build_evidence_agent(
 
 def gather_tool_evidence(
     message: str,
-    session: SessionStore,
+    session: SessionState,
     *,
     on_progress: ToolEventObserver | None = None,
     persist: PersistToolCalls | None = None,
@@ -255,13 +289,14 @@ def gather_tool_evidence(
     resolved_integrations: dict[str, Any] | None = None,
     max_iterations: int | None = None,
     is_cancelled: Callable[[], bool] | None = None,
-) -> str | None:
+) -> GatheredEvidence | None:
     """Run a bounded tool-calling loop and return collected evidence, or None.
 
-    Returns a formatted observation block when at least one tool was executed;
-    otherwise ``None`` so the caller falls back to the normal text-only answer.
-    Any failure is reported and swallowed (returns ``None``) — gathering must
-    never break the conversational turn.
+    Returns :class:`GatheredEvidence` (prompt text + structured tool payloads)
+    when at least one tool was executed; otherwise ``None`` so the caller
+    falls back to the normal text-only answer. Any failure is reported and
+    swallowed (returns ``None``) — gathering must never break the
+    conversational turn.
     """
 
     def _run_gather_turn() -> Any | None:
@@ -294,6 +329,9 @@ def gather_tool_evidence(
             iteration_cap,
         )
         tool_resources = cancel_tool_resources(is_cancelled)
+        seed_tools, seed_sources = load_gather_unreachable(session)
+        breaker = SourceCircuitBreaker(seed_tools=seed_tools, seed_sources=seed_sources)
+        gather_hooks = with_gather_discovery_budget(breaker.hooks())
         if agent_factory is None:
             agent = _build_evidence_agent(
                 llm=llm,
@@ -304,6 +342,7 @@ def gather_tool_evidence(
                 message=message,
                 max_iterations=iteration_cap,
                 tool_resources=tool_resources,
+                tool_hooks=gather_hooks,
             )
         else:
             # Test/custom factories keep the historical signature; cancel probe
@@ -325,6 +364,8 @@ def gather_tool_evidence(
             llm=llm,
             session=session,
         )
+        tools_snap, sources_snap = breaker.snapshot()
+        store_gather_unreachable(session, tools=tools_snap, sources=sources_snap)
         persist_turn_system_prompt(
             session,
             phase="gather_agent",
@@ -357,11 +398,16 @@ def gather_tool_evidence(
         if persist is not None:
             persist(result.executed)
         log.debug("gather_evidence done tools_executed=%s", len(result.executed))
-        return _format_observation(result.executed)
+        return GatheredEvidence(
+            observation=_format_observation(result.executed),
+            tool_results=tool_results_from_executed(result.executed),
+            truncated=bool(result.hit_iteration_cap),
+        )
 
 
 __all__ = [
     "GatherAgentFactory",
+    "GatheredEvidence",
     "MAX_REPORT_GATHER_ITERATIONS",
     "PersistToolCalls",
     "gather_tool_evidence",

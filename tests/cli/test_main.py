@@ -223,7 +223,7 @@ def test_main_captures_analytics_once_for_accepted_command(monkeypatch, capsys) 
     assert captured == ["install", "cli"]
 
 
-def test_main_fast_version_command_skips_runtime_bootstrap(monkeypatch, capsys) -> None:
+def test_main_fast_version_command_skips_first_run_setup(monkeypatch, capsys) -> None:
     captured: list[dict[str, object] | None] = []
     monkeypatch.setattr(
         "surfaces.cli.app.capture_first_run_if_needed",
@@ -240,6 +240,26 @@ def test_main_fast_version_command_skips_runtime_bootstrap(monkeypatch, capsys) 
     assert exit_code == 0
     assert "opensre" in capsys.readouterr().out
     assert captured == []
+
+
+def test_main_fast_print_template_skips_startup(monkeypatch, capsys) -> None:
+    """``investigate --print-template`` must not install harness adapters."""
+    boot_calls: list[str] = []
+
+    monkeypatch.setattr(
+        "surfaces.cli.app.startup.run",
+        lambda *_a, **_k: boot_calls.append("startup"),
+    )
+    monkeypatch.setattr("surfaces.cli.app.capture_first_run_if_needed", lambda: None)
+    monkeypatch.setattr("surfaces.cli.app.capture_cli_invoked", lambda *_a: None)
+    monkeypatch.setattr("surfaces.cli.app.shutdown_analytics", lambda **_kw: None)
+
+    exit_code = main(["investigate", "--print-template", "generic"])
+
+    assert exit_code == 0
+    assert boot_calls == []
+    payload = capsys.readouterr().out
+    assert '"alert_source": "generic"' in payload
 
 
 def test_main_debug_sentry_sends_synthetic_event(monkeypatch, capsys) -> None:

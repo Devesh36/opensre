@@ -27,8 +27,18 @@ RULES: tuple[PathRule, ...] = (
     # User-facing quickstart surface
     PathRule("docs/quickstart.mdx", ("tests/cli/test_quickstart.py",)),
     # Installer surfaces (curl/bash, PowerShell, docs, Homebrew sync)
-    PathRule("install.sh", ("tests/cli/test_install_matrix.py", "tests/cli/test_install_sh_path.py", "tests/cli/test_install_sh_resolution.py")),
-    PathRule("install.ps1", ("tests/cli/test_install_matrix.py", "tests/cli/test_install_ps1_progress.py")),
+    PathRule(
+        "install.sh",
+        (
+            "tests/cli/test_install_matrix.py",
+            "tests/cli/test_install_sh_path.py",
+            "tests/cli/test_install_sh_resolution.py",
+        ),
+    ),
+    PathRule(
+        "install.ps1",
+        ("tests/cli/test_install_matrix.py", "tests/cli/test_install_ps1_progress.py"),
+    ),
     PathRule("docs/install.mdx", ("tests/cli/test_install_matrix.py",)),
     PathRule("docs/install-local.mdx", ("tests/cli/test_install_matrix.py",)),
     PathRule(
@@ -566,31 +576,7 @@ RULES: tuple[PathRule, ...] = (
     PathRule("platform/sandbox/", ("tests/sandbox/",)),
     PathRule(
         "platform/deployment_ec2/",
-        (
-            "tests/platform/deployment_fargate/test_deploy_account_guard.py",
-            "tests/platform/deployment_fargate/test_ec2_launch_instance.py",
-            "tests/platform/deployment_fargate/test_ec2_security_group.py",
-            "tests/platform/deployment_fargate/test_ec2_stack_instances.py",
-            "tests/platform/deployment_ec2/telegram_gateway/",
-        ),
-    ),
-    PathRule(
-        "platform/deployment_fargate/lambda_control_plane/",
-        (
-            "tests/deployment/",
-            "tests/platform/deployment_fargate/test_lambda_bundle_paths.py",
-        ),
-    ),
-    PathRule(
-        "platform/deployment_fargate/lambda_public_forwarder/",
-        (
-            "tests/deployment/",
-            "tests/platform/deployment_fargate/test_lambda_bundle_paths.py",
-        ),
-    ),
-    PathRule(
-        "platform/deployment_fargate/",
-        ("tests/deployment/", "tests/platform/deployment_fargate/"),
+        ("tests/platform/deployment_ec2/",),
     ),
     PathRule("platform/auth/", ("tests/platform/auth/",)),
     PathRule("gateway/web/webapp.py", ("gateway/tests/web/test_webapp.py",)),

@@ -1500,6 +1500,30 @@ def test_route_handled_without_handoff_stays_action_only() -> None:
     assert route.intent == "handled_without_llm"
 
 
+def test_route_goal_set_slash_stays_action_only_despite_session_goal_tag() -> None:
+    """``/goal set`` injects ``session_goal:continue`` but must not gather.
+
+    Gathering on the attach turn answered the condition before autosubmit, so
+    the user saw PostHog work with no ``[N] ❯`` work-turn chrome, then a second
+    identical turn after ``↗ /goal``.
+    """
+    from core.agent_harness.turns.orchestrator import TurnRoutingInput, _route_turn
+
+    routing = TurnRoutingInput(
+        action_handled=True,
+        executed_success_count=1,
+        has_observation=False,
+    )
+    route = _route_turn(
+        routing,
+        user_text=(
+            "/goal set --max-turns 4 What is D7 retention for users who signed up on Windows?"
+        ),
+        handoff_contents=("session_goal:continue",),
+    )
+    assert route.intent == "handled_without_llm"
+
+
 def test_route_investigation_dispatch_skips_gather_even_with_handoff() -> None:
     from core.agent_harness.turns.orchestrator import TurnRoutingInput, _route_turn
 
@@ -2171,6 +2195,50 @@ def test_run_turn_does_not_gather_after_the_action_turn_already_did_the_work() -
     assert gather_calls == [], "swept integrations after the turn already answered"
     assert answer_kwargs, "the assistant must still explain the handoff"
     assert answer_kwargs[0]["handoff_contents"]
+
+
+def test_run_turn_skips_gather_for_stream_only_conversational_handoff() -> None:
+    """Pure chat with ``requires_gather=false`` must not run the gather agent.
+
+    Docs/how-to/greeting turns need stream_answer only. Paying for a gather
+    ReAct loop is the latency tax vs Cursor/Codex on those asks. The action
+    planner signals stream-only via the typed handoff field — not user-text
+    keywords.
+    """
+    session = Session()
+    gather_calls: list[str] = []
+    answer_calls: list[dict[str, Any]] = []
+
+    def _execute(*_args: object, **_kwargs: object) -> ToolCallingTurnResult:
+        return ToolCallingTurnResult(
+            planned_count=1,
+            executed_count=1,
+            executed_success_count=1,
+            has_unhandled_clause=False,
+            handled=True,
+            handoff_contents=("chat:greeting",),
+            handoff_requires_gather=False,
+        )
+
+    def _gather(text: str, *_args: object, **_kwargs: object) -> str:
+        gather_calls.append(text)
+        return "Tool: should_not_run\nResult: unused"
+
+    def _answer(_text: str, request: AnswerRequest, **_kwargs: Any) -> None:
+        answer_calls.append({"handoff_contents": request.handoff_contents})
+        return None
+
+    run_turn(
+        "hi",
+        session,
+        execute_actions=_execute,
+        gather=_gather,
+        answer=_answer,
+        accounting=DefaultTurnAccounting(session, "hi"),
+    )
+
+    assert gather_calls == []
+    assert answer_calls == [{"handoff_contents": ("chat:greeting",)}]
 
 
 def test_run_turn_still_gathers_after_actions_when_the_handoff_did_not_opt_out() -> None:

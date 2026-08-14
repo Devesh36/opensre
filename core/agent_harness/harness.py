@@ -9,10 +9,12 @@ sits one layer above and adds env resolution and prompt context.
 
 Construct **one** agent per logical session, then many turns::
 
-    session = AgentSession.start()       # or attach_agent(custom_headless)
-    result = session.chat("…")           # turn 1
-    follow = session.chat("…")           # turn 2 — same attached agent
-    report = session.investigate({…})    # Path-2 (no attached chat agent required)
+    session = AgentSession.start(config)  # or attach_agent(custom_headless)
+    result = session.chat("…")            # turn 1
+    follow = session.chat("…")            # turn 2 — same attached agent
+    report = session.investigate({…})     # Path-2 (no attached chat agent required)
+
+Embedded scripts that need local adapters: ``bootstrap.embedded.start_embedded_session``.
 
 Custom ports (live gateway sink, REPL)::
 
@@ -42,6 +44,8 @@ if TYPE_CHECKING:
     from core.agent_harness.investigation_api import AlertInput, InvestigationResult
     from core.agent_harness.ports import OutputSink, PromptContextProvider
     from core.agent_harness.session.session_core import SessionCore
+    from core.agent_harness.session_goal.goal import SessionGoal
+    from core.agent_harness.session_goal.run_until import SessionGoalRunResult
     from core.agent_harness.turns.turn_results import TurnResult
 
 
@@ -70,8 +74,15 @@ class SessionConfig:
     # create() (a fresh session can warm on first turn).
     warm_integrations: bool | None = None
     persistent_tasks: bool = True
-    open_storage: bool = True
+    open_store: bool = True
     session_manager: SessionManager | None = None
+    # Optional process boot run once at :meth:`AgentSession.startup`. A
+    # callable, not a flag: ``core`` may not import ``bootstrap`` (package
+    # layers), so the host supplies the step. Embedded scripts use
+    # :func:`bootstrap.embedded.start_embedded_session`, which fills this
+    # with ``configure_process(EMBEDDED_PROFILE)``. CLI, gateway and web
+    # already boot their own profile and leave this unset.
+    boot_process: Callable[[], None] | None = None
 
 
 # Scheduled/one-shot runs: a fresh warm session that leaves no persisted task
@@ -81,7 +92,7 @@ SCHEDULED_RUN_CONFIG = SessionConfig(
     hydrate_integrations=True,
     warm_integrations=True,
     persistent_tasks=False,
-    open_storage=False,
+    open_store=False,
 )
 
 
@@ -105,6 +116,7 @@ class AgentSession:
         self._config = config or SessionConfig()
         self._session_manager = self._config.session_manager or SessionManager()
         self._agent: ChatDispatcher | None = None
+        self._bound_session: SessionCore | None = None
 
     def resolve_env_variables(self) -> None:
         """Load local OpenSRE env defaults into the process, once.
@@ -145,7 +157,7 @@ class AgentSession:
             hydrate_integrations=self._config.hydrate_integrations,
             warm_integrations=warm,
             persistent_tasks=self._config.persistent_tasks,
-            open_storage=self._config.open_storage,
+            open_store=self._config.open_store,
         )
 
     def resolve_integrations(self, session: SessionCore) -> dict[str, Any]:
@@ -202,13 +214,20 @@ class AgentSession:
     ) -> AgentSession:
         """Return a session that is ready to :meth:`chat`.
 
-        The single headless bootstrap: create the session, run ``prepare_session``,
-        resolve the sink and prompt context, and attach the default agent. Build
-        it once and dispatch as many turns as the caller needs::
+        Create the session, run ``prepare_session``, resolve the sink and prompt
+        context, and attach the default agent. Build it once and dispatch as
+        many turns as the caller needs::
 
-            session = AgentSession.start()
+            session = AgentSession.start(config)
             for prompt in prompts:
                 result = session.chat(prompt)
+
+        Does **not** import ``bootstrap`` — package layers forbid it. Embedded
+        hosts that need local adapters use
+        :func:`bootstrap.embedded.start_embedded_session` (or pass
+        ``SessionConfig(boot_process=…)`` after calling
+        ``configure_process``). Surfaces that already booted another profile
+        leave ``boot_process`` unset.
 
         ``prepare_session`` runs after session create (e.g. pin a project scope)
         and before the agent is built. ``message`` is the first turn's text when
@@ -224,6 +243,7 @@ class AgentSession:
         startup = agent_session.startup()
         if prepare_session is not None:
             prepare_session(startup.session)
+        agent_session._bound_session = startup.session
         agent_session._attach_default_headless(
             session=startup.session,
             output=output if output is not None else BufferOutputSink(),
@@ -264,7 +284,17 @@ class AgentSession:
         return self._agent
 
     def startup(self) -> SessionStartupResult:
-        """Run env resolution, session bootstrap/resume, and context loading."""
+        """Run process boot (optional), env, session bootstrap/resume, and context.
+
+        :attr:`SessionConfig.boot_process`, when supplied, runs first — an
+        embedded host passes ``lambda: configure_process(EMBEDDED_PROFILE)`` so
+        gather and tools see the same local integrations as the interactive
+        shell. CLI, gateway and web already boot their own profile, so they
+        leave it unset. ``configure_process`` is idempotent per profile, so a
+        host that boots twice is harmless.
+        """
+        if self._config.boot_process is not None:
+            self._config.boot_process()
         self.resolve_env_variables()
         session = self.load_or_create_session()
         prompts = self.load_context()
@@ -294,6 +324,40 @@ class AgentSession:
                 "(call attach_agent first, or pass agent=)."
             )
         return target.dispatch(message)
+
+    def chat_until_goal(
+        self,
+        message: str,
+        *,
+        goal: SessionGoal | None = None,
+        evaluate: Callable[..., str] | None = None,
+        cancel_requested: Callable[[], bool] | None = None,
+        on_progress: Callable[[SessionGoal], None] | None = None,
+    ) -> SessionGoalRunResult:
+        """Run :meth:`chat` in a loop until the :class:`SessionGoal` completes.
+
+        Pass ``goal=`` explicitly, or let the first action turn attach one via a
+        ``session_goal:`` handoff tag. Does not scan user prose for intent.
+        Caps at ``goal.max_outer_turns``. Honors ``cancel_requested`` between turns.
+        ``on_progress`` receives the goal after each turn (checklist UI).
+        """
+        from core.agent_harness.session_goal.run_until import run_until_session_goal
+
+        session = self._bound_session
+        if session is None:
+            raise RuntimeError(
+                "AgentSession.chat_until_goal requires a bound session "
+                "(call AgentSession.start() first)."
+            )
+        return run_until_session_goal(
+            self.chat,
+            session,
+            message,
+            goal=goal,
+            evaluate=evaluate,
+            cancel_requested=cancel_requested,
+            on_progress=on_progress,
+        )
 
     def investigate(
         self,

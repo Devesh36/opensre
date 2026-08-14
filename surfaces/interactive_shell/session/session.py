@@ -91,7 +91,7 @@ class Session(SessionCore):
         timestamps and future uses have complete data.
         """
         self.history.append({"type": "incoming_alert", "text": alert.text, "ok": True})
-        self.storage.append_turn(self, "incoming_alert", alert.text)
+        self.store.append_turn(self, "incoming_alert", alert.text)
         self.alerts.add(alert)
 
     def clear(self, *, rotate_identity: bool = True) -> None:
@@ -103,6 +103,8 @@ class Session(SessionCore):
         self.terminal.submitted_turn_count = 0
         self.terminal.pending_prompt_default = None
         self.terminal.pending_prompt_autosubmit = False
+        self.terminal.last_input_autosubmitted = False
+        self.terminal.dispatch_active = False
         self.terminal.exclusive_stdin_active = False
         self.terminal.background_mode_enabled = False
         self.terminal.background_investigations.clear()

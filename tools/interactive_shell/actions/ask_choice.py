@@ -22,6 +22,8 @@ from core.agent_harness.tools.tool_context import (
     string_array_property,
     string_property,
 )
+from core.domain.types.tools import ToolSurface
+from core.tool_framework.metadata import SideEffectLevel
 from core.tool_framework.registered_tool import RegisteredTool
 
 _MIN_OPTIONS = 2
@@ -147,12 +149,12 @@ ask_user_choice_tool = RegisteredTool(
         required=("title", "options"),
     ),
     source="interactive_shell",
-    surfaces=("action",),
+    surfaces=(ToolSurface.ACTION,),
     parallel_safe=False,
     accepts_runtime_context=True,
     run=run_ask_user_choice,
     tags=("safe", "fast", "no-credentials"),
-    side_effect_level="read_only",
+    side_effect_level=SideEffectLevel.READ_ONLY,
 )
 
 

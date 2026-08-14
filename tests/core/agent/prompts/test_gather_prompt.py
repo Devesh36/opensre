@@ -18,7 +18,9 @@ from core.agent_harness.prompts.memory.prior_investigation import (
     PRIOR_INVESTIGATION_RECALL_SECONDS,
     STALE_PRIOR_INVESTIGATION_NOTE,
 )
-from core.agent_harness.turns.orchestrator import _is_prior_investigation_follow_up_handoff
+from core.agent_harness.turns.handoff_policy import (
+    is_prior_investigation_follow_up_handoff,
+)
 from core.agent_harness.turns.turn_snapshot import TurnSnapshot
 from integrations.github.gather_prompt import github_gather_prompt_fragment
 
@@ -165,6 +167,16 @@ def test_github_gather_prompt_routes_star_history_to_dedicated_tool() -> None:
     assert "execute_python_code" in prompt
 
 
+def test_posthog_gather_prompt_refuses_login_as_signup_stand_in() -> None:
+    """Retention/signup must not treat user_signed_in as signup."""
+    from integrations.posthog.gather_prompt import posthog_gather_prompt_fragment
+
+    prompt = posthog_gather_prompt_fragment()
+    assert "user_signed_in" in prompt
+    assert "signup" in prompt.lower()
+    assert "unverified" in prompt.lower()
+
+
 def test_answer_prompt_keeps_an_old_investigation_and_labels_it() -> None:
     """A retrospective question can come at any time; the RCA must survive the window.
 
@@ -245,7 +257,7 @@ def test_action_prompt_teaches_the_follow_up_handoff_tag() -> None:
 
     # Assert: the emitted value must satisfy the orchestrator's prefix check.
     assert 'assistant_handoff(content="follow_up:prior_investigation")' in prompt
-    assert _is_prior_investigation_follow_up_handoff(("follow_up:prior_investigation",))
+    assert is_prior_investigation_follow_up_handoff(("follow_up:prior_investigation",))
 
 
 def test_assistant_has_guidance_for_the_follow_up_tag() -> None:

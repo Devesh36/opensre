@@ -67,6 +67,12 @@
             ]
           },
           {
+            "group": "Enterprise",
+            "pages": [
+              "install-enterprise"
+            ]
+          },
+          {
             "group": "Environment guides",
             "pages": [
               "environments/macos",
@@ -148,6 +154,7 @@
                   "groundcover",
                   "hermes",
                   "honeycomb",
+                  "new_relic",
                   "openobserve",
                   "posthog",
                   "posthog-mcp",
@@ -184,8 +191,10 @@
                   "elb",
                   "helm",
                   "kubernetes",
+                  "yandex-cloud",
                   "railway",
                   "s3",
+                  "sqs_queues",
                   "vercel"
                 ]
               },
@@ -293,12 +302,12 @@
   },
   "footer": {
     "socials": {
-      "website": "https://tracer.cloud",
-      "github": "https://github.com/Tracer-Cloud",
+      "website": "https://www.opensre.com",
+      "github": "https://github.com/Tracer-Cloud/opensre",
       "linkedin": "https://linkedin.com/company/tracercloud",
-      "slack": "https://join.slack.com/t/tracer-cloud/shared_invite/zt-3ifakcs2e-igoUEH8ygMlfxgJGLxsqeA"
+      "discord": "https://discord.gg/opensre"
     },
-    "copyright": "\u00a9 2025 Tracer Cloud. All rights reserved."
+    "copyright": "\u00a9 2026 OpenSRE. All rights reserved."
   },
   "integrations": {
     "posthog": {
@@ -315,6 +324,34 @@
     {
       "source": "/messaging/twilio",
       "destination": "/messaging/twilio-sms"
+    },
+    {
+      "source": "/tracer-faq",
+      "destination": "/faq"
+    },
+    {
+      "source": "/technology/end-to-end",
+      "destination": "/"
+    },
+    {
+      "source": "/comparisons/overview",
+      "destination": "/"
+    },
+    {
+      "source": "/introduction-monitoring",
+      "destination": "/"
+    },
+    {
+      "source": "/quickstart-monitoring",
+      "destination": "/quickstart"
+    },
+    {
+      "source": "/environments/codespaces",
+      "destination": "/install"
+    },
+    {
+      "source": "/environments/overview",
+      "destination": "/install"
     }
   ],
   "seo": {

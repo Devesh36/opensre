@@ -10,7 +10,7 @@ import pytest
 from rich.console import Console
 
 from core.agent_harness.session import SessionCore
-from core.agent_harness.session.persistence.memory import InMemorySessionStorage
+from core.agent_harness.session.persistence.memory import InMemorySessionStore
 from core.agent_harness.tools.action_tools import get_action_tool
 from gateway.core.runtime.turn_handler import GatewayTurnHandler
 from tests.core.agent.orchestration.cross_surface_parity_harness import (
@@ -24,7 +24,7 @@ def _gateway_console() -> Console:
 
 
 def _run_gateway_slash(message: str) -> RecordingGatewaySink:
-    session = SessionCore(storage=InMemorySessionStorage())
+    session = SessionCore(store=InMemorySessionStore())
     sink = RecordingGatewaySink()
     handler = GatewayTurnHandler(
         console=_gateway_console(),
@@ -80,6 +80,25 @@ def test_gateway_investigate_discord_alert_prefix(monkeypatch: pytest.MonkeyPatc
     sink = _run_gateway_slash("/investigate alert:High error rate on checkout")
     assert sink.finalized is not None
     assert "failed" not in (sink.finalized or "").lower()
+
+
+def test_gateway_background_read_forms_are_not_swallowed() -> None:
+    """Literal /background read forms run against SessionCore, which has no
+    terminal facet; they must answer instead of raising AttributeError."""
+    listed = _run_gateway_slash("/background list")
+    assert listed.finalized is not None
+    assert "no background investigations" in listed.finalized.lower()
+
+    status = _run_gateway_slash("/background status")
+    assert status.finalized is not None
+    assert "background mode" in status.finalized.lower()
+
+
+def test_gateway_background_write_forms_report_repl_only() -> None:
+    """/background on toggles REPL-local state with no headless equivalent."""
+    sink = _run_gateway_slash("/background on")
+    assert sink.finalized is not None
+    assert "uv run opensre" in sink.finalized
 
 
 def test_gateway_onboard_slash_returns_headless_guidance(monkeypatch: pytest.MonkeyPatch) -> None:

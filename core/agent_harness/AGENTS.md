@@ -9,19 +9,75 @@ interactive terminal and be invoked headlessly via
 
 ## Host API (teach this)
 
-Prefer `AgentSession.start()` → `.chat` / `.investigate` — not free-function
-turn dumps. Construct one agent per logical session (or scheduled loop), then
-many turns — do not rebuild every message. Process boot
-(`configure_process`) and headless construction (`build_default_headless_agent`)
-are separate layers.
+Prefer `AgentSession.start()` / `start_embedded_session()` → `.chat` /
+`.investigate` — not free-function turn dumps. Construct one agent per logical
+session (or scheduled loop), then many turns — do not rebuild every message.
+Process boot (`configure_process`) and headless construction
+(`build_default_headless_agent`) are separate layers. `core` must not import
+`bootstrap`; embedded hosts use `bootstrap.embedded.start_embedded_session`.
 
 | Path | Call |
 |------|------|
 | Process boot (once) | `configure_process(PROFILE)` — adapters only; not agent construction |
-| Happy path | `AgentSession.start()` → repeated `.chat` / `.investigate` |
+| Happy path (already booted) | `AgentSession.start()` → repeated `.chat` / `.investigate` |
+| Embedded / script | `start_embedded_session()` → repeated `.chat` / `.investigate` |
+| Multi-step / keep-going | `start` / `start_embedded_session` → `.chat_until_goal(...)` (`SessionGoal` loop) |
 | Custom host | **`build_default_headless_agent(...)`** (only factory) → `attach_agent` once → many `.chat` |
-| Gateway | `SessionAgentPool` → factory once / session → `bind_turn` → `.chat` |
+| Gateway | `SessionAgentPool` → factory once / session → `bind_turn` → `run_until_session_goal` (same SessionGoal policy as shell) |
 | Scheduled one-shot | `AgentSession.run_headless_turn(...)` (not the multi-turn pattern) |
+
+`SessionGoal` (`session_goal/` component — `goal` + `run_until`) is
+**not** the ReAct `Goal` / `goal_review`. User-facing word is `/goal` only
+(show / set / pause / resume / edit / clear). Status `paused` stops session-goal
+continuation but keeps state; `host_owned` blocks handoff replace while
+**active or paused**. While a goal is **attached** (active or paused),
+`run_turn` suppresses investigation Want-me-to closers. Completion is judged by
+`session_goal/evaluate.py` (independent of model self-report): checklist
+complete via `done=` indices; condition-only handoff goals need
+`session_goal:achieved` **with tool evidence** (bare `achieved` ignored);
+**host-owned** (`/goal set`) condition-only goals may achieve on the tag alone
+(explicit slash-path rule). Host reason strings live in `SessionGoalReason` —
+never embed `session_goal:…` tag grammar in painted reasons. Reason derive:
+`session_goal.goal.derive_session_goal_reason`. Paint (presentation only):
+`session_goal/progress.py` (`SESSION_GOAL_PAINT_MARK`). Continuation prompts:
+`session_goal/continuation.py`. Flush/restore: `session_goal/persist.py`. Optional LLM
+confirm for the tool-evidence path: `build_session_goal_llm_evaluator` in
+`session_goal/confirm.py` (pass as `evaluate=` to the session-goal loop) —
+closed `SessionGoalConfirmVerdict` via structured output, not free-text scrape.
+No host wires it by default; opt in when a second opinion is worth the tokens.
+Package rules: `session_goal/AGENTS.md`. Borders SoT (local notes):
+`opensre-notes/goal-core-system-design-aug2026.html`.
+
+**Evidence kinds (open/closed):** vocabulary + per-kind policy live in
+`turns/evidence_kind.py` (`EvidenceKind` + `EvidenceKindPolicy`). Add a kind by
+extending the enum and registering its policy row — do **not** grow
+`if kind is …` branches in `classify_evidence_need`. Tool schema `enum` is
+`EVIDENCE_KIND_VALUES` (derived), not a parallel hard-coded list. Preferred
+integration ids stay opt-in via `platform.harness_ports.register_preferred_evidence_source`.
+
+**Evidence tiers / degradation:** `classify_evidence_need` is connectivity-first
+(`L0_degraded` + skip gather when a preferred authoritative source is missing).
+After an L1 gather, `reclassify_evidence_need_after_gather` may flip to
+`L0_degraded` with `EvidenceDegradeCause.CONFIG_FAILURE` only for a typed
+`tool_unavailable` envelope (`{"source", "available": False, "error"}`).
+Prefer `GatheredEvidence.tool_results` from the gather loop; fall back to
+`split`/`partition` on the rendered `Tool:`/`Result:` observation (see
+`gather_observation.iter_tool_result_blocks`) — never regex or phrase lists.
+Empty SQL / vendor-query failures stay L1 (no L0 CTA). A metric gather that never
+ran a live query still gets a vendor-registered draft query block (via
+`platform.harness_ports.register_metric_query_draft`) and one
+`/integrations setup …` line, then stops — the **unformed-metric floor**
+(`turns/metric_query_floor.py`). Product cohort / signup-retention identity
+is core policy (`turns/cohort_identity.py`); vendors supply dialect drafts and
+optional observation parsers (`register_metric_cohort_resolver`).
+
+**No keyword intent routing around the action agent.** Do not scan user text
+with regex/keywords to skip gather, attach goals, or bypass `execute_actions`.
+Policy keys off typed `AssistantHandoff` (`turns/assistant_handoff.py`) —
+schema fields first; content tags are decode fallback only. Legacy tag tuples
+(`evidence_kind:…`, `session_goal:…`, `session_goal_item:…`, `database_query:…`)
+and explicit host APIs remain for older readers. Checklist progress uses
+`session_goal:done=<index>` in replies.
 
 Do **not** duplicate the default port stack outside `build_default_headless_agent`.
 Shell uses a TTY `ChatDispatcher` (same `AgentSession.chat` / `run_turn`) —
@@ -33,6 +89,9 @@ intentional, not a second headless factory. Do not reintroduce peer
 `HeadlessAgent.bind_session` / `bind_turn(console=…, output=…)` only call ports
 that match those Protocols. Gateway usually keeps a stable `LiveOutputSink` and
 rebinds the transport via `LiveOutputSink.bind` (no `output=` each turn).
+The mutable session port is **`SessionState`** (field `HeadlessAgent._session`,
+headless impl `InMemorySessionState`) — not `SessionStore`. Durable JSONL is
+`SessionStore` / `SessionRepo` (`docs/NAMING.md`).
 
 **Host cancel:** one `threading.Event` on the output sink
 (`ensure_turn_cancel` / `host_cancel_requested` in `turns/host_cancel.py`) —
@@ -70,13 +129,22 @@ subpackage. Default port implementations live with the concern they serve, not i
   single instantiation site for `core.agent.Agent` across all surfaces
   (action, evidence, gateway). See "Agent construction pattern" below.
 - `turns/` — the turn drivers that orchestrate `core.agent.Agent`:
-  - `orchestrator.py` — `run_turn`: the three-path routing
-    (summarize-observation / handled / gather+answer). Resolves integrations
-    **once** at the top of the turn onto the frozen `turn_snapshot`, so
-    `turn_snapshot.resolved_integrations` is the single source of truth for
-    what the turn knows. Downstream components (e.g.
+  - `orchestrator.py` — `run_turn` sequences three seams (do not merge them):
+    1. **route decide** — pure `turn_route.route_turn` (no I/O, no stream flags)
+    2. **route execute** — summarize / handled / gather+answer effects
+    3. **answer finalize** — `answer_finalize.finalize_routed_answer` (CTA,
+       Want-me-to, stream flush). Stream rewrite locals
+       (`text_changed_after_streaming`) stay inside finalize and must **never**
+       gate route selection.
+    Resolves integrations **once** at the top of the turn onto the frozen
+    `turn_snapshot`, so `turn_snapshot.resolved_integrations` is the single
+    source of truth for what the turn knows. Downstream components (e.g.
     `action_driver._resolved_integrations_for_turn`) read it from there rather
     than re-resolving. Do NOT reintroduce per-component integration resolution.
+  - `turn_route.py` / `answer_finalize.py` / `handoff_policy.py` — the seams
+    above, extracted so post-answer bookkeeping cannot regress into routing.
+  - `SessionGoal` vs local shell multi-step are also separate concerns:
+    prompt fragments in `prompts/action/multi_step_policy.py`.
   - `action_driver.py` — `ActionTurnRunner`: one action tool-calling turn
     over the ports, via a `_build_action_agent` factory that returns an
     `ActionTurnPlan`.
@@ -109,6 +177,10 @@ subpackage. Default port implementations live with the concern they serve, not i
   history, task registry, session-scoped background records, integration resolution
   (:mod:`session.integration_resolution`), and `SessionManager` (the lifecycle owner).
   See "Session lifecycle" below.
+- `session_goal/` — `/goal` / SessionGoal component (`SessionGoal` across many `chat`
+  turns): `goal`, `evaluate` / `confirm`, `progress` / `continuation`, `persist`,
+  `run_until`. **Not** the ReAct `Goal` / `turns/goal_review.py`. See
+  `session_goal/AGENTS.md`.
 
 ## Session lifecycle (owned by SessionManager)
 
@@ -139,7 +211,7 @@ to it instead of re-implementing bootstrap + persistence:
   :meth:`AgentSession.run_headless_turn` (or ``start`` + ``chat``).
   That is the same ``run_turn`` engine as the shell; do not reassemble
   ``BufferOutputSink`` + ``build_default_headless_agent`` in integrations.
-  Ephemeral in-memory sessions (``headless_dispatch.InMemorySessionStore``)
+  Ephemeral in-memory sessions (``headless_dispatch.InMemorySessionState``)
   bypass ``SessionManager`` by design when tests need no JSONL.
 
 `Session` (formerly `ReplSession`) is the in-memory session object used by every
@@ -201,7 +273,11 @@ configuration on `self`, which diverged routing across surfaces.
   `build_agent`. Used by the action, evidence/gather, and investigation agents.
 - **Direct answer (no tools)** — `orchestrator.stream_answer`, one grounded
   text answer streamed via `client.invoke_stream` (the `StreamAnswerFn` seam).
-  It does **not** use `Agent`: no tool loop, no observe step.
+  It does **not** use `Agent`: no tool loop, no observe step. The host reaches
+  this path after action when `assistant_handoff` sets `requires_gather=false`
+  (pure docs/how-to/greeting chat, or action tools already answered) — gather
+  is skipped. Default `requires_gather=true` still runs the evidence gatherer
+  before `stream_answer` for live-data asks.
 
 A new agent is one shape or the other: if it calls tools it is the tool-calling
 shape; if it answers directly without tools it is the direct-answer shape.
@@ -240,22 +316,24 @@ a headless agent on every message for the same logical session.
 **Host API shape**
 
 ```python
-from bootstrap.process import EMBEDDED_PROFILE, configure_process
-from core.agent_harness import AgentSession
+from bootstrap.embedded import start_embedded_session
 
-configure_process(EMBEDDED_PROFILE)   # adapters / investigation runner
-session = AgentSession.start()        # construct once (session + default agent)
+session = start_embedded_session()    # EMBEDDED_PROFILE + default agent
 result = session.chat("…")            # turn 1
 result = session.chat("…")            # turn 2 — same attached agent
 report = session.investigate({…})     # Path-2 verb (separate stage machine)
 ```
+
+``AgentSession.start`` must not import ``bootstrap`` (layer contract). Surfaces
+that already ran another process profile call ``startup()`` (or pass an
+explicit ``boot_process``).
 
 **One agent per logical session (or scheduled loop)**
 
 | Lifetime | Construct | Then |
 |----------|-----------|------|
 | Chat session (gateway) | `SessionAgentPool` keeps one `HeadlessAgent` per session id; each turn rebinds outer sink via `LiveOutputSink.bind`, then `bind_turn` (session / accounting / console / tool_hooks) | `AgentSession.chat` / `agent.dispatch` |
-| Embedder / script | `AgentSession.start()` or `attach_agent(HeadlessAgent…)` once | repeated `chat` / `dispatch` |
+| Embedder / script | `start_embedded_session()` or `attach_agent(HeadlessAgent…)` once | repeated `chat` / `dispatch` |
 | Scheduled loop | Prefer one agent for the loop’s lifetime when multi-turn; `run_headless_turn` is OK for true one-shot digests | do not treat one-shot as the multi-turn pattern |
 | Interactive shell | TTY `ChatDispatcher` bound for the REPL lifetime (not `HeadlessAgent`) | `AgentSession.chat` per submission |
 

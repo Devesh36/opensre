@@ -12,6 +12,8 @@ import pytest
 from prompt_toolkit.history import FileHistory
 from rich.console import Console
 
+from core.agent_harness.session import SessionCore
+from core.agent_harness.session.persistence.memory import InMemorySessionStore
 from platform.common.task_types import TaskKind, TaskStatus
 from surfaces.interactive_shell.command_registry import SLASH_COMMANDS, dispatch_slash
 from surfaces.interactive_shell.command_registry import repl_data as repl_data_module
@@ -333,6 +335,45 @@ class TestDispatchSlash:
         assert "background notify channels set" in output.lower()
         assert "invalid channel" not in output.lower()
 
+    def test_background_read_forms_survive_a_headless_session(self) -> None:
+        """Chat transports dispatch literal slashes against SessionCore, which has
+        no terminal facet; the read forms must report empty state, not raise."""
+        session = SessionCore(store=InMemorySessionStore())
+        console, buf = _capture()
+
+        assert dispatch_slash("/background list", session, console) is True
+        assert "no background investigations" in buf.getvalue().lower()
+
+    def test_background_status_survives_a_headless_session(self) -> None:
+        session = SessionCore(store=InMemorySessionStore())
+        console, buf = _capture()
+
+        assert dispatch_slash("/background status", session, console) is True
+        assert "background mode" in buf.getvalue().lower()
+
+    @pytest.mark.parametrize("form", ["on", "off", "notify set email"])
+    def test_background_write_forms_are_interactive_shell_only(self, form: str) -> None:
+        """Write forms have no headless equivalent: background_mode_enabled has no
+        setter and preferences live on the terminal facet. They must point at the
+        REPL rather than crashing or silently doing nothing."""
+        session = SessionCore(store=InMemorySessionStore())
+        console, buf = _capture()
+
+        assert dispatch_slash(f"/background {form}", session, console) is True
+        assert "uv run opensre" in buf.getvalue()
+
+    @pytest.mark.parametrize(
+        "form",
+        ["", "status", "list", "show bg123", "use bg123", "notify list", "bogus"],
+    )
+    def test_background_every_form_answers_on_a_headless_session(self, form: str) -> None:
+        """No form may raise on SessionCore: chat transports dispatch all of them."""
+        session = SessionCore(store=InMemorySessionStore())
+        console, buf = _capture()
+
+        assert dispatch_slash(f"/background {form}".strip(), session, console) is True
+        assert buf.getvalue().strip()
+
     def test_background_notify_set_accepts_email_and_telegram_combined(self) -> None:
         """AC-2: email,telegram combined -> both stored, first-seen order preserved."""
         session = Session()
@@ -353,7 +394,10 @@ class TestDispatchSlash:
         output = buf.getvalue()
         assert "invalid channel" in output
         assert session.terminal.background_notification_preferences.channels == ()
-        assert "email, telegram" in output
+        # Listed individually, not as an adjacent pair: the hint now comes from the
+        # adapter registry, which reports capable channels sorted.
+        assert "email" in output
+        assert "telegram" in output
 
     def test_background_notify_set_telegram_shows_in_list_and_status(self) -> None:
         """AC-21: after setting telegram, /background notify list and the /background status
@@ -382,6 +426,41 @@ class TestDispatchSlash:
         assert dispatch_slash("/background notify set telegram,telegram", session, console) is True
         assert session.terminal.background_notification_preferences.channels == ("telegram",)
         assert "invalid channel" not in buf.getvalue().lower()
+
+    def test_background_notify_set_validates_against_the_adapter_registry(self) -> None:
+        """AC-4 asks that adapters declare background support rather than a curated
+        list deciding it. Registering one makes its channel acceptable without any
+        edit here, which a hardcoded tuple cannot do."""
+        from bootstrap.adapters import install_notification_adapters
+        from platform.notifications.outbound_registry import (
+            BACKGROUND_RCA,
+            clear_outbound_adapters,
+            get_outbound_adapter,
+            register_outbound_adapter,
+        )
+
+        class _StubAdapter:
+            name = "pagerduty"
+            capabilities = frozenset({BACKGROUND_RCA})
+
+            def deliver(self, record: BackgroundInvestigationRecord) -> str:
+                _ = record
+                return "sent"
+
+        session = Session()
+        console, buf = _capture()
+        register_outbound_adapter(_StubAdapter())
+        try:
+            assert dispatch_slash("/background notify set pagerduty", session, console) is True
+            assert session.terminal.background_notification_preferences.channels == ("pagerduty",)
+            assert "invalid channel" not in buf.getvalue().lower()
+        finally:
+            # Clearing alone would leave every later test in this worker with an
+            # empty registry, silently turning each channel into "unsupported".
+            clear_outbound_adapters()
+            install_notification_adapters()
+        assert get_outbound_adapter("pagerduty") is None
+        assert get_outbound_adapter("telegram") is not None
 
     def test_background_show_renders_real_dispatcher_telegram_sent(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1893,12 +1972,12 @@ class TestResumeCommand:
         from unittest.mock import patch
 
         from core.agent_harness.session import (
-            JsonlSessionStorage,
+            JsonlSessionStore,
             default_session_repo,
         )
         from surfaces.interactive_shell.command_registry.session_cmds import _apply_resume_data
 
-        SessionStore = JsonlSessionStorage()
+        SessionState = JsonlSessionStore()
         session = Session()
         old_id = session.session_id
         target_id = "old-abc-1234567890"
@@ -1907,7 +1986,7 @@ class TestResumeCommand:
             "core.agent_harness.session.persistence.paths.sessions_dir",
             return_value=tmp_path,
         ):
-            SessionStore.open_session(session)
+            SessionState.open_session(session)
             session.record("chat", "pre-resume turn")
 
             # Pre-create a finalized target session file to resume into.
@@ -2053,10 +2132,10 @@ class TestResumeCommand:
         """History display uses REPL turn order and includes slash commands."""
         from unittest.mock import patch
 
-        from core.agent_harness.session import JsonlSessionStorage
+        from core.agent_harness.session import JsonlSessionStore
         from surfaces.interactive_shell.command_registry.session_cmds import _apply_resume_data
 
-        SessionStore = JsonlSessionStorage()
+        SessionState = JsonlSessionStore()
         data = {
             "session_id": "display-test-abc123456789",
             "name": "My Session",
@@ -2079,7 +2158,7 @@ class TestResumeCommand:
             "core.agent_harness.session.persistence.paths.sessions_dir",
             return_value=tmp_path,
         ):
-            SessionStore.open_session(session)
+            SessionState.open_session(session)
             _apply_resume_data(data, session, console)
 
         output = buf.getvalue()
@@ -2673,7 +2752,7 @@ class TestRunCliCommand:
     ) -> None:
         """Gateway/headless surfaces need the real exit status for slash analytics."""
         from core.agent_harness.session import SessionCore
-        from core.agent_harness.session.persistence.memory import InMemorySessionStorage
+        from core.agent_harness.session.persistence.memory import InMemorySessionStore
         from surfaces.interactive_shell.command_registry import cli_parity as m
 
         def _fake_run(
@@ -2693,7 +2772,7 @@ class TestRunCliCommand:
             return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="boom\n")
 
         monkeypatch.setattr(m.subprocess, "run", _fake_run)
-        session = SessionCore(storage=InMemorySessionStorage())
+        session = SessionCore(store=InMemorySessionStore())
         session.record("slash", "/remote health", ok=True)
         console, _buf = _capture()
         assert m.run_cli_command(console, ["remote", "health"], session=session) is False

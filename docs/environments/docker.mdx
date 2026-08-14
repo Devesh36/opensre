@@ -31,7 +31,7 @@ docker build -t opensre:latest .
 The image can run in two modes via `MODE`:
 
 - **`web`** (default) — HTTP API for health checks and investigations
-- **`gateway`** — messaging gateway (Slack / Telegram) plus related services
+- **`gateway`** — messaging gateway (Slack / Telegram / Discord / Buzz) plus related services
 
 ## 2. Run web mode
 
@@ -56,13 +56,13 @@ ANTHROPIC_API_KEY=...
 
 ## 3. Run gateway mode (optional)
 
-If you want Slack Socket Mode and/or Telegram on the gateway:
+If you want Slack Socket Mode, Telegram, Discord, and/or Buzz on the gateway:
 
 ```bash
 docker run --rm -e MODE=gateway --env-file .env opensre:latest
 ```
 
-You'll need the usual LLM vars plus Slack and/or Telegram tokens. Details: [Deployment](/deployment) and [Messaging](/messaging).
+You'll need the usual LLM vars plus the matching messaging tokens. Details: [Deployment](/deployment) and [Messaging](/messaging).
 
 ## Prefer the CLI instead?
 

@@ -16,7 +16,7 @@ from typing import Any, Literal
 from rich.console import Console
 
 from core.agent_harness.prompts.grounding import DefaultPromptContextProvider
-from core.agent_harness.session import InMemorySessionStorage
+from core.agent_harness.session import InMemorySessionStore
 from core.agent_harness.tools.tool_provider import DefaultToolProvider
 from core.agent_harness.turns.default_reasoning_client import DefaultReasoningClientProvider
 from core.agent_harness.turns.gather_ports import GatherPorts
@@ -26,6 +26,7 @@ from core.agent_harness.turns.headless_dispatch import (
     NoopTurnAccounting,
 )
 from core.agent_harness.turns.turn_results import TurnResult
+from core.domain.types.tools import ToolSurface
 from core.llm.types import AgentLLMResponse, ToolCall
 from core.tool_framework.registered_tool import RegisteredTool
 from gateway.core.runtime.turn_handler import GatewayTurnHandler
@@ -227,7 +228,7 @@ def console() -> Console:
 
 
 def fresh_session(*, integrations: dict[str, Any] | None = None) -> Session:
-    session = Session(storage=InMemorySessionStorage())
+    session = Session(store=InMemorySessionStore())
     session.resolved_integrations_cache = dict(integrations or {})
     return session
 
@@ -254,11 +255,11 @@ def wire_tool_registry(monkeypatch: Any, tools: list[RegisteredTool]) -> None:
     by_name = {tool.name: tool for tool in tools}
 
     class _FixedToolRegistry:
-        def tools_for_surface(self, surface: str) -> list[RegisteredTool]:
+        def tools_for_surface(self, surface: ToolSurface) -> list[RegisteredTool]:
             del surface
             return list(tools)
 
-        def tool_map_for_surface(self, surface: str) -> dict[str, RegisteredTool]:
+        def tool_map_for_surface(self, surface: ToolSurface) -> dict[str, RegisteredTool]:
             del surface
             return dict(by_name)
 

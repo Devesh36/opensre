@@ -37,7 +37,7 @@ def _extract_no_params(_sources: dict[str, dict]) -> dict[str, Any]:
     return {}
 
 
-def _normalize_surfaces(surfaces: Iterable[str] | None) -> tuple[ToolSurface, ...]:
+def _normalize_surfaces(surfaces: Iterable[ToolSurface] | None) -> tuple[ToolSurface, ...]:
     """Backward-compatible alias for registry surface normalization."""
     return normalize_surfaces(surfaces)
 
@@ -53,11 +53,9 @@ class RegisteredTool:
     run: Callable[..., Any] = field(repr=False)
     display_name: str | None = None
     source_id: str | None = None
-    # ``... | str`` keeps plain wire values accepted from callers; the
-    # ``ToolMetadata`` round-trip in ``__post_init__`` coerces them to members.
-    evidence_type: EvidenceType | str | None = None
-    side_effect_level: SideEffectLevel | str | None = None
-    surfaces: tuple[ToolSurface | str, ...] = _DEFAULT_SURFACES
+    evidence_type: EvidenceType | None = None
+    side_effect_level: SideEffectLevel | None = None
+    surfaces: tuple[ToolSurface, ...] = _DEFAULT_SURFACES
     use_cases: list[str] = field(default_factory=list)
     examples: list[str] = field(default_factory=list)
     anti_examples: list[str] = field(default_factory=list)
@@ -208,7 +206,7 @@ class RegisteredTool:
         cls,
         tool: BaseTool,
         *,
-        surfaces: Iterable[str] | None = None,
+        surfaces: Iterable[ToolSurface] | None = None,
         retrieval_controls: RetrievalControls | None = None,
         tags: tuple[str, ...] | None = None,
         requires_approval: bool | None = None,
@@ -290,9 +288,9 @@ class RegisteredTool:
         input_model: type[BaseModel] | None = None,
         source: EvidenceSource | None,
         source_id: str | None = None,
-        evidence_type: EvidenceType | str | None = None,
-        side_effect_level: SideEffectLevel | str | None = None,
-        surfaces: Iterable[str] | None = None,
+        evidence_type: EvidenceType | None = None,
+        side_effect_level: SideEffectLevel | None = None,
+        surfaces: Iterable[ToolSurface] | None = None,
         use_cases: list[str] | None = None,
         examples: list[str] | None = None,
         anti_examples: list[str] | None = None,

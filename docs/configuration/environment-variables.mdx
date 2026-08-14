@@ -5,6 +5,25 @@ description: Every OpenSRE setting you can put in the environment or a .env file
 
 All configuration options for OpenSRE can be set via environment variables. This page provides a complete reference.
 
+## Secret storage
+
+Environment variables are checked before OpenSRE's local stores. For credentials
+entered through `opensre onboard` or `opensre integrations setup`, writes to the
+system keychain are opt-in. Without `OPENSRE_USE_KEYRING`, OpenSRE writes the
+credential to an owner-only fallback file under `~/.opensre/`, which keeps the
+first-run path working without an OS keychain prompt.
+
+Set `OPENSRE_USE_KEYRING=1` before onboarding to prefer the system keychain:
+
+```bash
+OPENSRE_USE_KEYRING=1 opensre onboard
+```
+
+If the keychain cannot store the credential, OpenSRE falls back to the same
+owner-only local file. A value supplied in the process environment or a local
+`.env` file takes precedence when reading credentials. Keep `.env` out of source
+control and never commit real secrets.
+
 ## LLM providers
 
 | Variable | Default | Description |
@@ -279,16 +298,30 @@ All configuration options for OpenSRE can be set via environment variables. This
 
   </Accordion>
 
+  <Accordion title="Custom endpoints">
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `CUSTOM_OPENAI_BASE_URL` |  | Base URL for an OpenAI-compatible gateway |
+| `CUSTOM_OPENAI_API_KEY` |  | API key for `custom-openai` |
+| `CUSTOM_OPENAI_MODEL` |  | Shared model for all `custom-openai` roles |
+| `CUSTOM_OPENAI_TOOLCALL_MODEL` |  | Optional toolcall-model override |
+| `CUSTOM_ANTHROPIC_BASE_URL` |  | Base URL for an Anthropic-compatible gateway |
+| `CUSTOM_ANTHROPIC_API_KEY` |  | API key for `custom-anthropic` |
+| `CUSTOM_ANTHROPIC_MODEL` |  | Shared model for all `custom-anthropic` roles |
+
+
+  </Accordion>
+
 </AccordionGroup>
 
 ## Output & Debugging
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `TRACER_VERBOSE` | `0` | Verbose output for tracer (`1`, `true`, `yes`) |
-| `TRACER_OUTPUT_FORMAT` |  | Output format for tracer results |
-| `TRACER_API_URL` |  | API URL for tracer reports |
-| `JWT_TOKEN` |  | Tracer JWT for hosted / web integrations |
+| `TRACER_VERBOSE` | `0` | Verbose OpenSRE CLI/UI output (`1`, `true`, `yes`) |
+| `TRACER_OUTPUT_FORMAT` |  | OpenSRE result output format |
+| `TRACER_API_URL` |  | Base URL for the tracer observability integration / report delivery |
 | `NO_COLOR` |  | Disable colored output (standard convention) |
 | `COLUMNS` | `80` | Terminal column width for output formatting |
 | `ENV` | `development` | Environment (`development`, `production`) |
@@ -316,6 +349,7 @@ Headless Linux, SSH on EC2, Docker, and CI often have no keychain. A macOS Keych
 | `OPENSRE_DISABLE_KEYRING` | `0` | Disable local credential storage; credentials must come from the environment |
 | `OPENSRE_USE_KEYRING` | `0` | Opt-in keyring writes (`1` to store new secrets in the OS keyring) |
 | `OPENSRE_LLM_AUTH_METADATA_PATH` | `~/.opensre/llm-auth.json` | Non-secret LLM auth metadata path used by prompt-safe status checks |
+| `OPENSRE_API_KEY` |  | API key for remote OpenSRE instances |
 | `DBUS_SESSION_BUS_ADDRESS` |  | D-Bus socket address (Linux keyring) |
 
 ## Telemetry & Monitoring
@@ -332,6 +366,9 @@ Headless Linux, SSH on EC2, Docker, and CI often have no keychain. A macOS Keych
 | `OPENSRE_PROMPT_LOG_LOCAL_DISABLED` | `0` | Disable local prompt log file |
 | `OPENSRE_PROMPT_LOG_REDACT` | `1` | Redact known token shapes from prompts/responses before local or PostHog logging |
 | `OPENSRE_PROMPT_LOG_PATH` | `~/.opensre/prompt_log.jsonl` | Path to local prompt log file |
+| `OPENSRE_OPERATIONS_LOG_DISABLED` | `0` | Disable the local operations log |
+| `OPENSRE_OPERATIONS_LOG_PATH` | `~/.opensre/operations_log.jsonl` | Path to the local operations log |
+| `OPENSRE_OPERATIONS_LOG_MAX_BYTES` | `5242880` | Rotate the local operations log after this many bytes |
 | `DO_NOT_TRACK` | `0` | Honor global do-not-track preference |
 | `SENTRY_TRACES_SAMPLE_RATE` | `1.0` | Trace sampling rate for Sentry |
 | `SENTRY_ERROR_SAMPLE_RATE` | `1.0` | Error sampling rate for Sentry |
@@ -340,6 +377,8 @@ Headless Linux, SSH on EC2, Docker, and CI often have no keychain. A macOS Keych
 
 | Variable | Default | Description |
 | --- | --- | --- |
+| `INVESTIGATIONS_DIR` | `~/.opensre/investigations` | Directory for saved investigations |
+| `OPENSRE_HOME` | `~/.opensre` | Root directory for local OpenSRE state |
 | `OPENSRE_PROJECT_ENV_PATH` | `PROJECT_ROOT/.env` | Path to project-level `.env` file |
 | `OPENSRE_WIZARD_STORE_PATH` | `~/.opensre/opensre.json` | Path to the local wizard/provider selection store |
 | `OPENSRE_CONTEXT_ROOT` |  | Override OpenSRE home/context root |
@@ -362,11 +401,12 @@ Mirror conversation history and memory to a user-owned object store. Details: [R
 | Variable | Default | Description |
 | --- | --- | --- |
 | `OPENSRE_REMOTE_SYNC` |  | Enable remote sync (`1`/`true`) |
-| `OPENSRE_REMOTE_SYNC_PROVIDER` | `aws` | Store backend (`aws` or `vercel`) |
+| `OPENSRE_REMOTE_SYNC_PROVIDER` | `aws` | Store backend (`aws`, `gcs`, `vercel`, `azure`, or `s3compat`) |
 | `OPENSRE_REMOTE_SYNC_BUCKET` |  | Bucket / Blob store name (required when sync is on) |
 | `OPENSRE_REMOTE_SYNC_PREFIX` | `opensre` | Key prefix inside the store |
 | `OPENSRE_REMOTE_SYNC_REGION` |  | Region override |
 | `OPENSRE_REMOTE_SYNC_PROFILE` |  | Named credentials profile |
+| `OPENSRE_REMOTE_SYNC_ENDPOINT_URL` |  | Custom S3 endpoint when provider is `s3compat` |
 | `OPENSRE_REMOTE_SYNC_EXCLUDE` |  | Comma-separated globs to exclude from sync |
 | `OPENSRE_REMOTE_SYNC_EXCLUDE_OFF` |  | Ignore configured exclusions for one run |
 | `BLOB_READ_WRITE_TOKEN` |  | Vercel Blob token (when provider is `vercel`) |
@@ -446,6 +486,9 @@ Mirror conversation history and memory to a user-owned object store. Details: [R
 | `POSTHOG_PERSONAL_API_KEY` |  | PostHog personal API key |
 | `POSTHOG_BASE_URL` | `https://us.i.posthog.com` | PostHog API instance base URL |
 | `POSTHOG_TIMEOUT_SECONDS` | `15.0` | Timeout in seconds for PostHog API requests |
+| `NEW_RELIC_API_KEY` |  | New Relic User key (`NRAK-...`) |
+| `NEW_RELIC_ACCOUNT_ID` |  | New Relic account ID |
+| `NEW_RELIC_API_URL` | `https://api.newrelic.com` | New Relic API URL (EU/JP endpoints supported) |
 
 
   </Accordion>
@@ -481,6 +524,13 @@ Mirror conversation history and memory to a user-owned object store. Details: [R
 | `ARGOCD_PROJECT` |  | Argo CD project |
 | `ARGOCD_APP_NAMESPACE` |  | Argo CD app namespace |
 | `ARGOCD_VERIFY_SSL` | `true` | Verify Argo CD TLS |
+| `YC_FOLDER_ID` |  | Yandex Cloud folder ID |
+| `YC_CLOUD_ID` |  | Yandex Cloud cloud ID |
+| `YC_SA_KEY_FILE` |  | Path to a Yandex Cloud service-account key JSON file |
+| `YC_SA_KEY` |  | Yandex Cloud service-account key, inline |
+| `YC_TOKEN` |  | Yandex Cloud OAuth token |
+| `YC_IAM_TOKEN` |  | Yandex Cloud IAM token |
+| `YC_USE_METADATA` |  | Use the Yandex Cloud VM metadata service (`true`) |
 
 
   </Accordion>
@@ -492,6 +542,10 @@ Mirror conversation history and memory to a user-owned object store. Details: [R
 | `SLACK_WEBHOOK_URL` |  | Slack incoming webhook URL |
 | `SLACK_BOT_TOKEN` |  | Slack bot token |
 | `SLACK_APP_TOKEN` |  | Slack app-level token (Socket Mode) |
+| `SLACK_GATEWAY_INBOUND_TRANSPORT` | `socket_mode` | How Slack delivers events: `socket_mode` or `events_api_http` |
+| `SLACK_SIGNING_SECRET` |  | Request-signature secret. Required for `events_api_http` |
+| `SLACK_GATEWAY_HTTP_PORT` | `3000` | Port the `events_api_http` listener binds |
+| `SLACK_GATEWAY_ALLOW_LOCAL_DEDUP` |  | Accept process-local event dedup when `DATABASE_URL` is unset. Single replica only |
 | `SLACK_ALLOWED_USERS` |  | Comma-separated Slack user IDs allowed to talk to the bot |
 | `SLACK_ALLOW_OPEN_WORKSPACE` |  | Allow any workspace user (`1` for dogfood) |
 | `SLACK_ACCESS_TOKEN` |  | Slack user token |
@@ -563,6 +617,7 @@ Mirror conversation history and memory to a user-owned object store. Details: [R
 | `OPSGENIE_REGION` | `us` | Opsgenie region (us/eu) |
 | `VERCEL_API_TOKEN` |  | Vercel API token |
 | `VERCEL_TEAM_ID` |  | Vercel team ID |
+| `VERCEL_POLL_PROJECT_IDS` |  | Project IDs for Vercel polling (CSV) |
 | `VERCEL_RUNTIME_LOGS_READ_TIMEOUT` |  | Timeout for Vercel runtime log reads |
 | `GOOGLE_CREDENTIALS_FILE` |  | Path to Google service-account JSON for Docs export |
 | `GOOGLE_DRIVE_FOLDER_ID` |  | Google Drive folder for Docs export |

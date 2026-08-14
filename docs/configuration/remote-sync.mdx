@@ -53,11 +53,12 @@ A bucket name alone does nothing — you must also set `OPENSRE_REMOTE_SYNC=1` (
 | Variable | What it does |
 | --- | --- |
 | `OPENSRE_REMOTE_SYNC` | `1` / `true` turns sync on |
-| `OPENSRE_REMOTE_SYNC_PROVIDER` | `aws` (default), `gcs`, `vercel`, or `azure` |
+| `OPENSRE_REMOTE_SYNC_PROVIDER` | `aws` (default), `gcs`, `vercel`, `azure`, or `s3compat` |
 | `OPENSRE_REMOTE_SYNC_BUCKET` | Bucket, container, or Blob store name (required when on) |
 | `OPENSRE_REMOTE_SYNC_PREFIX` | Key prefix (default `opensre`). Same prefix = shared history |
 | `OPENSRE_REMOTE_SYNC_REGION` | AWS region (AWS only) |
 | `OPENSRE_REMOTE_SYNC_PROFILE` | AWS profile name, or Azure storage account name when `provider=azure` |
+| `OPENSRE_REMOTE_SYNC_ENDPOINT_URL` | Custom S3 endpoint when `provider=s3compat` (MinIO / R2 / Spaces) |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob token (Vercel only) |
 | `OPENSRE_REMOTE_SYNC_EXCLUDE` | Comma-separated paths to skip (see below) |
 | `OPENSRE_REMOTE_SYNC_EXCLUDE_OFF` | `1` ignores exclusions for one run |
@@ -90,6 +91,8 @@ Remote sync is for a **personal machine**. Org-bound Slack/Discord turns are ref
 **Vercel Blob** — private store. Set `BLOB_READ_WRITE_TOKEN`. `OPENSRE_REMOTE_SYNC_BUCKET` is the store name/id for status.
 
 **Azure Blob Storage** — private container. Set `OPENSRE_REMOTE_SYNC_PROVIDER=azure`, `OPENSRE_REMOTE_SYNC_BUCKET` to the container name, and `OPENSRE_REMOTE_SYNC_PROFILE` to the storage account name. Auth uses ambient Azure credentials (`az login`, Managed Identity, or `AZURE_*`). The principal needs **Storage Blob Data Contributor** on the account (plain Contributor is not enough).
+
+**S3-compatible (MinIO / R2 / Spaces)** — set `OPENSRE_REMOTE_SYNC_PROVIDER=s3compat` and `OPENSRE_REMOTE_SYNC_ENDPOINT_URL` to the custom endpoint (or `AWS_ENDPOINT_URL_S3`). Path-style addressing is enabled for MinIO. Use the same ambient S3 credentials as AWS.
 
 ## Skip some paths
 
