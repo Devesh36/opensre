@@ -157,7 +157,7 @@ in chat.
 | Incoming webhook | Omit `--chat-id` — the webhook URL is bound to one channel |
 | Bot token (Socket Mode) | Set `SLACK_DEFAULT_CHAT_ID` (or pass `--chat-id` / `/loops add --slack-chat-id`) |
 
-Copy the channel id (`C…`) from Slack channel details. During `opensre integrations setup slack` (Socket Mode or Both), you can persist a default channel id for scheduled delivery.
+Copy the channel id (`C…`) from Slack channel details. During `opensre integrations setup slack` (Socket Mode or Both), you can persist a default channel id for scheduled delivery. The default channel is taken from the same place as the bot token: if the token is in `.env`, set `SLACK_DEFAULT_CHAT_ID` there too. A channel saved only in the integration store is not paired with an env or task-level token.
 
 **Sentry morning digest** (unresolved issues → Slack):
 

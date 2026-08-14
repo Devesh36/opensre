@@ -334,7 +334,9 @@ def _resolve_slack_delivery_chat_id(
 
     When a webhook is configured it is channel-bound, so an implicit default
     channel must not be applied on top — that would force the bot-token path
-    while credentials resolve to webhook-only.
+    while credentials resolve to webhook-only. Implicit bot-token defaults
+    come from :func:`resolve_slack_default_chat_id`, which pairs the channel
+    with the same credential source as the token.
     """
     explicit = task.params.get(LOOP_SLACK_CHAT_ID_PARAM, "").strip() or (
         (task.chat_id or "").strip() if task.provider == Provider.SLACK else ""

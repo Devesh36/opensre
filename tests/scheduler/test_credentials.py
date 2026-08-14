@@ -22,6 +22,16 @@ _ROCKETCHAT_ENV_VARS = (
 )
 
 
+def _stub_slack_store(monkeypatch: pytest.MonkeyPatch, mapping: dict[str, str]) -> None:
+    def _get(service: str, key: str) -> str:
+        if service != "slack":
+            return ""
+        return mapping.get(key, "")
+
+    monkeypatch.setattr("platform.scheduler.credentials._get_integration_credential", _get)
+    monkeypatch.delenv("SLACK_WEBHOOK_URL", raising=False)
+
+
 class TestTelegramCredentials:
     def test_from_params(self) -> None:
         creds = resolve_telegram_credentials({"bot_token": "from_params"})
@@ -175,6 +185,16 @@ class TestSlackCredentials:
         creds = resolve_slack_credentials({})
         assert creds == {"access_token": "xoxb-from-env"}
 
+    def test_store_bot_token_maps_to_access_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _stub_slack_store(monkeypatch, {"bot_token": "xoxb-from-store"})
+        monkeypatch.delenv("SLACK_WEBHOOK_URL", raising=False)
+        monkeypatch.setattr(
+            "platform.scheduler.credentials.resolve_env_credential",
+            lambda *_args, **_kwargs: "",
+        )
+        creds = resolve_slack_credentials({})
+        assert creds == {"access_token": "xoxb-from-store"}
+
 
 class TestSlackDefaultChatId:
     def test_from_params_chat_id(self) -> None:
@@ -184,28 +204,65 @@ class TestSlackDefaultChatId:
         assert resolve_slack_default_chat_id({LOOP_SLACK_CHAT_ID_PARAM: "C222"}) == "C222"
 
     def test_from_integration_store(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            "platform.scheduler.credentials._get_integration_credential",
-            lambda service, key: "C333" if service == "slack" and key == "default_chat_id" else "",
-        )
+        _stub_slack_store(monkeypatch, {"bot_token": "xoxb-store", "default_chat_id": "C333"})
         monkeypatch.delenv("SLACK_DEFAULT_CHAT_ID", raising=False)
+        monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+        monkeypatch.setattr(
+            "platform.scheduler.credentials.resolve_env_credential",
+            lambda *_args, **_kwargs: "",
+        )
         assert resolve_slack_default_chat_id({}) == "C333"
 
     def test_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            "platform.scheduler.credentials._get_integration_credential",
-            lambda *_: "",
-        )
+        _stub_slack_store(monkeypatch, {})
         monkeypatch.setenv("SLACK_DEFAULT_CHAT_ID", "C444")
+        monkeypatch.setattr(
+            "platform.scheduler.credentials.resolve_env_credential",
+            lambda name, **_kwargs: "xoxb-env" if name == "SLACK_BOT_TOKEN" else "",
+        )
         assert resolve_slack_default_chat_id({}) == "C444"
 
     def test_empty_when_nothing_configured(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            "platform.scheduler.credentials._get_integration_credential",
-            lambda *_: "",
-        )
+        _stub_slack_store(monkeypatch, {})
         monkeypatch.delenv("SLACK_DEFAULT_CHAT_ID", raising=False)
+        monkeypatch.setattr(
+            "platform.scheduler.credentials.resolve_env_credential",
+            lambda *_args, **_kwargs: "",
+        )
         assert resolve_slack_default_chat_id({}) == ""
+
+    def test_store_channel_not_paired_with_env_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _stub_slack_store(monkeypatch, {"default_chat_id": "C-store"})
+        monkeypatch.delenv("SLACK_DEFAULT_CHAT_ID", raising=False)
+        monkeypatch.setattr(
+            "platform.scheduler.credentials.resolve_env_credential",
+            lambda name, **_kwargs: "xoxb-env" if name == "SLACK_BOT_TOKEN" else "",
+        )
+        assert resolve_slack_default_chat_id({}) == ""
+
+    def test_store_channel_not_paired_with_task_token(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _stub_slack_store(monkeypatch, {"default_chat_id": "C-store"})
+        monkeypatch.setenv("SLACK_DEFAULT_CHAT_ID", "C-env")
+        assert resolve_slack_default_chat_id({"access_token": "xoxb-params"}) == ""
+
+    def test_env_channel_not_paired_with_store_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _stub_slack_store(monkeypatch, {"bot_token": "xoxb-store"})
+        monkeypatch.setenv("SLACK_DEFAULT_CHAT_ID", "C-env")
+        monkeypatch.setattr(
+            "platform.scheduler.credentials.resolve_env_credential",
+            lambda name, **_kwargs: "xoxb-env" if name == "SLACK_BOT_TOKEN" else "",
+        )
+        assert resolve_slack_default_chat_id({}) == ""
+
+    def test_explicit_chat_id_wins_over_mismatched_sources(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _stub_slack_store(monkeypatch, {"default_chat_id": "C-store"})
+        monkeypatch.setenv("SLACK_DEFAULT_CHAT_ID", "C-env")
+        params = {"access_token": "xoxb-params", "chat_id": "C-explicit"}
+        assert resolve_slack_default_chat_id(params) == "C-explicit"
 
 
 class TestRequiresExplicitChatId:
