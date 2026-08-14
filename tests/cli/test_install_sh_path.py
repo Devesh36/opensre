@@ -933,8 +933,10 @@ def _run_ensure_buzz_cli(
     env_exports = " ".join(
         f"{key}={shlex.quote(value)}" for key, value in (env_extra or {}).items()
     )
+    # Extract functions AND the BUZZ_CLI_PINNED_* global constants
     script = textwrap.dedent(f"""\
         eval "$(awk '
+            /^BUZZ_CLI_PINNED_/ {{ print }}
             /^[a-z_][a-z_]*\\(\\)/ {{ in_fn=1 }}
             in_fn {{ print }}
             in_fn && /^\\}}$/ {{ in_fn=0 }}
@@ -945,18 +947,25 @@ def _run_ensure_buzz_cli(
     return subprocess.run(["bash", "-c", script], capture_output=True, text=True)
 
 
-def _write_stub_git(bin_dir: Path, *, succeed: bool) -> None:
+def _write_stub_git(
+    bin_dir: Path, *, succeed: bool, sha: str = "4a977c588a540be38bd8ddb268cd24437bac8165"
+) -> None:
     git = bin_dir / "git"
     if succeed:
         # git clone --depth 1 --branch <tag> <url> <dest>
         # $1=clone $2=--depth $3=1 $4=--branch $5=tag $6=url $7=dest
+        # git -C <dir> rev-parse HEAD -> returns the pinned SHA
         git.write_text(
             textwrap.dedent(
-                """\
+                f"""\
                 #!/bin/sh
                 if [ "$1" = "clone" ]; then
                   dest="$7"
                   mkdir -p "$dest/crates/buzz-cli"
+                  exit 0
+                fi
+                if [ "$1" = "-C" ] && [ "$3" = "rev-parse" ]; then
+                  echo "{sha}"
                   exit 0
                 fi
                 exit 1
@@ -1064,3 +1073,20 @@ def test_ensure_buzz_cli_mktemp_failure_does_not_fail_install(tmp_path: Path) ->
     assert result.returncode == 0, result.stderr
     assert "Could not create temporary directory" in result.stderr
     assert "github.com/block/buzz" in result.stderr
+
+
+def test_ensure_buzz_cli_sha_mismatch_aborts_install(tmp_path: Path) -> None:
+    """Security test: SHA mismatch must abort cargo install and warn about integrity."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    # Use a wrong SHA to simulate a compromised or force-pushed tag
+    _write_stub_git(bin_dir, succeed=True, sha="0000000000000000000000000000000000000000")
+    _write_stub_cargo(bin_dir, succeed=True)
+
+    result = _run_ensure_buzz_cli(path_dirs=[bin_dir])
+    assert result.returncode == 0, result.stderr
+    assert "integrity check failed" in result.stderr
+    assert "Expected commit" in result.stderr
+    assert "Aborting automatic install" in result.stderr
+    # Cargo should NOT have been called since we abort before that
+    assert "Installed Buzz CLI" not in result.stdout

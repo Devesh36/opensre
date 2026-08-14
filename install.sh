@@ -564,9 +564,11 @@ buzz_cli_manual_install_hint() {
   warn "  cargo install --path crates/buzz-cli"
 }
 
-# Pinned tag for reproducible, auditable builds. Update after verifying new releases.
-# See https://github.com/block/buzz/releases for available tags.
+# Pinned tag and commit SHA for reproducible, auditable, immutable builds.
+# The SHA ensures we build exactly the code we verified, even if the tag is force-pushed.
+# Update both after verifying new releases at https://github.com/block/buzz/releases.
 BUZZ_CLI_PINNED_TAG="v0.5.0"
+BUZZ_CLI_PINNED_SHA="4a977c588a540be38bd8ddb268cd24437bac8165"
 
 ensure_buzz_cli() {
   # Soft dependency for Buzz integration. Never fails the OpenSRE install.
@@ -599,6 +601,18 @@ ensure_buzz_cli() {
   fi
 
   if git clone --depth 1 --branch "$BUZZ_CLI_PINNED_TAG" https://github.com/block/buzz.git "$buzz_clone_dir"; then
+    # Verify the cloned commit matches the expected SHA for immutable source identity.
+    local actual_sha=""
+    actual_sha="$(git -C "$buzz_clone_dir" rev-parse HEAD 2>/dev/null || true)"
+    if [ "$actual_sha" != "$BUZZ_CLI_PINNED_SHA" ]; then
+      warn "Buzz CLI source integrity check failed."
+      warn "Expected commit $BUZZ_CLI_PINNED_SHA but got $actual_sha."
+      warn "The upstream tag may have been modified. Aborting automatic install."
+      buzz_cli_manual_install_hint
+      rm -rf "$buzz_clone_dir" 2>/dev/null || true
+      return 0
+    fi
+
     if cargo install --path "${buzz_clone_dir}/crates/buzz-cli"; then
       success "Installed Buzz CLI (buzz) via cargo"
       if ! command -v buzz >/dev/null 2>&1; then

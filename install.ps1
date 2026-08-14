@@ -974,9 +974,11 @@ function Write-OpenSreBuzzCliManualInstallHint {
     Write-Warning "  cargo install --path crates/buzz-cli"
 }
 
-# Pinned tag for reproducible, auditable builds. Update after verifying new releases.
-# See https://github.com/block/buzz/releases for available tags.
+# Pinned tag and commit SHA for reproducible, auditable, immutable builds.
+# The SHA ensures we build exactly the code we verified, even if the tag is force-pushed.
+# Update both after verifying new releases at https://github.com/block/buzz/releases.
 $script:BuzzCliPinnedTag = "v0.5.0"
+$script:BuzzCliPinnedSha = "4a977c588a540be38bd8ddb268cd24437bac8165"
 
 function Ensure-OpenSreBuzzCli {
     # Soft dependency for Buzz integration. Never fails the OpenSRE install.
@@ -1016,6 +1018,16 @@ function Ensure-OpenSreBuzzCli {
         & git clone --depth 1 --branch $script:BuzzCliPinnedTag https://github.com/block/buzz.git $buzzCloneDir
         if ($LASTEXITCODE -ne 0) {
             Write-Warning "Failed to clone https://github.com/block/buzz (tag $script:BuzzCliPinnedTag) for buzz-cli install."
+            Write-OpenSreBuzzCliManualInstallHint
+            return
+        }
+
+        # Verify the cloned commit matches the expected SHA for immutable source identity.
+        $actualSha = & git -C $buzzCloneDir rev-parse HEAD 2>$null
+        if ($actualSha -ne $script:BuzzCliPinnedSha) {
+            Write-Warning "Buzz CLI source integrity check failed."
+            Write-Warning "Expected commit $script:BuzzCliPinnedSha but got $actualSha."
+            Write-Warning "The upstream tag may have been modified. Aborting automatic install."
             Write-OpenSreBuzzCliManualInstallHint
             return
         }
