@@ -948,12 +948,14 @@ def _run_ensure_buzz_cli(
 def _write_stub_git(bin_dir: Path, *, succeed: bool) -> None:
     git = bin_dir / "git"
     if succeed:
+        # git clone --depth 1 --branch <tag> <url> <dest>
+        # $1=clone $2=--depth $3=1 $4=--branch $5=tag $6=url $7=dest
         git.write_text(
             textwrap.dedent(
                 """\
                 #!/bin/sh
                 if [ "$1" = "clone" ]; then
-                  dest="$5"
+                  dest="$7"
                   mkdir -p "$dest/crates/buzz-cli"
                   exit 0
                 fi
@@ -1042,4 +1044,23 @@ def test_ensure_buzz_cli_stubbed_cargo_failure_does_not_fail_install(tmp_path: P
     result = _run_ensure_buzz_cli(path_dirs=[bin_dir])
     assert result.returncode == 0, result.stderr
     assert "cargo install of buzz-cli failed" in result.stderr
+    assert "github.com/block/buzz" in result.stderr
+
+
+def test_ensure_buzz_cli_mktemp_failure_does_not_fail_install(tmp_path: Path) -> None:
+    """Regression test: mktemp failure must not exit under set -e."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_stub_git(bin_dir, succeed=True)
+    _write_stub_cargo(bin_dir, succeed=True)
+
+    # Use a non-existent directory as TMPDIR to force mktemp to fail
+    nonexistent_tmpdir = tmp_path / "nonexistent-tmpdir-for-test"
+
+    result = _run_ensure_buzz_cli(
+        path_dirs=[bin_dir],
+        env_extra={"TMPDIR": str(nonexistent_tmpdir)},
+    )
+    assert result.returncode == 0, result.stderr
+    assert "Could not create temporary directory" in result.stderr
     assert "github.com/block/buzz" in result.stderr

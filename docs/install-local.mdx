@@ -48,7 +48,7 @@ The curl installer also soft-installs the [GitHub CLI](https://cli.github.com/) 
 curl -fsSL https://install.opensre.com | OPENSRE_SKIP_GH_INSTALL=1 bash
 ```
 
-The same installers also soft-install the Buzz CLI (`buzz`) when `cargo` and `git` are already on `PATH` — a shallow clone of [block/buzz](https://github.com/block/buzz) plus `cargo install --path crates/buzz-cli`. This step is optional and the compile can take a few minutes. Skip it with:
+The same installers also soft-install the Buzz CLI (`buzz`) when `cargo` and `git` are already on `PATH` — a shallow clone of [block/buzz](https://github.com/block/buzz) at a pinned release tag plus `cargo install --path crates/buzz-cli`. This step is optional and the compile can take a few minutes. Skip it with:
 
 ```bash
 curl -fsSL https://install.opensre.com | OPENSRE_SKIP_BUZZ_INSTALL=1 bash

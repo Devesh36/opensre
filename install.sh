@@ -560,9 +560,13 @@ skip_buzz_cli_install() {
 
 buzz_cli_manual_install_hint() {
   warn "Install the Buzz CLI manually from https://github.com/block/buzz:"
-  warn "  git clone https://github.com/block/buzz.git && cd buzz"
+  warn "  git clone --branch v0.5.0 https://github.com/block/buzz.git && cd buzz"
   warn "  cargo install --path crates/buzz-cli"
 }
+
+# Pinned tag for reproducible, auditable builds. Update after verifying new releases.
+# See https://github.com/block/buzz/releases for available tags.
+BUZZ_CLI_PINNED_TAG="v0.5.0"
 
 ensure_buzz_cli() {
   # Soft dependency for Buzz integration. Never fails the OpenSRE install.
@@ -588,9 +592,13 @@ ensure_buzz_cli() {
   step "Installing Buzz CLI (buzz) for OpenSRE Buzz integration (optional; cargo build may take a few minutes)"
 
   local buzz_clone_dir=""
-  buzz_clone_dir="$(mktemp -d "${TMPDIR:-/tmp}/opensre-buzz-clone.XXXXXX")"
+  if ! buzz_clone_dir="$(mktemp -d "${TMPDIR:-/tmp}/opensre-buzz-clone.XXXXXX" 2>/dev/null)"; then
+    warn "Could not create temporary directory for Buzz CLI clone."
+    buzz_cli_manual_install_hint
+    return 0
+  fi
 
-  if git clone --depth 1 https://github.com/block/buzz.git "$buzz_clone_dir"; then
+  if git clone --depth 1 --branch "$BUZZ_CLI_PINNED_TAG" https://github.com/block/buzz.git "$buzz_clone_dir"; then
     if cargo install --path "${buzz_clone_dir}/crates/buzz-cli"; then
       success "Installed Buzz CLI (buzz) via cargo"
       if ! command -v buzz >/dev/null 2>&1; then
@@ -602,11 +610,11 @@ ensure_buzz_cli() {
       buzz_cli_manual_install_hint
     fi
   else
-    warn "Failed to clone https://github.com/block/buzz for buzz-cli install."
+    warn "Failed to clone https://github.com/block/buzz (tag $BUZZ_CLI_PINNED_TAG) for buzz-cli install."
     buzz_cli_manual_install_hint
   fi
 
-  rm -rf "$buzz_clone_dir"
+  rm -rf "$buzz_clone_dir" 2>/dev/null || true
 }
 
 require_prerequisites() {

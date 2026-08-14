@@ -330,6 +330,8 @@ def test_install_sh_source_exposes_env_knobs() -> None:
         "launch_onboarding_after_install",
         "ensure_github_cli",
         "ensure_buzz_cli",
+        "BUZZ_CLI_PINNED_TAG",
+        "--branch",
     ):
         assert needle in source, f"install.sh missing {needle!r}"
 
@@ -352,6 +354,8 @@ def test_install_ps1_source_exposes_all_windows_install_knobs() -> None:
         'else { "main" }',
         "main-build",
         "$exe onboard",
+        "$script:BuzzCliPinnedTag",
+        "--branch",
     ):
         assert needle in source, f"install.ps1 missing {needle!r}"
 

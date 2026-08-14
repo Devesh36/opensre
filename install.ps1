@@ -970,9 +970,13 @@ function Ensure-OpenSreGithubCli {
 
 function Write-OpenSreBuzzCliManualInstallHint {
     Write-Warning "Install the Buzz CLI manually from https://github.com/block/buzz:"
-    Write-Warning "  git clone https://github.com/block/buzz.git; cd buzz"
+    Write-Warning "  git clone --branch v0.5.0 https://github.com/block/buzz.git; cd buzz"
     Write-Warning "  cargo install --path crates/buzz-cli"
 }
+
+# Pinned tag for reproducible, auditable builds. Update after verifying new releases.
+# See https://github.com/block/buzz/releases for available tags.
+$script:BuzzCliPinnedTag = "v0.5.0"
 
 function Ensure-OpenSreBuzzCli {
     # Soft dependency for Buzz integration. Never fails the OpenSRE install.
@@ -997,13 +1001,21 @@ function Ensure-OpenSreBuzzCli {
 
     Write-OpenSreLine -Message "Installing Buzz CLI (buzz) for OpenSRE Buzz integration (optional; cargo build may take a few minutes)" -Color "Cyan"
 
-    $buzzCloneDir = Join-Path ([System.IO.Path]::GetTempPath()) ("opensre-buzz-clone-" + [System.Guid]::NewGuid().ToString("N"))
-    New-Item -ItemType Directory -Path $buzzCloneDir -Force | Out-Null
+    $buzzCloneDir = $null
+    try {
+        $buzzCloneDir = Join-Path ([System.IO.Path]::GetTempPath()) ("opensre-buzz-clone-" + [System.Guid]::NewGuid().ToString("N"))
+        New-Item -ItemType Directory -Path $buzzCloneDir -Force | Out-Null
+    }
+    catch {
+        Write-Warning "Could not create temporary directory for Buzz CLI clone."
+        Write-OpenSreBuzzCliManualInstallHint
+        return
+    }
 
     try {
-        & git clone --depth 1 https://github.com/block/buzz.git $buzzCloneDir
+        & git clone --depth 1 --branch $script:BuzzCliPinnedTag https://github.com/block/buzz.git $buzzCloneDir
         if ($LASTEXITCODE -ne 0) {
-            Write-Warning "Failed to clone https://github.com/block/buzz for buzz-cli install."
+            Write-Warning "Failed to clone https://github.com/block/buzz (tag $script:BuzzCliPinnedTag) for buzz-cli install."
             Write-OpenSreBuzzCliManualInstallHint
             return
         }
@@ -1023,7 +1035,7 @@ function Ensure-OpenSreBuzzCli {
         }
     }
     finally {
-        if (Test-Path -LiteralPath $buzzCloneDir) {
+        if ($buzzCloneDir -and (Test-Path -LiteralPath $buzzCloneDir)) {
             Remove-Item -LiteralPath $buzzCloneDir -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
