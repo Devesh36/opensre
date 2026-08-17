@@ -16,6 +16,157 @@ When you type `/` and browse with the arrow keys, the hint line above the prompt
   Commands marked **elevated** may ask for confirmation unless trust mode is on (`/trust on`). Outside a TTY, elevated actions are blocked.
 </Info>
 
+## How the REPL works
+
+| Input type | What happens |
+| --- | --- |
+| Slash command (`/status`) | Routed through the action agent and executed via `slash_invoke` |
+| Plain language (`verify datadog`) | Routed by the action agent to slash commands, investigations, or doc-grounded answers |
+| Pasted alert JSON/text | Often starts an investigation without a slash command |
+| Shell one-liner (`kubectl get pods`) | Executed through shell policy when the action agent selects a shell action |
+
+**TTY vs non-TTY:** Interactive menus, confirmations, and onboarding wizards need a real terminal. Piping input or running in CI is non-interactive — prefer explicit CLI commands outside the REPL for automation.
+
+**Unknown commands:** Typos suggest the closest registered command (`Did you mean /integrations?`). Run `/help` for the authoritative list — it always matches your installed OpenSRE version.
+
+**Keyboard shortcuts:**
+
+| Key | Effect |
+| --- | --- |
+| **Up/Down** | Recall persisted command history (when enabled); during `/` completion browse, preview the highlighted command description in the hint line above the prompt |
+| **Ctrl+C** once | Cancel in-flight streaming work or interrupt the current prompt |
+| **Ctrl+C** twice within 2s | Exit the REPL (prints `/resume` hint) |
+| **Ctrl+D** | Exit when the prompt is empty (same resume hint as `/exit`) |
+
+When you first launch the shell with no scheduled loops, a picker offers three starter loops (CI/CD, task management, daily brief). Escape skips; the picker returns on the next launch until a loop exists. See [Scheduled deliveries](/cron).
+
+## Quick reference
+
+### Help and exit
+
+| Command | What it does |
+| --- | --- |
+| `/help` | List commands or show help for one command or category |
+| `/?` | Shortcut for `/help` |
+| `/exit` | Leave the interactive shell |
+| `/quit` | Alias for `/exit` |
+
+### Session
+
+| Command | What it does |
+| --- | --- |
+| `/status` | Session summary — interactions, alerts, provider, effort, trust mode |
+| `/cost` | Token usage and LLM call count for the current session |
+| `/context` | Infra metadata accumulated during the session |
+| `/effort` | Set or show reasoning effort (`low` … `max`) |
+| `/trust` | Enable or disable trust mode (skip confirmation prompts) |
+| `/verbose` | Toggle verbose logging |
+| `/clear` | Clear the screen and re-render the banner |
+| `/compact` | Summarize older context into a replayable compaction entry |
+| `/sessions` | List recent REPL sessions on disk |
+| `/resume <id>` | Restore a past session's conversation context |
+| `/resume <id>:<entry>` | Restore a specific session branch point |
+| `/new` | Start a new session file while keeping LLM context |
+
+### Investigation
+
+| Command | What it does |
+| --- | --- |
+| `/investigate` | Run an RCA from a file path or sample template |
+| `/template` | Print a starter alert JSON template |
+| `/last` | Reprint the most recent investigation report |
+| `/save <path>` | Export the last investigation to a file **elevated** |
+
+### Integrations, models, and tools
+
+| Command | What it does |
+| --- | --- |
+| `/health` | Integration and agent health check |
+| `/verify` | Verify integration connectivity (all or one service) |
+| `/integrations` | List, verify, show, setup, or remove integrations |
+| `/mcp` | List, connect, or disconnect MCP servers |
+| `/model` | Show or switch LLM provider and models |
+| `/tools` | List registered investigation and chat tools |
+
+### Privacy and history
+
+| Command | What it does |
+| --- | --- |
+| `/history` | Show or manage persisted command history |
+| `/privacy` | History persistence, redaction status, and threat model |
+
+### Tasks and background work
+
+| Command | What it does |
+| --- | --- |
+| `/background` | Run investigations async; track RCAs and completion notifications |
+| `/loops` | List, create, run once, and debug recurring prompt loops |
+| `/tasks` | List recent and in-flight background tasks |
+| `/work` | List, add, complete, and prioritize human work items |
+| `/cancel <id>` | Cancel a running task by id **elevated** |
+| `/stop` | Guidance for stopping investigations and background work |
+
+### Watchdog
+
+| Command | What it does |
+| --- | --- |
+| `/watch` | Watch a process and send threshold alarms via Telegram or Rocket.Chat **elevated** |
+| `/watches` | List active watchdog tasks with latest samples |
+| `/unwatch <id>` | Stop a watchdog task by id **elevated** |
+| `/watchdog` | CLI-parity wrapper for the watchdog monitor |
+
+### Agents and alerts
+
+| Command | What it does |
+| --- | --- |
+| `/fleet` | View and manage the local AI agent fleet |
+| `/alerts` | Alert listener inbox status |
+
+### CLI parity
+
+These commands delegate to the same Click CLI you would run outside the REPL.
+
+| Command | What it does |
+| --- | --- |
+| `/auth` | Log in to LLM providers, show provider auth status, or clear credentials |
+| `/login` | Shortcut for `/auth login` (`/login chatgpt`, `/login claude`, `/login deepseek`) |
+| `/onboard` | Interactive onboarding wizard |
+| `/remote` | Connect to and operate remote deployed agents |
+| `/remote-sync` | Manage remote sync to your object store. Subcommands: `status`, `sync`, `setup`. See [Sync to your own object store](/configuration/remote-sync). |
+| `/config` | Show or edit `~/.opensre/config.yml` |
+| `/cron` | Manage scheduled delivery jobs |
+| `/sentry` | Schedule automated Sentry morning digests or uptime watches (Telegram or Slack required) |
+| `/messaging` | Telegram pairing and allowlist |
+| `/hermes` | Hermes log tailing and incident escalation |
+| `/guardrails` | Sensitive-information guardrail rules |
+| `/tests` | Browse and run inventoried tests |
+| `/update` | Check for updates and upgrade OpenSRE |
+| `/debug` | Targeted runtime diagnostics |
+| `/uninstall` | Remove OpenSRE and local data **elevated** |
+
+### System
+
+| Command | What it does |
+| --- | --- |
+| `/doctor` | Full local environment diagnostic |
+| `/version` | OpenSRE, Python, and OS versions |
+
+### Commands with interactive menus (TTY)
+
+Bare invocation opens a picker or submenu:
+
+| Command | Menu behavior |
+| --- | --- |
+| `/help` | Browse categories; Enter runs the selected command |
+| `/integrations` | list / verify / show / setup / remove |
+| `/mcp` | list / connect / disconnect |
+| `/model` | show / set / restore / toolcall |
+| `/investigate` | Demo alerts, templates, custom file path |
+| `/template` | Template type picker |
+| `/trust`, `/verbose` | on / off |
+| `/history` | show / clear / off / on / retention |
+| `/resume` | Numbered list of recent sessions |
+
 ## Commands
 
 ### Help
@@ -858,6 +1009,33 @@ If the listener is inactive, prints a warning. Incoming alerts also appear in `/
 These spawn `opensre …` subprocesses. Output is captured into the REPL buffer for non-interactive subcommands; wizards attach to the real TTY.
 
 <AccordionGroup>
+<Accordion title="/auth">
+
+```text
+/auth
+/auth status
+/auth login deepseek
+/auth logout deepseek
+/auth verify anthropic
+```
+
+Log in to LLM providers, show local auth status, or clear stored credentials. Same as `opensre auth`. Interactive login prompts on the real TTY.
+
+</Accordion>
+
+<Accordion title="/login">
+
+```text
+/login
+/login chatgpt
+/login claude
+/login deepseek
+```
+
+Shortcut for `/auth login`. Same provider flows as `opensre auth login`.
+
+</Accordion>
+
 <Accordion title="/onboard">
 
 ```text
@@ -865,7 +1043,7 @@ These spawn `opensre …` subprocesses. Output is captured into the REPL buffer 
 /onboard local_llm
 ```
 
-First-run setup: LLM keys, integrations, Telegram, alert listener. Requires exclusive stdin — the REPL tears down prompt_toolkit before the wizard runs.
+First-run setup: LLM keys, integrations, Telegram, alert listener. A blank LLM key defers provider setup instead of blocking the wizard. Requires exclusive stdin — the REPL tears down prompt_toolkit before the wizard runs.
 
 </Accordion>
 
@@ -880,6 +1058,20 @@ First-run setup: LLM keys, integrations, Telegram, alert listener. Requires excl
 ```
 
 Operate remote deployed OpenSRE agents (EC2, Nitro, hosted runtime). See [Remote runtime investigation](/remote-runtime-investigation).
+
+</Accordion>
+
+<Accordion title="/remote-sync">
+
+```text
+/remote-sync
+/remote-sync status
+/remote-sync sync
+/remote-sync sync --dry-run
+/remote-sync setup --provider aws --bucket my-opensre-bucket
+```
+
+Copy sessions and memory to an object store you own (S3, GCS, Azure, Vercel Blob, or S3-compatible). Credentials and API keys stay local. See [Sync to your own object store](/configuration/remote-sync).
 
 </Accordion>
 
@@ -1168,6 +1360,8 @@ Compound requests ("health then integrations") execute as an ordered sequence of
 /model show
 ```
 
+If you skip onboarding's LLM key, later turns that need a model point you at `/auth login` instead of a raw provider error. On first launch with no scheduled loops, the shell offers three starter loops — Escape skips. See [Scheduled deliveries](/cron).
+
 ### Incident triage (local)
 
 ```text
@@ -1250,3 +1444,4 @@ Continue chatting, then optionally:
 - [Cron](/cron) — `/cron` scheduled deliveries
 - [Hermes](/hermes) — `/hermes watch`
 - [Remote runtime investigation](/remote-runtime-investigation) — `/remote`
+- [Sync to your own object store](/configuration/remote-sync) — `/remote-sync`

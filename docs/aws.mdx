@@ -12,7 +12,7 @@ Related AWS tool pages (same credentials, no separate setup): [EC2](/ec2), [ELB]
 ## Prerequisites
 
 - AWS account with IAM permissions
-- Either a role ARN (recommended) or static access keys
+- Either a role ARN (recommended) or static access keys. A role ARN is *assumed* using your ambient AWS credentials — environment keys, an `aws configure` profile, or an attached instance/task role — so one of those must exist on the machine running OpenSRE
 
 ## Setup
 
@@ -22,7 +22,10 @@ Related AWS tool pages (same credentials, no separate setup): [EC2](/ec2), [ELB]
 opensre integrations setup aws
 ```
 
-Provide a role ARN or static access keys when prompted.
+Provide a role ARN or static access keys when prompted. If you pick a role
+and this machine has no base AWS credentials, setup offers to switch to
+access keys, pause so you can run `aws configure`, or continue anyway
+(for EC2/ECS/Lambda with an attached role).
 
 ### Option 2: Environment variables (IAM role)
 
@@ -52,6 +55,9 @@ AWS_REGION=us-east-1
 
 <Info>
 Either `AWS_ROLE_ARN` or `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` is required.
+`AWS_ROLE_ARN` alone is not enough on a laptop: the role is assumed with whatever
+credentials boto3 finds (env keys, `~/.aws/credentials`, or an instance/task role), and
+that identity needs `sts:AssumeRole` on the role.
 </Info>
 
 For multiple AWS accounts or regions, use [multi-instance](/multi-instance-integrations) with `AWS_INSTANCES`.
@@ -169,6 +175,7 @@ Inside the REPL: `/integrations verify aws` or `/verify aws`. Aliases such as `e
 
 | Symptom | Fix |
 | --- | --- |
+| **Unable to locate credentials** (role ARN setup) | You chose IAM Role ARN but nothing on this machine has base AWS credentials. The setup wizard detects this when you pick the role option and offers to switch to Access Key + Secret, or to pause while you run `aws configure` / export `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` for an identity allowed to assume the role. If you set `AWS_ROLE_ARN` by hand instead of through the wizard, provide one of those base credentials |
 | **AccessDenied on STS** | Ensure the caller has `sts:AssumeRole` permission on the target role |
 | **InvalidClientTokenId** | Check that `AWS_ACCESS_KEY_ID` is correct and the key is active |
 | **Could not connect to endpoint** | Check `AWS_REGION` and network connectivity |

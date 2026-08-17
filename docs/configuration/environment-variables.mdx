@@ -7,22 +7,20 @@ All configuration options for OpenSRE can be set via environment variables. This
 
 ## Secret storage
 
-Environment variables are checked before OpenSRE's local stores. For credentials
-entered through `opensre onboard` or `opensre integrations setup`, writes to the
-system keychain are opt-in. Without `OPENSRE_USE_KEYRING`, OpenSRE writes the
-credential to an owner-only fallback file under `~/.opensre/`, which keeps the
-first-run path working without an OS keychain prompt.
+Environment variables are checked first. Credentials you enter through
+`opensre onboard` or `opensre integrations setup` are written to an
+owner-only file at `~/.opensre/credentials.json` (mode `0600`). OpenSRE
+does not write new secrets to the OS keychain, so first-run setup does
+not trigger a keychain prompt.
 
-Set `OPENSRE_USE_KEYRING=1` before onboarding to prefer the system keychain:
+A value in the process environment or a local `.env` file wins over the
+local file. Keep `.env` out of source control and never commit real secrets.
 
-```bash
-OPENSRE_USE_KEYRING=1 opensre onboard
-```
+Secrets stored in the OS keychain by an earlier OpenSRE version are copied
+into that local file once, then the keychain copies are removed.
 
-If the keychain cannot store the credential, OpenSRE falls back to the same
-owner-only local file. A value supplied in the process environment or a local
-`.env` file takes precedence when reading credentials. Keep `.env` out of source
-control and never commit real secrets.
+Want credentials only from the environment, never on disk? Set
+`OPENSRE_DISABLE_KEYRING=1` and export everything yourself.
 
 ## LLM providers
 
@@ -331,26 +329,19 @@ control and never commit real secrets.
 For secrets (`*_TOKEN`, `*_KEY`, `*_PASSWORD`, `*_SECRET`, and similar), OpenSRE looks in this order:
 
 1. Your process environment
-2. The OS keychain (Keychain on macOS, etc.)
-3. A local fallback file if there's no keychain (see below)
+2. The owner-only file `~/.opensre/credentials.json`
 
-`opensre onboard` often saves credentials so they still work after you clear `.env`.
+`opensre onboard` saves credentials there so they still work after you clear `.env`.
 
-**Not stored in the keychain:** webhook-style URLs such as `SLACK_WEBHOOK_URL` and `ROCKETCHAT_WEBHOOK_URL`. Those stay in env / store only — treat them as secrets and don't log them.
+**Not stored as secrets:** webhook-style URLs such as `SLACK_WEBHOOK_URL` and `ROCKETCHAT_WEBHOOK_URL`. Those stay in env / store only — treat them as secrets and don't log them.
 
 Want credentials only from the environment, never on disk? Set `OPENSRE_DISABLE_KEYRING=1` and export everything yourself.
-
-### No system keychain?
-
-Headless Linux, SSH on EC2, Docker, and CI often have no keychain. A macOS Keychain can also be locked. In those cases OpenSRE writes to `~/.opensre/credentials.json` with owner-only permissions (`0600`) and tells you. Unlock or install a keychain later and re-run setup to move secrets back into secure storage.
 
 | Variable | Default | Description |
 | --- | --- | --- |
 | `OPENSRE_DISABLE_KEYRING` | `0` | Disable local credential storage; credentials must come from the environment |
-| `OPENSRE_USE_KEYRING` | `0` | Opt-in keyring writes (`1` to store new secrets in the OS keyring) |
 | `OPENSRE_LLM_AUTH_METADATA_PATH` | `~/.opensre/llm-auth.json` | Non-secret LLM auth metadata path used by prompt-safe status checks |
 | `OPENSRE_API_KEY` |  | API key for remote OpenSRE instances |
-| `DBUS_SESSION_BUS_ADDRESS` |  | D-Bus socket address (Linux keyring) |
 
 ## Telemetry & Monitoring
 
@@ -618,7 +609,7 @@ Mirror conversation history and memory to a user-owned object store. Details: [R
 | `VERCEL_API_TOKEN` |  | Vercel API token |
 | `VERCEL_TEAM_ID` |  | Vercel team ID |
 | `VERCEL_POLL_PROJECT_IDS` |  | Project IDs for Vercel polling (CSV) |
-| `VERCEL_RUNTIME_LOGS_READ_TIMEOUT` |  | Timeout for Vercel runtime log reads |
+| `VERCEL_RUNTIME_LOGS_READ_TIMEOUT` | `600` | Seconds to wait per Vercel runtime-log read (minimum `30`) |
 | `GOOGLE_CREDENTIALS_FILE` |  | Path to Google service-account JSON for Docs export |
 | `GOOGLE_DRIVE_FOLDER_ID` |  | Google Drive folder for Docs export |
 
