@@ -140,16 +140,17 @@ uv run pytest -n auto -v \
 
 ### Boot capability warnings (`curl`, `shell`, `network`, `python` gaps)
 
-When OpenSRE boots, `boot_capability_warnings` runs lightweight runtime probes (checking system `PATH` tools and sandbox execution capabilities). If a capability is unavailable or restricted, it surfaces non-fatal boot warnings:
+Boot logs non-fatal warnings when a `PATH` tool is missing or a sandbox probe fails. Sandbox lines look like `<capability> is unavailable in this environment (probe returned unavailable) — the agent will not be able to use it.` The two network rows are **expected** on a normal machine.
 
-| Boot Warning | Root Cause | Impact | Concrete Fix / Remediation |
+| Boot warning | Cause | Impact | What to do |
 | :--- | :--- | :--- | :--- |
-| **`curl is not on PATH`** | The `curl` binary is missing from system `PATH`. | Sandboxed tools and HTTP health probes cannot run. | **macOS:** `brew install curl`<br />**Linux:** `sudo apt-get install -y curl`<br />**Windows:** `winget install cURL.cURL` |
-| **`no interactive shell (bash/sh) on PATH`** | Neither `bash` nor `sh` shell interpreter is found on `PATH`. | Subprocess execution and interactive shell actions cannot run. | **Linux:** `sudo apt-get install -y bash`<br />**macOS:** Ensure `/bin` is in `PATH`.<br />**Windows:** Install Git Bash (`winget install Git.Git`) or WSL. |
-| **`network egress is blocked for sandboxed code by default`** | Outbound network access is restricted by sandbox security policy by default. Setting `OPENSRE_ALLOW_NETWORK=1` updates the boot metadata fact, but sandbox code execution still isolates raw sockets by default. | Sandboxed scripts cannot make arbitrary outbound raw socket connections. | Set `export OPENSRE_ALLOW_NETWORK=1` (or add `OPENSRE_ALLOW_NETWORK=1` in `.env`) to update runtime metadata facts. For external communications, use configured integration clients (e.g. Datadog, Slack, Prometheus) rather than raw socket scripts in sandbox. |
-| **`python execution is unavailable in this environment`** | The sandbox probe failed to run test code via the running interpreter (`sys.executable`), or the OpenSRE temporary directory (`/tmp/opensre` or `%TEMP%\opensre`) is not writable. | Python-based tools and sandboxed script evaluation cannot run. | 1. Ensure the temporary directory is writable: `mkdir -p /tmp/opensre && chmod 700 /tmp/opensre`<br />2. Ensure the active Python environment is healthy and `sys.executable` can spawn subprocesses (`uv sync --frozen --extra dev` or `make install`). |
-| **`shell commands is unavailable in this environment`** | Sandbox cannot spawn a shell interpreter. | Shell-based investigation tools are disabled. | Ensure `bash` or `sh` is installed and has process execution permissions. |
-| **`file reading is unavailable in this environment`** | Process lacks read permission for the current working directory. | Agent cannot read local files or workspace context. | Ensure read permissions on the repository directory (`chmod -R u+r .`). |
+| **`curl is not on PATH`** | `curl` is not on `PATH`. | The agent is told not to shell out to `curl`. | **macOS:** `brew install curl`<br />**Linux:** `sudo apt-get install -y curl`<br />**Windows:** `winget install cURL.cURL` |
+| **`no interactive shell (bash/sh) on PATH`** | Neither `bash` nor `sh` is on `PATH`. | The agent is told it cannot run shell commands. | **Linux:** `sudo apt-get install -y bash`<br />**macOS:** keep `/bin` on `PATH`.<br />**Windows:** Git Bash (`winget install Git.Git`) or WSL. |
+| **`network egress is blocked for sandboxed code by default`** | Default sandbox policy blocks outbound sockets. | Sandboxed Python cannot open raw sockets. | Expected. Ignore it. Use configured integrations for outbound HTTP. Do **not** set `OPENSRE_ALLOW_NETWORK=1` — that only hides the warning. |
+| **`network requests is unavailable in this environment`** | The sandbox network probe uses the same default block. | Same as the previous row. | Expected. Same as the previous row. |
+| **`python execution is unavailable in this environment`** | The sandbox could not run a short Python snippet, often because the OpenSRE temp dir is not writable. That dir is `$TMPDIR/opensre` (macOS/Linux; `/tmp/opensre` only when `TMPDIR` is unset) or `%TEMP%\opensre` (Windows) — not always `/tmp/opensre`. | The agent is told it cannot run sandboxed Python. | **macOS/Linux:** `mkdir -p "${TMPDIR:-/tmp}/opensre" && chmod 700 "${TMPDIR:-/tmp}/opensre"`<br />**Windows:** `mkdir "%TEMP%\opensre"`<br />Then `make install` (or `uv sync --frozen --extra dev`). |
+| **`shell commands is unavailable in this environment`** | No `bash`/`sh` on `PATH` (same check as the shell row). | The agent is told it cannot run shell commands. | Same install steps as **`no interactive shell (bash/sh) on PATH`**. |
+| **`file reading is unavailable in this environment`** | The process cannot list the current working directory. | The agent is told it cannot read local files. | Run from a readable checkout (`ls .` should succeed). |
 
 ### `opensre` does not pick up local code edits
 
