@@ -212,6 +212,7 @@ from config.constants.slack import (
     SLACK_APP_TOKEN_ENV,
     SLACK_BOT_TOKEN_ENV,
     SLACK_DEFAULT_CHAT_ID_ENV,
+    SLACK_WEBHOOK_URL_ENV,
 )
 from config.constants.smtp import (
     SMTP_DEFAULT_TO_ENV,
@@ -1415,7 +1416,7 @@ def load_env_integrations() -> list[dict[str, Any]]:
             )
 
     slack_bot_token = resolve_env_credential(SLACK_BOT_TOKEN_ENV)
-    slack_webhook_url = os.getenv("SLACK_WEBHOOK_URL", "").strip()
+    slack_webhook_url = os.getenv(SLACK_WEBHOOK_URL_ENV, "").strip()
     if slack_bot_token or slack_webhook_url:
         slack_credentials = {
             "webhook_url": slack_webhook_url,
@@ -2359,11 +2360,11 @@ def resolve_effective_integrations(
             effective["slack"] = _effective_entry("local store", slack_config)
     else:
         slack_config = _slack_effective_config(
-            webhook_url=os.getenv("SLACK_WEBHOOK_URL", "").strip(),
+            webhook_url=os.getenv(SLACK_WEBHOOK_URL_ENV, "").strip(),
             bot_token=resolve_env_credential(SLACK_BOT_TOKEN_ENV),
             app_token=resolve_env_credential(SLACK_APP_TOKEN_ENV),
             default_chat_id=os.getenv(SLACK_DEFAULT_CHAT_ID_ENV, "").strip(),
-            webhook_label="SLACK_WEBHOOK_URL",
+            webhook_label=SLACK_WEBHOOK_URL_ENV,
         )
         if slack_config:
             effective["slack"] = _effective_entry("local env", slack_config)
