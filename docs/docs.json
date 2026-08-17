@@ -45,7 +45,8 @@
               "investigation-overview",
               "how-investigations-work",
               "interactive-shell-commands",
-              "interactive-shell-assistant"
+              "interactive-shell-assistant",
+              "goals"
             ]
           }
         ]
@@ -99,7 +100,8 @@
             "pages": [
               "deployment",
               "api",
-              "python-api"
+              "python-api",
+              "hosting-the-agent"
             ]
           },
           {

@@ -271,7 +271,6 @@ from integrations.config_models import (
     DatadogIntegrationConfig,
     DiscordBotConfig,
     GrafanaIntegrationConfig,
-    GroundcoverIntegrationConfig,
     HelmIntegrationConfig,
     IncidentIoIntegrationConfig,
     JiraIntegrationConfig,
@@ -301,6 +300,7 @@ from integrations.gitlab import DEFAULT_GITLAB_BASE_URL, build_gitlab_config
 from integrations.gitlab import classify as _classify_gitlab
 from integrations.grafana import classify as _classify_grafana
 from integrations.groundcover import classify as _classify_groundcover
+from integrations.groundcover.config import GroundcoverIntegrationConfig
 from integrations.helm import classify as _classify_helm
 from integrations.honeycomb import classify as _classify_honeycomb
 from integrations.honeycomb.config import HoneycombIntegrationConfig

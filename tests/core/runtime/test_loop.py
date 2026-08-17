@@ -9,6 +9,7 @@ from typing import Any, cast
 import pytest
 
 from core.agent import Agent, AgentRunResult
+from core.agent_harness.runtime import TurnBinding
 from core.agent_harness.turns.headless_dispatch import HeadlessAgent
 from core.events import (
     MessageUpdateEvent,
@@ -184,11 +185,12 @@ def test_one_headless_agent_dispatches_multiple_messages(monkeypatch: pytest.Mon
 
 
 def test_provided_accounting_is_consumed_once() -> None:
-    """Constructor accounting is take-once — hosts must rebind per message."""
+    """Bound accounting is take-once — hosts must rebind per message."""
     from core.agent_harness.turns.headless_dispatch import NoopTurnAccounting, NullToolProvider
 
     accounting = NoopTurnAccounting()
-    agent = HeadlessAgent(tools=NullToolProvider(), accounting=accounting)
+    agent = HeadlessAgent(tools=NullToolProvider())
+    agent.bind_turn(TurnBinding(accounting=accounting))
     assert agent._take_accounting("a") is accounting
     # Slot cleared so a forgotten bind_turn cannot leak the prior turn's prompt.
     assert agent._take_accounting("b") is not accounting

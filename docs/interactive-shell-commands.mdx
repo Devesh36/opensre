@@ -67,6 +67,7 @@ When you first launch the shell with no scheduled loops, a picker offers three s
 | `/resume <id>` | Restore a past session's conversation context |
 | `/resume <id>:<entry>` | Restore a specific session branch point |
 | `/new` | Start a new session file while keeping LLM context |
+| `/goal` | Set a finish line and keep working toward it across turns — see [Goals](/goals) |
 
 ### Investigation
 
@@ -449,6 +450,25 @@ new session started — conversation context carried forward.
 | `/resume` | Target session | Replaced with target | Reset for that session |
 
 Use `/new` after a long `/resume` so `/sessions` stays tidy without losing your place in the conversation.
+
+</Accordion>
+
+<Accordion title="/goal">
+
+Set a finish line and keep working toward it across turns:
+
+```text
+/goal
+/goal set How many Windows users signed up last week?
+/goal set --max-turns 4 Prefer live PostHog if connected
+/goal pause
+/goal resume
+/goal edit <updated condition>
+/goal clear
+```
+
+Bare `/goal` shows the current goal. `/goal set` starts work immediately.
+See [Goals](/goals) for the full workflow.
 
 </Accordion>
 
@@ -1436,6 +1456,7 @@ Continue chatting, then optionally:
 
 ## Related docs
 
+- [Goals](/goals) — `/goal` set, pause, resume, edit, clear
 - [Session History](/sessions) — persistence format, privacy, `/new` vs `/clear`
 - [Interactive Shell Privacy](/interactive-shell-privacy) — redaction, env vars, threat model
 - [Investigation overview](/investigation-overview) — RCA workflow, plain-language actions, CLI investigate

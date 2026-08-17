@@ -23,12 +23,12 @@ Each provider has two model roles:
 <Tabs>
   <Tab title="API keys">
 
-
 | Provider | Config | Default models |
 | --- | --- | --- |
 | Anthropic API key | `LLM_PROVIDER=anthropic`<br />`LLM_AUTH_METHOD=api_key`<br />`ANTHROPIC_API_KEY` | Reasoning: `claude-opus-4-7`<br />Toolcall: `claude-haiku-4-5-20251001` |
 | OpenAI API key | `LLM_PROVIDER=openai`<br />`LLM_AUTH_METHOD=api_key`<br />`OPENAI_API_KEY` | Reasoning: `gpt-5.4-mini`<br />Toolcall: `gpt-5.4-mini` |
 | OpenRouter | `LLM_PROVIDER=openrouter`<br />`OPENROUTER_API_KEY` | Reasoning: `openrouter/auto`<br />Toolcall: `openrouter/auto` |
+| TrustedRouter | `LLM_PROVIDER=trustedrouter`<br />`TRUSTEDROUTER_API_KEY` | Reasoning: `trustedrouter/auto`<br />Toolcall: `trustedrouter/auto` |
 | DeepSeek | `LLM_PROVIDER=deepseek`<br />`DEEPSEEK_API_KEY` | Reasoning: `deepseek-v4-pro`<br />Toolcall: `deepseek-v4-flash` |
 | Google Gemini API key | `LLM_PROVIDER=gemini`<br />`GEMINI_API_KEY` | Reasoning: `gemini-3.1-pro-preview`<br />Toolcall: `gemini-3.1-flash-lite-preview` |
 | NVIDIA NIM | `LLM_PROVIDER=nvidia`<br />`NVIDIA_API_KEY` | Reasoning: `meta/llama-3.1-405b-instruct`<br />Toolcall: `meta/llama-3.1-8b-instruct` |
@@ -92,8 +92,8 @@ Browser login, token storage, refresh, and logout are handled by the vendor
 CLI. OpenSRE runs the onboarding UI and does not store OAuth tokens itself.
 
 In the interactive shell, `/model` lists common models. Some providers also
-accept custom model IDs (OpenAI, OpenRouter, Gemini, NVIDIA, Bedrock, local
-CLIs, Ollama, and DeepSeek):
+accept custom model IDs (OpenAI, OpenRouter, TrustedRouter, Gemini, NVIDIA,
+Bedrock, local CLIs, Ollama, and DeepSeek):
 
 ```bash
 /model set openai gpt-5.6-sol
@@ -144,6 +144,7 @@ request; OpenSRE still handles schema cleanup, retries, and message replay.
 | `openai` | OpenAI SDK | `openai/<model>` | Opt-in |
 | `bedrock` | boto3 / AnthropicBedrock / Converse | `bedrock/<model-id>` | Opt-in; uses AWS credentials |
 | `openrouter` | OpenAI-compatible SDK | `openai/<model>` + OpenRouter base URL | Opt-in |
+| `trustedrouter` | OpenAI-compatible SDK | `openai/<model>` + TrustedRouter base URL | Opt-in |
 | `deepseek` | OpenAI-compatible SDK | `openai/<model>` + DeepSeek base URL | Opt-in |
 | `gemini` | OpenAI-compatible SDK | `openai/<model>` + Gemini base URL | Opt-in |
 | `nvidia` | OpenAI-compatible SDK | `openai/<model>` + NVIDIA NIM base URL | Opt-in |
@@ -351,6 +352,40 @@ export OPENROUTER_TOOLCALL_MODEL=openai/gpt-4o-mini
 OpenAI-compatible proxy. Pick any model on
 [openrouter.ai/models](https://openrouter.ai/models). Base URL:
 `https://openrouter.ai/api/v1`.
+
+</Accordion>
+
+<Accordion title="TrustedRouter">
+
+```bash
+export LLM_PROVIDER=trustedrouter
+export TRUSTEDROUTER_API_KEY=sk-tr-...
+# Optional override (single value applies to all roles if set):
+export TRUSTEDROUTER_MODEL=trustedrouter/auto
+# Or per role:
+export TRUSTEDROUTER_REASONING_MODEL=anthropic/claude-opus-4-7
+export TRUSTEDROUTER_TOOLCALL_MODEL=trustedrouter/fast
+```
+
+OpenAI-compatible proxy. Base URL: `https://api.trustedrouter.com/v1`; keys at
+[trustedrouter.com/keys](https://trustedrouter.com/keys).
+
+Model ids are namespaced (`anthropic/claude-opus-4-7`, `openai/gpt-5.4-mini`) —
+a bare `gpt-5.4-mini` is rejected. Ids under `trustedrouter/` are routing
+policies rather than single models: each picks an upstream per request and
+fails over if it is down.
+
+| Route | Picks for |
+| --- | --- |
+| `trustedrouter/auto` | Capability, with failover (default) |
+| `trustedrouter/fast` | Latency |
+| `trustedrouter/cheap` | Cost |
+| `trustedrouter/zdr` | Providers that retain no data |
+| `trustedrouter/e2e` | Confidential-compute providers |
+| `trustedrouter/eu` | EU-hosted providers |
+
+The full catalog is at
+[api.trustedrouter.com/v1/models](https://api.trustedrouter.com/v1/models).
 
 </Accordion>
 
