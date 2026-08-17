@@ -5011,9 +5011,9 @@ def test_credential_line_for_saved_summary_ollama_host_verified() -> None:
     )
 
 
-@pytest.mark.parametrize("stale_mode", ["aha", "banana", ""])
+@pytest.mark.parametrize("stale_mode", ["aha", "focused", "banana", ""])
 def test_run_wizard_falls_back_when_saved_mode_is_not_offered(monkeypatch, stale_mode) -> None:
-    """A saved mode that is no longer offered must default to 'focused'.
+    """A saved mode that is no longer offered must default to 'quickstart'.
 
     Saved defaults outlive the modes they name — a value persisted by an older
     build, or a mode removed in a refactor, must not be passed to the chooser as
@@ -5040,7 +5040,7 @@ def test_run_wizard_falls_back_when_saved_mode_is_not_offered(monkeypatch, stale
         flow.run_wizard()
 
     # Assert
-    assert seen["default"] == "focused"
+    assert seen["default"] == "quickstart"
 
 
 def test_run_wizard_blank_llm_key_defers_setup_instead_of_ending(monkeypatch, tmp_path) -> None:
