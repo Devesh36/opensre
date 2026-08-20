@@ -50,6 +50,7 @@ from core.agent_harness.turns.headless_adapters import (
     StaticReasoningClientProvider,
 )
 from core.agent_harness.turns.headless_agent import HeadlessAgent
+from platform.harness_ports import get_subprocess_presenter_factory
 
 if TYPE_CHECKING:
     from core.agent_harness.session.session_core import SessionCore
@@ -145,8 +146,18 @@ class DefaultHeadlessBuild:
         )
 
     def tools(self) -> ToolProvider:
-        """A bare :class:`DefaultToolProvider`; hosts pass their own configured one to :meth:`agent`."""
-        return DefaultToolProvider(self.session, self._console, tool_action_logger=self._logger)
+        """A bare :class:`DefaultToolProvider`; hosts pass their own configured one to :meth:`agent`.
+
+        The presenter factory is the one registered at process boot so
+        ``shell_run`` can execute. A host that wants a different presenter
+        passes its own :class:`DefaultToolProvider`.
+        """
+        return DefaultToolProvider(
+            self.session,
+            self._console,
+            tool_action_logger=self._logger,
+            subprocess_presenter_factory=get_subprocess_presenter_factory(),
+        )
 
     def prompts(self) -> PromptContextProvider:
         if self.surface is not None:
