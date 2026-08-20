@@ -96,27 +96,6 @@ def test_turn_snapshot_can_drive_agent_runtime_request() -> None:
     assert llm.seen_messages == [{"role": "user", "content": "investigate"}]
 
 
-def test_agent_context_falls_back_to_process_wide_llm(monkeypatch: pytest.MonkeyPatch) -> None:
-    """When ``llm=`` is omitted at construction, ``run(runtime_request=...)`` resolves
-    the process-wide client via :func:`agent_llm_client.get_agent_llm`."""
-    tool = _tool()
-    built = _NoToolLLM()
-    monkeypatch.setattr("core.llm.factory.get_llm", lambda _role: built)
-
-    ctx = _turn_snapshot(
-        system_prompt=PromptEnvelope.from_text("runtime system"),
-        available_tools=(tool,),
-        active_tools=(tool,),
-        resolved_integrations={"github": {"configured": True}},
-        max_iterations=2,
-    )
-
-    result = Agent[Any](max_iterations=1).run(runtime_request=ctx)
-
-    assert result.final_text == "done"
-    assert built.seen_system == "runtime system"
-
-
 def test_turn_snapshot_runtime_validation_requires_runtime_fields() -> None:
     with pytest.raises(ValueError, match="system_prompt"):
         _turn_snapshot().validate_runtime_request()

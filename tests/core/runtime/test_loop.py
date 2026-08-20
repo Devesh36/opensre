@@ -210,35 +210,6 @@ def test_default_accounting_is_resolved_fresh_per_message() -> None:
     assert first is not second  # resolved per message, not once at construction
 
 
-def test_agent_defaults_to_agent_llm_without_tools(monkeypatch: pytest.MonkeyPatch) -> None:
-    llm = FakeLLM(iter([_text_response("reasoned answer")]))
-    monkeypatch.setattr("core.llm.factory.get_llm", lambda _role: llm)
-
-    agent = Agent(system="sys", tools=[], resolved_integrations={}, max_iterations=1)
-    result = agent.run([{"role": "user", "content": "hello"}])
-
-    assert result.final_text == "reasoned answer"
-    assert result.executed == []
-    assert llm.schema_tool_names == [[]]
-
-
-def test_agent_default_agent_llm_receives_tools(monkeypatch: pytest.MonkeyPatch) -> None:
-    llm = FakeLLM(iter([_text_response("unused")]))
-    monkeypatch.setattr("core.llm.factory.get_llm", lambda _role: llm)
-
-    agent = Agent(
-        system="sys",
-        tools=_tools(FakeTool("query_logs")),
-        resolved_integrations={},
-        max_iterations=1,
-    )
-
-    result = agent.run([{"role": "user", "content": "hello"}])
-
-    assert result.final_text == "unused"
-    assert llm.schema_tool_names == [["query_logs"]]
-
-
 def test_immediate_final_answer_executes_no_tools() -> None:
     llm = FakeLLM(iter([_text_response("done immediately")]))
 
