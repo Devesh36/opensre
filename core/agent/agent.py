@@ -22,7 +22,6 @@ from core.agent.provider_hooks import ProviderHookDelegate
 from core.agent.react_loop import run_react_loop
 from core.agent.run_io import AgentRunInput, AgentRunResult
 from core.events import RuntimeEventCallback, TupleEventCallback
-from core.execution import ToolExecutionHooks
 from core.llm.types import AgentLLMClient
 from core.messages import ProviderMessage, RuntimeMessage, RuntimeMessageLike
 from core.provider import ProviderHooks, ProviderRequest
