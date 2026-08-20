@@ -26,7 +26,8 @@ from core.execution import ToolExecutionHooks
 from core.llm.types import AgentLLMClient
 from core.messages import ProviderMessage, RuntimeMessage, RuntimeMessageLike
 from core.provider import ProviderHooks, ProviderRequest
-from core.types import RuntimeTool
+from core.tool.contracts import RuntimeTool
+from core.tool.execution import ToolExecutionHooks
 
 if TYPE_CHECKING:
     from core.agent.goals import Goal
