@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from rich.markup import escape
@@ -30,10 +31,12 @@ class DefaultReasoningClientProvider:
     def __init__(
         self,
         *,
+        client_factory: Callable[[], Any],
         output: OutputSink | None = None,
         error_reporter: ErrorReporter | None = None,
         session: Any | None = None,
     ) -> None:
+        self._client_factory = client_factory
         self._output = output
         self._error_reporter = error_reporter
         self._session = session
@@ -48,18 +51,14 @@ class DefaultReasoningClientProvider:
 
     def get(self) -> Any | None:
         try:
-            from core.llm.factory import LLMRole, get_llm
+            return self._client_factory()
         except Exception as exc:
-            self._handle_unavailable(
-                exc, context="core.agent_harness.default_reasoning_client.import"
+            context = (
+                "core.agent_harness.default_reasoning_client.import"
+                if isinstance(exc, ImportError)
+                else "core.agent_harness.default_reasoning_client.create"
             )
-            return None
-        try:
-            return get_llm(LLMRole.REASONING)
-        except Exception as exc:
-            self._handle_unavailable(
-                exc, context="core.agent_harness.default_reasoning_client.create"
-            )
+            self._handle_unavailable(exc, context=context)
             return None
 
     def _handle_unavailable(self, exc: Exception, *, context: str) -> None:

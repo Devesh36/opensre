@@ -162,6 +162,8 @@ subpackage. Default port implementations live with the concern they serve, not i
     and the neutral turn-result models.
   - `default_reasoning_client.py` — `DefaultReasoningClientProvider`, kept with the
     reasoning-client family (`stream_answer`, `StaticReasoningClientProvider`).
+    The client factory is injected at construction; `DefaultHeadlessBuild.reasoning`
+    supplies `default_reasoning_llm_factory`. `get()` swallows factory failures.
 - `tools/` — action-tool wiring over the canonical registry (`action_tools.py`,
   `tool_context.py`) and `tool_provider.py` (`DefaultToolProvider`).
 - `accounting/` — session-scoped token accounting and LLM run metadata, plus the
