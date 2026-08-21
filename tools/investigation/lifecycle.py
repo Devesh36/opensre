@@ -40,8 +40,7 @@ def run_connected_investigation(
     custom termination policy, structured-stage progression, or other
     agent-level extensions can pass a subclass instead.
     """
-    from core.agent_harness.llm_resolution import agent_llm_is_cli_backed
-    from platform.observability.errors.sentry import capture_exception
+    from core.agent_harness.runtime import agent_llm_is_cli_backed
     from infrastructure.observability.errors.sentry import capture_exception
     from tools.investigation.reporting import deliver
     from tools.investigation.stages.diagnose import diagnose

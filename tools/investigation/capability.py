@@ -306,7 +306,7 @@ async def astream_investigation(
     def _run_pipeline() -> None:
         state = initial
         try:
-            from core.agent_harness.llm_resolution import agent_llm_is_cli_backed
+            from core.agent_harness.runtime import agent_llm_is_cli_backed
             from core.state.updates import apply_state_updates
             from tools.investigation.reporting.node import generate_report
             from tools.investigation.stages.diagnose import diagnose

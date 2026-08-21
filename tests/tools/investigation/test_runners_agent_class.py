@@ -102,7 +102,7 @@ def test_run_connected_investigation_picks_default_policy_from_routing(cli_backe
     with (
         _stubbed_stages(),
         patch(
-            "core.agent_harness.llm_resolution.agent_llm_is_cli_backed",
+            "core.agent_harness.runtime.agent_llm_is_cli_backed",
             return_value=cli_backed,
         ),
         patch.object(
