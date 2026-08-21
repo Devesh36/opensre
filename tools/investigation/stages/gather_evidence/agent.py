@@ -10,7 +10,8 @@ from typing import Any, cast
 from config.constants.investigation import MAX_INVESTIGATION_LOOPS
 from core import RuntimeEventCallback, TupleEventCallback, execute_tools, summarise, tool_source
 from core.agent.goals import Goal, GoalObservation
-from core.agent_harness.runtime import AgentConfig, build_agent, default_llm_factory
+from core.agent_harness.agent_builder import AgentConfig, build_agent
+from core.agent_harness.llm_resolution import default_llm_factory
 from core.events import (
     AgentEndEvent,
     AgentStartEvent,
@@ -557,11 +558,9 @@ class ConnectedInvestigationAgent:
 InvestigationAgent = ConnectedInvestigationAgent
 
 
-def get_investigation_agent_class() -> type[ConnectedInvestigationAgent]:
-    """Return the investigation policy appropriate for the active agent LLM."""
-    from core.llm.transports.sdk.agent_clients import CLIBackedAgentClient
-
-    if isinstance(default_llm_factory(), CLIBackedAgentClient):
+def get_investigation_agent_class(*, cli_backed: bool) -> type[ConnectedInvestigationAgent]:
+    """Return the investigation policy for a CLI-backed vs hosted agent LLM."""
+    if cli_backed:
         return CLIBackedInvestigationAgent
     return ConnectedInvestigationAgent
 

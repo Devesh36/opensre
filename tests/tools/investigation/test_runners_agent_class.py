@@ -18,8 +18,12 @@ silently using the production default.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 from unittest.mock import patch
+
+import pytest
 
 from tools.investigation.stages.gather_evidence import ConnectedInvestigationAgent
 
@@ -48,6 +52,28 @@ def _reset_sentinel() -> None:
     _SentinelAgent.instances_constructed.clear()
 
 
+@contextmanager
+def _stubbed_stages() -> Iterator[None]:
+    """Stub every pipeline stage except the investigation agent itself."""
+    with (
+        patch(
+            "tools.investigation.stages.resolve_integrations.resolve_integrations",
+            return_value={"resolved_integrations": {}},
+        ),
+        patch(
+            "tools.investigation.stages.intake.extract_alert",
+            return_value={"is_noise": False},
+        ),
+        patch("tools.investigation.stages.plan_evidence.plan_actions", return_value={}),
+        patch(
+            "tools.investigation.reporting.upstream_correlation.node.node_correlate_upstream",
+            return_value={},
+        ),
+        patch("tools.investigation.reporting.deliver", return_value={}),
+    ):
+        yield
+
+
 def test_run_connected_investigation_uses_agent_class_when_provided() -> None:
     """The pipeline must instantiate the override class, not the default."""
     _reset_sentinel()
@@ -55,72 +81,38 @@ def test_run_connected_investigation_uses_agent_class_when_provided() -> None:
     from tools.investigation.state_factory import make_initial_state
 
     state = make_initial_state(raw_alert="alert text")
-    # Avoid running real integration/extraction; mock them to no-ops so the
-    # test focuses on the agent_class threading specifically.
-    with (
-        patch(
-            "tools.investigation.stages.resolve_integrations.resolve_integrations",
-            return_value={"resolved_integrations": {}},
-        ),
-        patch(
-            "tools.investigation.stages.intake.extract_alert",
-            return_value={"is_noise": False},
-        ),
-        patch("tools.investigation.stages.plan_evidence.plan_actions", return_value={}),
-        patch(
-            "tools.investigation.reporting.upstream_correlation.node.node_correlate_upstream",
-            return_value={},
-        ),
-        patch("tools.investigation.reporting.deliver", return_value={}),
-    ):
+    with _stubbed_stages():
         run_connected_investigation(state, agent_class=_SentinelAgent)
 
     assert len(_SentinelAgent.instances_constructed) == 1
     assert _SentinelAgent.instances_constructed[0].was_run is True
 
 
-def test_run_connected_investigation_uses_default_agent_when_class_omitted() -> None:
-    """Production behavior is unchanged: omitting ``agent_class`` constructs
-    :class:`ConnectedInvestigationAgent` (the default)."""
-    _reset_sentinel()
+@pytest.mark.parametrize("cli_backed", [False, True])
+def test_run_connected_investigation_picks_default_policy_from_routing(cli_backed: bool) -> None:
+    """Omitting ``agent_class`` selects the policy the configured transport implies."""
     from tools.investigation.lifecycle import run_connected_investigation
+    from tools.investigation.stages.gather_evidence.agent import CLIBackedInvestigationAgent
     from tools.investigation.state_factory import make_initial_state
 
     state = make_initial_state(raw_alert="alert text")
+    # Patched on the base class so an instance of the wrong policy is still
+    # recorded — the assertion is which class was constructed, not that some
+    # agent ran.
     with (
+        _stubbed_stages(),
         patch(
-            "tools.investigation.stages.resolve_integrations.resolve_integrations",
-            return_value={"resolved_integrations": {}},
+            "core.agent_harness.llm_resolution.agent_llm_is_cli_backed",
+            return_value=cli_backed,
         ),
-        patch(
-            "tools.investigation.stages.intake.extract_alert",
-            return_value={"is_noise": False},
-        ),
-        patch("tools.investigation.stages.plan_evidence.plan_actions", return_value={}),
-        # When merged with the upstream base branch, the pipeline resolves the
-        # default agent class via get_investigation_agent_class(), which calls
-        # get_agent_llm() and fails when no LLM API key is set.  Mock it to
-        # return the concrete class so the test can focus on agent_class=None
-        # threading.
-        patch(
-            "tools.investigation.stages.gather_evidence.get_investigation_agent_class",
-            return_value=ConnectedInvestigationAgent,
-        ),
-        patch(
-            "tools.investigation.stages.gather_evidence.agent.ConnectedInvestigationAgent.run",
-            return_value={},
+        patch.object(
+            ConnectedInvestigationAgent, "run", autospec=True, return_value={}
         ) as mock_run,
-        patch(
-            "tools.investigation.reporting.upstream_correlation.node.node_correlate_upstream",
-            return_value={},
-        ),
-        patch("tools.investigation.reporting.deliver", return_value={}),
     ):
         run_connected_investigation(state)  # no agent_class kwarg
 
-    # Sentinel was never used; the production class was.
-    assert _SentinelAgent.instances_constructed == []
-    assert mock_run.called
+    expected = CLIBackedInvestigationAgent if cli_backed else ConnectedInvestigationAgent
+    assert type(mock_run.call_args.args[0]) is expected
 
 
 def test_run_investigation_forwards_agent_class_to_pipeline() -> None:
@@ -132,22 +124,7 @@ def test_run_investigation_forwards_agent_class_to_pipeline() -> None:
     _reset_sentinel()
     from tools.investigation.capability import run_investigation
 
-    with (
-        patch(
-            "tools.investigation.stages.resolve_integrations.resolve_integrations",
-            return_value={"resolved_integrations": {}},
-        ),
-        patch(
-            "tools.investigation.stages.intake.extract_alert",
-            return_value={"is_noise": False},
-        ),
-        patch("tools.investigation.stages.plan_evidence.plan_actions", return_value={}),
-        patch(
-            "tools.investigation.reporting.upstream_correlation.node.node_correlate_upstream",
-            return_value={},
-        ),
-        patch("tools.investigation.reporting.deliver", return_value={}),
-    ):
+    with _stubbed_stages():
         run_investigation(raw_alert={"alert": "test"}, agent_class=_SentinelAgent)
 
     assert len(_SentinelAgent.instances_constructed) == 1, (
