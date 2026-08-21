@@ -306,7 +306,6 @@ async def astream_investigation(
     def _run_pipeline() -> None:
         state = initial
         try:
-            from core.agent_harness.runtime import agent_llm_is_cli_backed
             from core.state.updates import apply_state_updates
             from tools.investigation.reporting.node import generate_report
             from tools.investigation.stages.diagnose import diagnose
@@ -369,7 +368,7 @@ async def astream_investigation(
             )
 
             # --- investigation agent (with real tool events) ---
-            agent_class = get_investigation_agent_class(cli_backed=agent_llm_is_cli_backed())
+            agent_class = get_investigation_agent_class()
             apply_state_updates(
                 state,
                 _traced_node(

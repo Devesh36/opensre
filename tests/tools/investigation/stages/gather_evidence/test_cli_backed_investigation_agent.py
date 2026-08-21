@@ -127,3 +127,12 @@ class TestGetInvestigationAgentClass:
 
         assert get_investigation_agent_class(cli_backed=True) is CLIBackedInvestigationAgent
         assert get_investigation_agent_class(cli_backed=False) is ConnectedInvestigationAgent
+
+    def test_omitted_flag_follows_configured_routing(self, monkeypatch: Any) -> None:
+        from tools.investigation.stages.gather_evidence.agent import get_investigation_agent_class
+
+        monkeypatch.setattr(
+            "core.agent_harness.runtime.agent_llm_is_cli_backed",
+            lambda: True,
+        )
+        assert get_investigation_agent_class() is CLIBackedInvestigationAgent

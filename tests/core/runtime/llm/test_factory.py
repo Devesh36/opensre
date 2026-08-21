@@ -109,10 +109,10 @@ def test_agent_llm_is_cli_backed_reads_the_route_and_builds_no_client(
 ):
     """Transport-based policy selection must not pay for a client it may not use."""
 
-    def _fail_build(_route: LLMRoute) -> None:
+    def _fail_get_llm(*_a: object, **_k: object) -> None:
         raise AssertionError("selecting on transport must not construct an LLM client")
 
-    monkeypatch.setattr("core.llm.client_builders.build_agent_client", _fail_build)
+    monkeypatch.setattr("core.llm.factory.get_llm", _fail_get_llm)
     monkeypatch.setattr(
         "core.llm.factory.resolve_llm_route",
         lambda: LLMRoute(SimpleNamespace(), "anthropic", registration, False),
