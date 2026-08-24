@@ -9,7 +9,7 @@ from core.tool import BaseTool, SideEffectLevel
 from core.tool_framework import SUMMARIZE_OBSERVATION_TAG, tool
 from core.tool_framework.utils import tool_unavailable
 from integrations.slack.tools.slack_read_messages_tool.constants import SOURCE
-from integrations.slack.web_client import bot_token_configured, resolve_bot_token, search_messages
+from integrations.slack.web_client import resolve_bot_token, search_messages
 
 
 class SlackSearchMessagesTool(BaseTool):
@@ -18,10 +18,12 @@ class SlackSearchMessagesTool(BaseTool):
     name = "slack_search_messages"
     source = SOURCE
     description = (
-        "Search Slack *messages* workspace-wide (search.messages) using the bot token. "
-        "Use Slack search syntax (e.g. 'in:#incidents timeout', 'from:@user error'). "
-        "Requires the search:read bot scope. Not for workspace roster — use "
-        "slack_list_team_members for who is on the team / member IDs."
+        "Search Slack *messages* workspace-wide (search.messages). Slack only allows "
+        "this method with a user token (xoxp-…); it rejects bot tokens (xoxb-…) "
+        "outright with not_allowed_token_type, regardless of scopes granted. This "
+        "integration configures a bot token only, so this tool cannot currently "
+        "return results — use slack_read_messages for one known channel/thread or "
+        "slack_list_team_members for the workspace roster instead."
     )
     use_cases = [
         "Finding prior discussion of an incident keyword",
@@ -59,8 +61,15 @@ class SlackSearchMessagesTool(BaseTool):
         "error_type": "validation_error, configuration_error, or api_error",
     }
 
-    def is_available(self, sources: dict[str, Any]) -> bool:
-        return bot_token_configured(sources)
+    def is_available(self, _sources: dict[str, Any]) -> bool:
+        """Always unavailable: search.messages needs a user token this integration never has.
+
+        No bot scope makes ``search.messages`` work — Slack rejects bot tokens for
+        this method with ``not_allowed_token_type`` regardless of scopes, and
+        ``integrations/slack/setup.py`` only collects a bot token. Advertising this
+        as available would offer a capability that fails on every call.
+        """
+        return False
 
     def run(self, query: str, count: int = 20, **_kwargs: Any) -> dict[str, Any]:
         target, resolution_error = resolve_bot_token()

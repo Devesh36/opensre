@@ -9,6 +9,7 @@ import pytest
 import integrations.slack.web_client as web_client
 from integrations.slack.tools.slack_join_channel_tool import slack_join_channel
 from integrations.slack.tools.slack_search_messages_tool import slack_search_messages
+from integrations.slack.tools.slack_search_messages_tool.tool import SlackSearchMessagesTool
 
 
 class _FakeResponse:
@@ -93,6 +94,29 @@ def test_add_reaction_ok(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_search_tool_requires_query() -> None:
     result = slack_search_messages.run(query="  ")
     assert result["status"] == "failed"
+
+
+def test_search_tool_is_never_available() -> None:
+    """search.messages rejects bot tokens outright; this integration has no user
+    token, so the tool must stay hidden rather than advertise a capability that
+    always fails with not_allowed_token_type (see issue #5660).
+    """
+    assert SlackSearchMessagesTool().is_available({"slack": {"bot_token": "xoxb-x"}}) is False
+
+
+def test_search_messages_maps_not_allowed_token_type_hint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_client(
+        monkeypatch,
+        lambda **_kw: _FakeResponse({"ok": False, "error": "not_allowed_token_type"}),
+    )
+    matches, error = web_client.search_messages(
+        web_client.SlackBotTarget(bot_token="xoxb-x"), query="boom"
+    )
+    assert matches is None
+    assert "user token" in error
+    assert "bot token" in error
 
 
 def test_join_tool_metadata() -> None:

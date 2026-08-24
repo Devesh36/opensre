@@ -152,6 +152,11 @@ def _api_error_hint(error: str, *, context: str) -> str:
             "The Slack app is missing a required OAuth scope. Reinstall after adding scopes.",
         ),
         "thread_not_found": "No thread with this parent ts was found in the channel.",
+        "not_allowed_token_type": (
+            "This Slack API method does not accept a bot token (xoxb-…) — it only "
+            "accepts a user token (xoxp-…), which this integration does not "
+            "configure. No added scope or reinstall enables it with a bot token."
+        ),
     }
     return hints.get(error, f"Slack API error: {error}")
 
