@@ -152,6 +152,10 @@ def _api_error_hint(error: str, *, context: str) -> str:
             "The Slack app is missing a required OAuth scope. Reinstall after adding scopes.",
         ),
         "thread_not_found": "No thread with this parent ts was found in the channel.",
+        "not_allowed_token_type": (
+            "search.messages requires a user token (xoxp-…); bot tokens are rejected. "
+            "Use slack_read_messages on a known channel instead."
+        ),
     }
     return hints.get(error, f"Slack API error: {error}")
 
@@ -686,6 +690,8 @@ def search_messages(
     q = str(query or "").strip()
     if not q:
         return None, "query cannot be empty."
+    if not target.bot_token.startswith("xoxp-"):
+        return None, _api_error_hint("not_allowed_token_type", context="search")
     limit = max(1, min(int(count), 100))
     payload, req_err = _request_json(
         "GET",
