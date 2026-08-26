@@ -121,6 +121,10 @@ from config.constants.github import (
     GITHUB_TOKEN_ENV,
 )
 from config.constants.gitlab import GITLAB_AUTH_TOKEN_ENV, GITLAB_BASE_URL_ENV
+from config.constants.google_docs import (
+    GOOGLE_CREDENTIALS_FILE_ENV,
+    GOOGLE_DRIVE_FOLDER_ID_ENV,
+)
 from config.constants.grafana import (
     GRAFANA_CA_BUNDLE_ENV,
     GRAFANA_INSTANCE_URL_ENV,
@@ -525,6 +529,8 @@ __all__ = [
     "OPENSRE_COMMIT_COAUTHOR_TRAILER",
     "GITLAB_AUTH_TOKEN_ENV",
     "GITLAB_BASE_URL_ENV",
+    "GOOGLE_CREDENTIALS_FILE_ENV",
+    "GOOGLE_DRIVE_FOLDER_ID_ENV",
     "GRAFANA_CA_BUNDLE_ENV",
     "GRAFANA_INSTANCE_URL_ENV",
     "GRAFANA_LOKI_DATASOURCE_UID_ENV",
