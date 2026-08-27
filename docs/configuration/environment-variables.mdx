@@ -717,7 +717,7 @@ Mirror conversation history and memory to a user-owned object store. Details: [R
 | `OPENOBSERVE_MAX_RESULTS` | `100` | Max OpenObserve results |
 | `VICTORIA_LOGS_URL` |  | VictoriaLogs instance URL |
 | `VICTORIA_LOGS_TENANT_ID` |  | VictoriaLogs tenant ID |
-| `HERMES_LOG_PATH` | `~/.hermes/logs/errors.log` | Default path and path sandbox for the `get_hermes_logs` tool |
+| `HERMES_LOG_PATH` | `~/.hermes/logs/errors.log` | Default path and path sandbox for `get_hermes_logs`. When set (or when the default file exists), Hermes investigations offer that tool without a credential verifier. |
 | `OPENSRE_HERMES_INVESTIGATE` |  | Set to `1` to enable Hermes watch auto-investigation when the CLI flag is omitted |
 | `CLICKHOUSE_HOST` |  | ClickHouse host |
 | `CLICKHOUSE_PORT` | `8123` | ClickHouse port |

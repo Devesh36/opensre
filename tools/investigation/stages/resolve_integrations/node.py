@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.domain.alerts.alert_source import resolve_alert_source
 from core.state import InvestigationState
 from infrastructure.harness_providers import resolve_integrations_with_metadata
 from infrastructure.observability import get_progress_tracker as get_tracker
+from integrations.hermes import attach_hermes_log_source
 
 
 def resolve_integrations(state: InvestigationState) -> dict[str, Any]:
@@ -33,13 +35,17 @@ def _resolve(state: InvestigationState, *, emit_progress: bool) -> dict[str, Any
         tracker.start("resolve_integrations", "Fetching org integrations")
 
     result = resolve_integrations_with_metadata(state)
+    resolved = attach_hermes_log_source(
+        dict(result.resolved_integrations),
+        alert_source=resolve_alert_source(dict(state)),
+    )
     _complete_tracker(
         tracker,
         "resolve_integrations",
         fields_updated=["resolved_integrations"],
         message=result.progress_message,
     )
-    return result.resolved_integrations
+    return resolved
 
 
 def _complete_tracker(tracker: Any | None, node_name: str, **kwargs: Any) -> None:

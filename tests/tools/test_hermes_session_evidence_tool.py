@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.tool.contracts import REGISTERED_TOOL_ATTR, RegisteredTool
 from integrations.hermes.tools.hermes_session_evidence_tool import (
     get_hermes_cron_state,
     get_hermes_kv_cache_state,
@@ -72,3 +73,11 @@ def test_tools_require_backend_when_not_configured() -> None:
     result = get_hermes_session_log(session_id="")
     assert result["available"] is False
     assert "requires a Hermes backend" in str(result["error"])
+
+
+def test_session_tools_stay_unavailable_without_fixture_backend() -> None:
+    """Live Hermes log presence must not unlock the 18 fixture-only tools."""
+    registered = getattr(get_hermes_session_log, REGISTERED_TOOL_ATTR)
+    assert isinstance(registered, RegisteredTool)
+    sources = {"hermes": {"connection_verified": True, "log_path": "/tmp/errors.log"}}
+    assert registered.is_available(sources) is False

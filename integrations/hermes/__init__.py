@@ -10,6 +10,7 @@ entrypoint.
 from __future__ import annotations
 
 from integrations.hermes.agent import DEFAULT_LOG_PATH, HermesAgent, IncidentSink
+from integrations.hermes.availability import attach_hermes_log_source
 from integrations.hermes.classifier import (
     DEFAULT_TRACEBACK_FOLLOWUP_S,
     DEFAULT_WARNING_BURST_THRESHOLD,
@@ -54,6 +55,7 @@ __all__ = [
     "RouteDestination",
     "TelegramSink",
     "TelegramSinkConfig",
+    "attach_hermes_log_source",
     "build_alert_from_incident",
     "classify_all",
     "make_telegram_sink",
