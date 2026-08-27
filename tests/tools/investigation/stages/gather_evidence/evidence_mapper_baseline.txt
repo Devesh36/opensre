@@ -51,12 +51,6 @@ get_failed_jobs
 get_failed_tools
 get_github_star_history
 get_groundcover_query_reference
-get_hermes_adapter_catalog
-get_hermes_approval_events
-get_hermes_audit_trail
-get_hermes_config
-get_hermes_credential_state
-get_hermes_cron_state
 get_hermes_filesystem_state
 get_hermes_kv_cache_state
 get_hermes_logs
