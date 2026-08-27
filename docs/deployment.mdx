@@ -103,21 +103,23 @@ Complete route reference: [HTTP API](/api).
 
 ## Horizontal scale-out
 
-Run more than one gateway task to serve more concurrent conversations.
+Run **one** gateway task and leave `OPENSRE_SESSION_FILE_LOCK` off. More than
+one gateway task sharing `OPENSRE_HOME` is not supported yet. Follow
+[#5474](https://github.com/Tracer-Cloud/opensre/issues/5474) and add a second
+task only after that lands.
 
-### Required: a shared, locked session store
-
-All tasks must use the same session store — a shared mount such as an S3 Files or
-EFS volume. Turn on the cross-process lock so two tasks never corrupt one
-session's file:
+To serve more concurrent conversations today, raise in-process concurrency on
+that single task (next section). After #5474, put every task on the same
+session store — a shared mount such as S3 Files or EFS — and set:
 
 ```bash
 OPENSRE_SESSION_FILE_LOCK=1
 ```
 
-Without it, two tasks handling turns for the same conversation at the same moment
-can interleave writes and lose turns. A single-task deployment does not need it
-and should leave it off.
+Do not turn the lock on to make a multi-task fleet safe until then. Even after
+the fix, `fcntl.flock` is weak on some shared mounts (NFS, and EFS depending on
+configuration) — stay on a single task there, or use a mount that honors POSIX
+locks.
 
 ### Concurrency per task
 
@@ -161,9 +163,9 @@ that file, so a separate filesystem would leave it running a stale task set.
 
 ### Optional: conversation affinity
 
-The lock keeps N tasks correct. Affinity — routing a conversation to the same
-task each time — is a performance option: it keeps that conversation's warm agent
-in one task's memory instead of cold-rebuilding when a turn lands elsewhere.
+Skip affinity until you run more than one gateway task (after #5474). Then it is
+a performance option: it keeps a conversation's warm agent in one task's memory
+instead of cold-rebuilding when a turn lands elsewhere.
 
 Affinity is a routing concern, not an app setting:
 
@@ -171,6 +173,5 @@ Affinity is a routing concern, not an app setting:
   the conversation (Slack channel and thread) so a thread sticks to one task.
 - With the pull transports (Slack Socket Mode, Telegram, Discord), each task
   connects independently and the provider spreads events across tasks, so there
-  is no built-in affinity. The lock keeps this correct; affinity would need an
-  external dispatcher and is worth adding only when warm-agent reuse measurably
-  helps.
+  is no built-in affinity. Affinity would need an external dispatcher and is
+  worth adding only when warm-agent reuse measurably helps.
