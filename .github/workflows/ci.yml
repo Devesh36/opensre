@@ -620,6 +620,7 @@ jobs:
           ${PYTEST_COVERAGE_ARGS}
           --ignore=tests/e2e/kubernetes_local_alert_simulation
           --ignore=tests/synthetic
+          --ignore=tests/tools/selection
           ${{ matrix.extra_pytest_args }}
           ${{ matrix.split_args }}
           -m "${PYTEST_MARKER_EXPR}"

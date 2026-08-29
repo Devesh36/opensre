@@ -14,6 +14,7 @@ from config.llm_settings import (
     resolve_llm_settings,
 )
 from core.llm.factory import LLMRole, get_llm
+from core.llm.shared.llm_retry import LLMCreditExhaustedError
 from core.llm.types import SchemaDescribedTool
 from tools.registry import get_registered_tool_map
 
@@ -161,7 +162,12 @@ def test_live_tool_selection_matches_target_tool(scenario: SelectionScenario) ->
         }
     ]
 
-    response = llm.invoke(messages=messages, tools=tool_schemas)
+    response = None
+    try:
+        response = llm.invoke(messages=messages, tools=tool_schemas)
+    except LLMCreditExhaustedError as exc:
+        pytest.skip(f"Skipping live tool selection; provider credit/quota is exhausted. {exc}")
+    assert response is not None
 
     assert response.has_tool_calls, (
         f"Model did not issue a tool call for scenario {scenario.scenario_id!r}. Content: {response.content!r}"

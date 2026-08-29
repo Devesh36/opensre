@@ -36,6 +36,8 @@ _NOT_IN_PR_CI = (
     "tests/e2e/install",
     "tests/e2e/quickstart",
     "tests/e2e/kubernetes_local_alert_simulation",
+    # Opt-in live tool selection: real LLM tool-choice, not a required gate.
+    "tests/tools/selection",
 )
 
 
@@ -171,3 +173,10 @@ def test_every_test_directory_runs_in_a_shard() -> None:
         + "\n".join(f"  - {item}" for item in uncovered)
         + "\nAdd each to a shard's pytest_paths in .github/workflows/ci.yml."
     )
+
+
+def test_live_tool_selection_is_ignored_on_claimed_tools_shards() -> None:
+    """``tests/tools`` claims the live suite, so the shared ignore is load-bearing."""
+    claimed = [shard for shard in _shards() if _covers(shard.claims, "tests/tools/selection")]
+    assert claimed
+    assert all("tests/tools/selection" in shard.ignores for shard in claimed)
