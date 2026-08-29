@@ -128,6 +128,21 @@ _CASES: list[tuple[str, dict[str, Any], str, dict[str, Any]]] = [
         {"available": True, "backend": "", "backend_status": "", "fallback_active": False},
     ),
     (
+        "get_hermes_memory_state",
+        {
+            "available": True,
+            "backend": "in_process",
+            "backend_status": "degraded",
+            "last_parse_error": {
+                "error_class": "JSONDecodeError",
+                "snippet": '{ "memory": [1,2,], }',
+                "model_name": "llama.cpp",
+            },
+        },
+        "in_process, degraded, parse error JSONDecodeError (llama.cpp)",
+        {"available": True, "backend": "", "backend_status": ""},
+    ),
+    (
         "get_hermes_message_history",
         {
             "available": True,

@@ -21,6 +21,10 @@ def _mapper(source: str, label: str, summarize: _Summarize) -> EvidenceMapper:
     return map_output
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
 def _count(output: dict[str, Any], key: str) -> int:
     rows = output.get(key) or []
     return len(rows) if isinstance(rows, list) else 0
@@ -71,10 +75,9 @@ def _config(output: dict[str, Any]) -> str | None:
 
 
 def _cron(output: dict[str, Any]) -> str | None:
-    last_run = output.get("last_run")
-    status = last_run.get("delivery_status") if isinstance(last_run, dict) else None
     return _join(
-        _str(output, "schedule_cron", "schedule "), f"last delivery {status}" if status else None
+        _str(output, "schedule_cron", "schedule "),
+        _str(_as_dict(output.get("last_run")), "delivery_status", "last delivery "),
     )
 
 
@@ -105,20 +108,22 @@ def _kv_cache(output: dict[str, Any]) -> str | None:
 
 
 def _memory(output: dict[str, Any]) -> str | None:
-    parse_error = output.get("last_parse_error")
     fallback = output.get("fallback_active")
+    err = _as_dict(output.get("last_parse_error"))
+    error_class = _str(err, "error_class")
+    model = _str(err, "model_name")
+    parse = f"parse error {error_class}" + (f" ({model})" if model else "") if error_class else None
     return _join(
         _str(output, "backend"),
         _str(output, "backend_status"),
         "fallback active" if fallback else None,
         _str(output, "fallback_reason") if fallback else None,
-        f"parse error: {parse_error}" if parse_error else None,
+        parse,
     )
 
 
 def _orchestration(output: dict[str, Any]) -> str | None:
-    raw = output.get("observed")
-    observed: dict[str, Any] = raw if isinstance(raw, dict) else {}
+    observed = _as_dict(output.get("observed"))
     return _join(
         _n(output, "declared_roles", "declared role(s)"),
         _str(output, "declared_topology", "topology "),
