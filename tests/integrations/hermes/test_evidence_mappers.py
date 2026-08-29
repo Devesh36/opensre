@@ -1,26 +1,16 @@
-"""Evidence mapper tests for Hermes session-evidence tools."""
+"""Evidence mapper tests for Hermes investigation tools."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
 import pytest
 
-from integrations.hermes.tools.hermes_session_evidence_tool._evidence import (
-    map_get_hermes_adapter_catalog,
-    map_get_hermes_approval_events,
-    map_get_hermes_audit_trail,
-    map_get_hermes_config,
-    map_get_hermes_credential_state,
-    map_get_hermes_cron_state,
-)
+from integrations.hermes.tools.hermes_session_evidence_tool import _evidence as mappers
 
-_Mapper = Callable[[dict[str, Any], dict[str, Any], dict[str, Any]], None]
 _UNAVAILABLE = {"available": False, "error": "requires a Hermes backend"}
-_CASES: list[tuple[_Mapper, str, dict[str, Any], str, dict[str, Any]]] = [
+_CASES: list[tuple[str, dict[str, Any], str, dict[str, Any]]] = [
     (
-        map_get_hermes_adapter_catalog,
         "get_hermes_adapter_catalog",
         {
             "available": True,
@@ -37,7 +27,6 @@ _CASES: list[tuple[_Mapper, str, dict[str, Any], str, dict[str, Any]]] = [
         },
     ),
     (
-        map_get_hermes_approval_events,
         "get_hermes_approval_events",
         {
             "available": True,
@@ -47,7 +36,6 @@ _CASES: list[tuple[_Mapper, str, dict[str, Any], str, dict[str, Any]]] = [
         {"available": True, "events": []},
     ),
     (
-        map_get_hermes_audit_trail,
         "get_hermes_audit_trail",
         {
             "available": True,
@@ -60,7 +48,6 @@ _CASES: list[tuple[_Mapper, str, dict[str, Any], str, dict[str, Any]]] = [
         {"available": True, "events": []},
     ),
     (
-        map_get_hermes_config,
         "get_hermes_config",
         {
             "available": True,
@@ -73,7 +60,6 @@ _CASES: list[tuple[_Mapper, str, dict[str, Any], str, dict[str, Any]]] = [
         {"available": True, "provider": "", "model": "", "region": "", "providers": []},
     ),
     (
-        map_get_hermes_credential_state,
         "get_hermes_credential_state",
         {
             "available": True,
@@ -85,7 +71,6 @@ _CASES: list[tuple[_Mapper, str, dict[str, Any], str, dict[str, Any]]] = [
         {"available": True, "mode": "", "outbound_calls": []},
     ),
     (
-        map_get_hermes_cron_state,
         "get_hermes_cron_state",
         {
             "available": True,
@@ -95,13 +80,87 @@ _CASES: list[tuple[_Mapper, str, dict[str, Any], str, dict[str, Any]]] = [
         "schedule 0 */2 * * *, last delivery never_started",
         {"available": True, "schedule_cron": "", "last_run": {}},
     ),
+    (
+        "get_hermes_filesystem_state",
+        {
+            "available": True,
+            "files": [{"path": "/tmp/hermes/memory/state.json", "is_corrupted": True}],
+            "backups_present": False,
+            "vcs_present": False,
+        },
+        "1 file(s), backups absent, no VCS",
+        {"available": True, "files": []},
+    ),
+    (
+        "get_hermes_kv_cache_state",
+        {
+            "available": True,
+            "cache_hits": 14,
+            "cache_misses": 36,
+            "last_invalidated_reason": "role format drift",
+            "messages_with_cache_miss": [{"message_index": 40}, {"message_index": 41}],
+        },
+        (
+            "14 cache hit(s), 36 cache miss(es), invalidated: role format drift, "
+            "2 cache-miss message(s)"
+        ),
+        {"available": True, "last_invalidated_reason": "", "messages_with_cache_miss": []},
+    ),
+    (
+        "get_hermes_logs",
+        {
+            "records": [{"level": "ERROR", "message": "gateway crash"}],
+            "incidents": [{"rule": "error_severity", "title": "ERROR burst"}],
+        },
+        "1 record(s), 1 incident(s)",
+        {"records": [], "incidents": []},
+    ),
+    (
+        "get_hermes_memory_state",
+        {
+            "available": True,
+            "backend": "mempalace",
+            "backend_status": "unreachable",
+            "fallback_active": True,
+            "fallback_reason": "External memory backend connection failed",
+        },
+        "mempalace, unreachable, fallback active, External memory backend connection failed",
+        {"available": True, "backend": "", "backend_status": "", "fallback_active": False},
+    ),
+    (
+        "get_hermes_message_history",
+        {
+            "available": True,
+            "messages": [{"role": "system"}, {"role": "tool"}, {"role": "tool_call"}],
+        },
+        "3 message(s)",
+        {"available": True, "messages": []},
+    ),
+    (
+        "get_hermes_orchestration_state",
+        {
+            "available": True,
+            "declared_roles": [{"name": "planner"}, {"name": "worker"}, {"name": "reviewer"}],
+            "declared_topology": "planner_worker_reviewer",
+            "observed": {
+                "actual_topology": "single_agent_loop",
+                "actual_runs": [{"role": "default"}],
+            },
+        },
+        (
+            "3 declared role(s), topology planner_worker_reviewer, "
+            "observed single_agent_loop, 1 observed run(s)"
+        ),
+        {"available": True, "declared_roles": [], "declared_topology": "", "observed": {}},
+    ),
 ]
 
 
-@pytest.mark.parametrize(("mapper", "source", "output", "summary", "empty"), _CASES)
+@pytest.mark.parametrize(("source", "output", "summary", "empty"), _CASES)
 def test_mapper_records_summary(
-    mapper: _Mapper, source: str, output: dict[str, Any], summary: str, empty: dict[str, Any]
+    source: str, output: dict[str, Any], summary: str, empty: dict[str, Any]
 ) -> None:
+    mapper = mappers.MAPPERS[source]
     evidence: dict[str, Any] = {}
     mapper(evidence, output, {})
     assert evidence["catalog_entries"][0]["source"] == source
@@ -115,7 +174,7 @@ def test_mapper_records_summary(
 
 def test_credential_state_records_zero_in_memory_count() -> None:
     evidence: dict[str, Any] = {}
-    map_get_hermes_credential_state(
+    mappers.MAPPERS["get_hermes_credential_state"](
         evidence,
         {"available": True, "mode": "proxy", "in_memory_credential_count": 0, "outbound_calls": []},
         {},

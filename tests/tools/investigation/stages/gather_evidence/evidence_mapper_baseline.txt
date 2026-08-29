@@ -49,12 +49,6 @@ get_failed_jobs
 get_failed_tools
 get_github_star_history
 get_groundcover_query_reference
-get_hermes_filesystem_state
-get_hermes_kv_cache_state
-get_hermes_logs
-get_hermes_memory_state
-get_hermes_message_history
-get_hermes_orchestration_state
 get_hermes_provider_traffic
 get_hermes_rbac_state
 get_hermes_routing_decisions
