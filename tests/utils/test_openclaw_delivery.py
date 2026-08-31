@@ -31,7 +31,9 @@ def _creds(**overrides: Any) -> dict[str, Any]:
     return base
 
 
-def test_send_openclaw_report_success_creates_conversation(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_send_openclaw_report_without_conversation_id_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     calls: list[tuple[str, dict[str, Any]]] = []
 
     monkeypatch.setattr(
@@ -51,21 +53,10 @@ def test_send_openclaw_report_success_creates_conversation(monkeypatch: pytest.M
         _creds(),
     )
 
-    assert posted is True
-    assert error is None
-    assert calls == [
-        (
-            "conversations_create",
-            {
-                "title": "Checkout API error rate spike",
-                "content": (
-                    "Full RCA report\n\nRoot cause: A bad deploy introduced 5xx errors.\n\n"
-                    "Remediation steps:\n- Roll back the deploy\n- Verify health checks\n\n"
-                    "Confidence: 92%"
-                ),
-            },
-        )
-    ]
+    assert posted is False
+    assert error is not None
+    assert "conversation_id" in error.lower()
+    assert calls == []
 
 
 def test_send_openclaw_report_invalid_config_returns_false() -> None:
@@ -89,7 +80,9 @@ def test_send_openclaw_report_runtime_unavailable_returns_false(
     )
 
     posted, error = send_openclaw_report(
-        _state(), "report", _creds(mode="stdio", command="openclaw")
+        _state(channel_contexts={"openclaw": {"conversation_id": "conv-1"}}),
+        "report",
+        _creds(mode="stdio", command="openclaw"),
     )
 
     assert posted is False
@@ -109,7 +102,11 @@ def test_send_openclaw_report_tool_error_returns_false(monkeypatch: pytest.Monke
         },
     )
 
-    posted, error = send_openclaw_report(_state(), "report", _creds())
+    posted, error = send_openclaw_report(
+        _state(channel_contexts={"openclaw": {"conversation_id": "conv-1"}}),
+        "report",
+        _creds(),
+    )
 
     assert posted is False
     assert error == "route missing"
@@ -125,7 +122,11 @@ def test_send_openclaw_report_exception_returns_false(monkeypatch: pytest.Monkey
         lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
     )
 
-    posted, error = send_openclaw_report(_state(), "report", _creds())
+    posted, error = send_openclaw_report(
+        _state(channel_contexts={"openclaw": {"conversation_id": "conv-1"}}),
+        "report",
+        _creds(),
+    )
 
     assert posted is False
     assert error is not None
@@ -154,8 +155,19 @@ def test_send_openclaw_report_forwards_conversation_id(monkeypatch: pytest.Monke
 
     assert posted is True
     assert error is None
-    assert calls[0][0] == "message_send"
-    assert calls[0][1]["conversationId"] == "conv-1"
+    assert calls == [
+        (
+            "messages_send",
+            {
+                "session_key": "conv-1",
+                "text": (
+                    "report\n\nRoot cause: A bad deploy introduced 5xx errors.\n\n"
+                    "Remediation steps:\n- Roll back the deploy\n- Verify health checks\n\n"
+                    "Confidence: 92%"
+                ),
+            },
+        )
+    ]
 
 
 def test_send_openclaw_report_merges_transport_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -177,7 +189,12 @@ def test_send_openclaw_report_merges_transport_overrides(monkeypatch: pytest.Mon
     posted, error = send_openclaw_report(
         _state(
             channel_contexts={
-                "openclaw": {"mode": "stdio", "command": "openclaw", "args": ["mcp", "serve"]}
+                "openclaw": {
+                    "conversation_id": "conv-1",
+                    "mode": "stdio",
+                    "command": "openclaw",
+                    "args": ["mcp", "serve"],
+                }
             }
         ),
         "report",
