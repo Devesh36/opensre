@@ -37,7 +37,10 @@ class _OpenClawReportDeliveryAdapter:
             logger.debug("[publish] openclaw delivery: no openclaw integration configured")
             return False
 
-        from integrations.openclaw.delivery import send_openclaw_report
+        from integrations.openclaw.delivery import (
+            MISSING_CONVERSATION_ID,
+            send_openclaw_report,
+        )
 
         # ``state`` arrives as the platform-level ``DeliveryContext`` (a
         # ``Mapping``); the OpenClaw client wants the concrete
@@ -51,7 +54,7 @@ class _OpenClawReportDeliveryAdapter:
         )
         logger.debug("[publish] openclaw delivery: posted=%s error=%s", posted, error)
         if not posted:
-            if error and "conversation_id" in error.lower():
+            if error == MISSING_CONVERSATION_ID:
                 logger.debug("[publish] openclaw delivery: skipped - %s", error)
                 return False
             logger.warning("[publish] OpenClaw delivery failed: %s", error)

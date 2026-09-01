@@ -18,8 +18,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _OVERRIDABLE_KEYS = ("url", "mode", "auth_token", "command", "args", "headers", "timeout_seconds")
-_MISSING_CONVERSATION_ID = (
-    "OpenClaw write-back requires a conversation_id; creating a new conversation is not supported."
+MISSING_CONVERSATION_ID = (
+    "OpenClaw write-back requires openclaw_conversation_id; "
+    "creating a new conversation is not supported."
 )
 
 
@@ -105,7 +106,7 @@ def send_openclaw_report(
         or ""
     ).strip()
     if not conversation_id:
-        return False, _MISSING_CONVERSATION_ID
+        return False, MISSING_CONVERSATION_ID
 
     posted, error = _send_message(
         config_payload,

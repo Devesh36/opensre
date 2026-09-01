@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from integrations.openclaw.delivery import send_openclaw_report
+from integrations.openclaw.delivery import MISSING_CONVERSATION_ID, send_openclaw_report
 
 
 def _state(**overrides: Any) -> dict[str, Any]:
@@ -55,8 +55,7 @@ def test_send_openclaw_report_without_conversation_id_fails_closed(
     )
 
     assert posted is False
-    assert error is not None
-    assert "conversation_id" in error.lower()
+    assert error == MISSING_CONVERSATION_ID
     assert calls == []
 
 
@@ -270,7 +269,10 @@ def test_openclaw_adapter_returns_true_after_failed_send(
     )
     monkeypatch.setattr(
         "integrations.openclaw.delivery.call_openclaw_tool",
-        lambda *_args, **_kwargs: {"is_error": True, "text": "route missing"},
+        lambda *_args, **_kwargs: {
+            "is_error": True,
+            "text": "Unknown conversation_id 'conv-1' on this workspace.",
+        },
     )
 
     with caplog.at_level(logging.WARNING, logger="integrations.openclaw.reporting_adapter"):
