@@ -51,8 +51,8 @@ class _OpenClawReportDeliveryAdapter:
         )
         logger.debug("[publish] openclaw delivery: posted=%s error=%s", posted, error)
         if not posted:
-            logger.debug("[publish] OpenClaw delivery failed: %s", error)
-        return True
+            logger.warning("[publish] OpenClaw delivery failed: %s", error)
+        return posted
 
 
 openclaw_delivery_adapter = _OpenClawReportDeliveryAdapter()

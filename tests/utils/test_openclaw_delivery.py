@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import pytest
@@ -204,3 +205,26 @@ def test_send_openclaw_report_merges_transport_overrides(monkeypatch: pytest.Mon
     assert posted is True
     assert error is None
     assert seen_configs[0] == ("stdio", "openclaw")
+
+
+def test_openclaw_adapter_warns_when_session_is_missing(caplog: pytest.LogCaptureFixture) -> None:
+    from integrations.openclaw.reporting_adapter import openclaw_delivery_adapter
+
+    with caplog.at_level(logging.WARNING, logger="integrations.openclaw.reporting_adapter"):
+        delivered = openclaw_delivery_adapter.deliver(
+            {
+                "resolved_integrations": {
+                    "openclaw": {
+                        "mode": "streamable-http",
+                        "url": "https://openclaw.example.com/mcp",
+                        "auth_token": "tok",
+                    }
+                },
+                "channel_contexts": {"openclaw": {}},
+            },
+            messages={"slack_text": "RCA report"},
+            blocks=[],
+        )
+
+    assert delivered is False
+    assert any("OpenClaw delivery failed" in rec.getMessage() for rec in caplog.records)
