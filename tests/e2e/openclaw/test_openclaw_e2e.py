@@ -391,7 +391,7 @@ class TestOpenClawWriteBackFailure:
     def test_fixture_is_valid_json(self) -> None:
         alert = _load_fixture("write_back_failure_alert.json")
         assert alert["status"] == "firing"
-        assert "conversations_create" in alert["commonAnnotations"]["mcp_tool"]
+        assert "messages_send" in alert["commonAnnotations"]["mcp_tool"]
 
     def test_fixture_mentions_investigation_name(self) -> None:
         alert = _load_fixture("write_back_failure_alert.json")

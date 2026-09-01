@@ -134,6 +134,33 @@ def test_send_openclaw_report_exception_returns_false(monkeypatch: pytest.Monkey
     assert "boom" in error
 
 
+def test_send_openclaw_report_uses_creds_conversation_id_when_context_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    monkeypatch.setattr(
+        "integrations.openclaw.delivery.openclaw_runtime_unavailable_reason",
+        lambda _config: None,
+    )
+
+    def _fake_call(_config: Any, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        calls.append((tool_name, arguments))
+        return {"is_error": False, "tool": tool_name, "arguments": arguments}
+
+    monkeypatch.setattr("integrations.openclaw.delivery.call_openclaw_tool", _fake_call)
+
+    posted, error = send_openclaw_report(
+        _state(),
+        "report",
+        _creds(openclaw_conversation_id="conv-from-creds"),
+    )
+
+    assert posted is True
+    assert error is None
+    assert calls[0][1]["session_key"] == "conv-from-creds"
+
+
 def test_send_openclaw_report_forwards_conversation_id(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, dict[str, Any]]] = []
 
@@ -207,10 +234,10 @@ def test_send_openclaw_report_merges_transport_overrides(monkeypatch: pytest.Mon
     assert seen_configs[0] == ("stdio", "openclaw")
 
 
-def test_openclaw_adapter_warns_when_session_is_missing(caplog: pytest.LogCaptureFixture) -> None:
+def test_openclaw_adapter_skips_when_session_is_missing(caplog: pytest.LogCaptureFixture) -> None:
     from integrations.openclaw.reporting_adapter import openclaw_delivery_adapter
 
-    with caplog.at_level(logging.WARNING, logger="integrations.openclaw.reporting_adapter"):
+    with caplog.at_level(logging.DEBUG, logger="integrations.openclaw.reporting_adapter"):
         delivered = openclaw_delivery_adapter.deliver(
             {
                 "resolved_integrations": {
@@ -227,4 +254,40 @@ def test_openclaw_adapter_warns_when_session_is_missing(caplog: pytest.LogCaptur
         )
 
     assert delivered is False
+    assert any("skipped" in rec.getMessage() for rec in caplog.records)
+    assert not any("OpenClaw delivery failed" in rec.getMessage() for rec in caplog.records)
+
+
+def test_openclaw_adapter_returns_true_after_failed_send(
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from integrations.openclaw.reporting_adapter import openclaw_delivery_adapter
+
+    monkeypatch.setattr(
+        "integrations.openclaw.delivery.openclaw_runtime_unavailable_reason",
+        lambda _config: None,
+    )
+    monkeypatch.setattr(
+        "integrations.openclaw.delivery.call_openclaw_tool",
+        lambda *_args, **_kwargs: {"is_error": True, "text": "route missing"},
+    )
+
+    with caplog.at_level(logging.WARNING, logger="integrations.openclaw.reporting_adapter"):
+        delivered = openclaw_delivery_adapter.deliver(
+            {
+                "resolved_integrations": {
+                    "openclaw": {
+                        "mode": "streamable-http",
+                        "url": "https://openclaw.example.com/mcp",
+                        "auth_token": "tok",
+                    }
+                },
+                "channel_contexts": {"openclaw": {"conversation_id": "conv-1"}},
+            },
+            messages={"slack_text": "RCA report"},
+            blocks=[],
+        )
+
+    assert delivered is True
     assert any("OpenClaw delivery failed" in rec.getMessage() for rec in caplog.records)

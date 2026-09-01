@@ -98,7 +98,12 @@ def send_openclaw_report(
         return False, f"OpenClaw config invalid: {exc}"
 
     content = _report_body(state, report)
-    conversation_id = str(openclaw_context.get("conversation_id") or "").strip()
+    conversation_id = str(
+        openclaw_context.get("conversation_id")
+        or merged_creds.get("openclaw_conversation_id")
+        or merged_creds.get("conversation_id")
+        or ""
+    ).strip()
     if not conversation_id:
         return False, _MISSING_CONVERSATION_ID
 
