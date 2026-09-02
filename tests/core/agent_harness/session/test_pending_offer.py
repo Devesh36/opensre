@@ -15,6 +15,20 @@ from tools.interactive_shell.actions.propose_scheduled_delivery import (
 )
 
 
+def test_pending_recurring_skill_offer_includes_skill_flag() -> None:
+    offer = PendingScheduleOffer(
+        kind="recurring_skill",
+        skill_name="morning-report",
+        cron="0 8 * * 1-5",
+        timezone="Europe/Amsterdam",
+        provider="slack",
+    )
+    assert offer.to_slash_command() == (
+        "/cron add --kind recurring_skill --cron '0 8 * * 1-5' "
+        "--tz Europe/Amsterdam --provider slack --skill morning-report"
+    )
+
+
 def test_pending_offer_to_slash_omits_slack_chat_id() -> None:
     offer = PendingScheduleOffer(
         kind="daily_summary",
@@ -74,7 +88,8 @@ def test_propose_tool_sets_session_pending_offer() -> None:
     )
     result = execute_propose_scheduled_delivery_tool(
         {
-            "kind": "daily_summary",
+            "kind": "recurring_skill",
+            "skill_name": "morning-report",
             "cron": "0 8 * * 1-5",
             "timezone": "UTC",
             "provider": "slack",
@@ -85,7 +100,8 @@ def test_propose_tool_sets_session_pending_offer() -> None:
     )
     assert result["ok"] is True
     assert session.pending_schedule_offer is not None
-    assert session.pending_schedule_offer.kind == "daily_summary"
+    assert session.pending_schedule_offer.kind == "recurring_skill"
+    assert session.pending_schedule_offer.skill_name == "morning-report"
     assert result["closer"].startswith("**Want me to:**")
     assert "Weather — Amsterdam" in result["response_text"]
     assert result["closer"] in result["response_text"]
@@ -97,7 +113,8 @@ def test_propose_alone_without_briefing_work_is_rejected() -> None:
     ctx = ActionToolScope(session=session, console=object())
     result = execute_propose_scheduled_delivery_tool(
         {
-            "kind": "daily_summary",
+            "kind": "recurring_skill",
+            "skill_name": "morning-report",
             "cron": "0 8 * * 1-5",
             "timezone": "UTC",
             "provider": "slack",

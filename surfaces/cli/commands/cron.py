@@ -11,6 +11,7 @@ import click
 from rich.console import Console
 from rich.table import Table
 
+from core.agent_harness.prompts.skills.schedule import pin_recurring_skill
 from infrastructure.scheduling.scheduler.credentials import requires_explicit_chat_id
 from infrastructure.scheduling.scheduler.types import Provider, TaskKind
 from infrastructure.terminal.theme import GLYPH_ERROR, GLYPH_SUCCESS
@@ -91,6 +92,14 @@ def cron_command() -> None:
     show_default=True,
     help="Lookback window in hours for the report (must be >= 1).",
 )
+@click.option(
+    "--skill",
+    "skill_name",
+    type=str,
+    default="",
+    show_default=False,
+    help="Recurring action skill to run (required for recurring_skill kind).",
+)
 def cron_add(
     name: str,
     kind: str,
@@ -99,6 +108,7 @@ def cron_add(
     provider: str,
     chat_id: str,
     window_hours: int,
+    skill_name: str,
 ) -> None:
     """Add a new scheduled delivery task."""
     from infrastructure.scheduling.scheduler.types import ScheduledTask
@@ -107,14 +117,29 @@ def cron_add(
     validate_cron_and_timezone(cron_expr, timezone)
     _validate_chat_id_for_provider(provider, chat_id)
 
+    task_kind = TaskKind(kind)
+    pinned_name = ""
+    pinned_revision = ""
+    if task_kind == TaskKind.RECURRING_SKILL:
+        if not skill_name.strip():
+            raise click.ClickException("--skill is required when --kind is recurring_skill.")
+        try:
+            pinned_name, pinned_revision = pin_recurring_skill(skill_name)
+        except RuntimeError as exc:
+            raise click.ClickException(str(exc)) from exc
+    elif skill_name.strip():
+        raise click.ClickException("--skill is only valid with --kind recurring_skill.")
+
     task = ScheduledTask(
         name=name.strip(),
-        kind=TaskKind(kind),
+        kind=task_kind,
         cron=cron_expr,
         timezone=timezone,
         provider=Provider(provider),
         chat_id=chat_id.strip(),
         window_hours=window_hours,
+        skill_name=pinned_name,
+        skill_revision=pinned_revision,
     )
 
     from infrastructure.scheduling.scheduler.operation_log import record_scheduler_task_operation
@@ -134,6 +159,8 @@ def cron_add(
     if added.name:
         _console.print(f"  Name: {added.name}")
     _console.print(f"  Kind: {added.kind.value}  Cron: {added.cron}  TZ: {added.timezone}")
+    if added.skill_name:
+        _console.print(f"  Skill: {added.skill_name}  Revision: {added.skill_revision[:12]}…")
     _console.print(f"  Provider: {added.provider.value}  Chat: {added.chat_id}")
 
 

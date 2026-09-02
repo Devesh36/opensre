@@ -15,6 +15,11 @@ from core.tool_framework.utils import object_schema, string_property
 from infrastructure.scheduling.scheduler.credentials import requires_explicit_chat_id
 from infrastructure.scheduling.scheduler.types import Provider, TaskKind
 
+from core.agent_harness.prompts.skills.schedule import (
+    is_recurring_skill,
+    normalize_skill_name,
+)
+
 # Match surfaces.cli.commands.cron: Sentry kinds use `opensre sentry`, not cron add.
 _KIND_VALUES = frozenset(
     kind.value
@@ -67,6 +72,37 @@ def _briefing_looks_real(text: str) -> bool:
     return any(marker in lowered for marker in _BRIEFING_MARKERS)
 
 
+def _briefing_precondition_error(
+    *,
+    label: str,
+    session: Any,
+    history_start: int,
+    briefing_text: str,
+) -> dict[str, Any] | None:
+    """Reject an offer that has no weather/news work behind it."""
+    if not _has_fetch_evidence(session, history_start):
+        return {
+            "ok": False,
+            "error": (
+                f"No weather/news fetch ran yet this session. For {label}, "
+                "run the morning-report shell_run fetches (wttr.in + headlines) "
+                "first, compose the briefing, optionally deliver it, THEN call "
+                "propose_scheduled_delivery with briefing_text set to that "
+                "composed briefing. Do not offer to schedule work that never ran."
+            ),
+        }
+    if not _briefing_looks_real(briefing_text):
+        return {
+            "ok": False,
+            "error": (
+                f"briefing_text is required for {label} and must contain the "
+                "composed weather + headlines briefing (not empty, not the closer "
+                "alone). Pass the same text you showed or delivered to the user."
+            ),
+        }
+    return None
+
+
 def execute_propose_scheduled_delivery_tool(
     args: dict[str, Any], ctx: ActionToolScope
 ) -> dict[str, Any]:
@@ -76,6 +112,7 @@ def execute_propose_scheduled_delivery_tool(
     provider = str(args.get("provider", "")).strip().lower()
     chat_id = str(args.get("chat_id", "")).strip()
     briefing_text = str(args.get("briefing_text", "") or "").strip()
+    skill_name = normalize_skill_name(str(args.get("skill_name", "") or ""))
 
     if kind not in _KIND_VALUES:
         return {
@@ -113,27 +150,29 @@ def execute_propose_scheduled_delivery_tool(
 
     # Refuse the failure mode where "give me a morning report" becomes ONLY a
     # Want-me-to closer: no weather, no headlines, nothing delivered.
-    if kind == TaskKind.DAILY_SUMMARY.value:
-        if not _has_fetch_evidence(ctx.session, getattr(ctx, "history_start", 0)):
+    briefing_label = ""
+    if kind == TaskKind.RECURRING_SKILL.value:
+        if not skill_name or not is_recurring_skill(skill_name):
             return {
                 "ok": False,
                 "error": (
-                    "No weather/news fetch ran yet this session. For daily_summary, "
-                    "run the morning-report shell_run fetches (wttr.in + headlines) "
-                    "first, compose the briefing, optionally deliver it, THEN call "
-                    "propose_scheduled_delivery with briefing_text set to that "
-                    "composed briefing. Do not offer to schedule work that never ran."
+                    "skill_name is required for recurring_skill and must name a "
+                    "skill marked recurring (e.g. 'morning-report')."
                 ),
             }
-        if not _briefing_looks_real(briefing_text):
-            return {
-                "ok": False,
-                "error": (
-                    "briefing_text is required for daily_summary and must contain the "
-                    "composed weather + headlines briefing (not empty, not the closer "
-                    "alone). Pass the same text you showed or delivered to the user."
-                ),
-            }
+        if skill_name == "morning-report":
+            briefing_label = "morning-report"
+    elif kind == TaskKind.DAILY_SUMMARY.value:
+        briefing_label = "daily_summary"
+    if briefing_label:
+        blocked = _briefing_precondition_error(
+            label=briefing_label,
+            session=ctx.session,
+            history_start=getattr(ctx, "history_start", 0),
+            briefing_text=briefing_text,
+        )
+        if blocked is not None:
+            return blocked
 
     offer = PendingScheduleOffer(
         kind=kind,
@@ -141,6 +180,7 @@ def execute_propose_scheduled_delivery_tool(
         timezone=timezone,
         provider=provider,
         chat_id=chat_id,
+        skill_name=skill_name if kind == TaskKind.RECURRING_SKILL.value else "",
     )
     ctx.session.pending_schedule_offer = offer
     # One pending affirmative at a time — schedule wins over investigate.
@@ -173,6 +213,7 @@ def run_propose_scheduled_delivery(
     timezone: str = "UTC",
     chat_id: str = "",
     briefing_text: str = "",
+    skill_name: str = "",
     context: Any,
 ) -> dict[str, Any]:
     return execute_with_action_context(
@@ -183,6 +224,7 @@ def run_propose_scheduled_delivery(
             "provider": provider,
             "chat_id": chat_id,
             "briefing_text": briefing_text,
+            "skill_name": skill_name,
         },
         context,
         execute_propose_scheduled_delivery_tool,
@@ -194,11 +236,11 @@ propose_scheduled_delivery_tool = RegisteredTool(
     description=(
         "Record a schedule offer the user has NOT yet accepted, and return the "
         "canonical Want me to: closer plus response_text (briefing + closer). "
-        "PRECONDITION for daily_summary: weather/news shell_run fetches must "
-        "already have succeeded in this session, and briefing_text must be the "
-        "composed briefing. This tool schedules nothing and produces no weather "
-        "— calling it alone leaves the user with an empty offer. Do NOT call "
-        "/cron add until the user confirms; their yes becomes the slash command."
+        "PRECONDITION for recurring_skill morning-report: weather/news shell_run "
+        "fetches must already have succeeded in this session, and briefing_text "
+        "must be the composed briefing. This tool schedules nothing and produces "
+        "no weather — calling it alone leaves the user with an empty offer. Do NOT "
+        "call /cron add until the user confirms; their yes becomes the slash command."
     ),
     use_cases=[
         (
@@ -219,7 +261,7 @@ propose_scheduled_delivery_tool = RegisteredTool(
         properties={
             "kind": string_property(
                 description=(
-                    "Scheduled task kind, e.g. 'daily_summary'. Must be a "
+                    "Scheduled task kind, e.g. 'recurring_skill'. Must be a "
                     f"cron-add kind: {', '.join(sorted(_KIND_VALUES))}."
                 ),
                 min_length=1,
@@ -243,10 +285,16 @@ propose_scheduled_delivery_tool = RegisteredTool(
             ),
             "briefing_text": string_property(
                 description=(
-                    "Required for daily_summary: the composed weather + headlines "
-                    "briefing already produced for the user. Returned in "
-                    "response_text ahead of the Want me to: closer so the user "
-                    "never sees an offer without the report."
+                    "Required for recurring_skill morning-report: the composed "
+                    "weather + headlines briefing already produced for the user. "
+                    "Returned in response_text ahead of the Want me to: closer so "
+                    "the user never sees an offer without the report."
+                ),
+            ),
+            "skill_name": string_property(
+                description=(
+                    "Required for recurring_skill: the kebab-case action skill "
+                    "to repeat (e.g. 'morning-report')."
                 ),
             ),
         },

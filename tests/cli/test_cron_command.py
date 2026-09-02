@@ -160,3 +160,23 @@ def test_cron_add_still_requires_chat_id_for_telegram() -> None:
     )
     assert result.exit_code == 2
     assert "--chat-id is required" in result.output
+
+
+def test_cron_add_rejects_non_recurring_skill() -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        cron_command,
+        [
+            "add",
+            "--kind",
+            "recurring_skill",
+            "--skill",
+            "architecture-audit",
+            "--cron",
+            "0 8 * * 1-5",
+            "--provider",
+            "interactive_shell",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "not marked recurring" in result.output

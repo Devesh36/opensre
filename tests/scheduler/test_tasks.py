@@ -346,3 +346,51 @@ class TestMessageBuilders:
 
         with pytest.raises(RuntimeError, match="PostHog metric report failed"):
             tasks_mod.build_message(task, runners_with_agent(_raise))
+
+
+class TestRecurringSkillBuilders:
+    def test_recurring_skill_uses_agent_runner_not_investigation(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from core.agent_harness.prompts.skills.schedule import find_action_skill, skill_revision
+
+        skill = find_action_skill("morning-report")
+        assert skill is not None
+        task = ScheduledTask(
+            kind=TaskKind.RECURRING_SKILL,
+            cron="0 8 * * 1-5",
+            provider=Provider.SLACK,
+            chat_id="C123",
+            skill_name="morning-report",
+            skill_revision=skill_revision(skill),
+        )
+        captured: dict[str, object] = {}
+
+        def _agent(payload: dict[str, object]) -> str:
+            captured.update(payload)
+            return "Good morning! Weather — Amsterdam: sunny\nTop headlines:\n- One headline"
+
+        def _investigation(_payload: object) -> dict[str, str]:
+            raise AssertionError("investigation runner must not run for recurring_skill")
+
+        monkeypatch.setattr(
+            "tools.investigation.scheduler_bootstrap.run_scheduled_investigation",
+            _investigation,
+        )
+        msg = tasks_mod.build_message(task, runners_with_agent(_agent))
+        assert "Daily Reliability Summary" not in msg
+        assert "Good morning!" in msg
+        assert captured["source"] == "scheduled_recurring_skill"
+        assert captured["skill_name"] == "morning-report"
+
+    def test_recurring_skill_revision_mismatch_raises(self) -> None:
+        task = ScheduledTask(
+            kind=TaskKind.RECURRING_SKILL,
+            cron="0 8 * * 1-5",
+            provider=Provider.SLACK,
+            chat_id="C123",
+            skill_name="morning-report",
+            skill_revision="0" * 64,
+        )
+        with pytest.raises(RuntimeError, match="changed since it was scheduled"):
+            tasks_mod.build_message(task, runners_with_agent(lambda _p: "ignored"))
