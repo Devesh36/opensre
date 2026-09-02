@@ -3,27 +3,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
-from core.agent_harness import AgentSession
-from core.agent_harness.harness import SCHEDULED_RUN_CONFIG
-from core.agent_harness.ports import ConfirmFn, ToolEventObserver, ToolProvider
-from core.agent_harness.prompts.skills.schedule import resolve_scheduled_skill
-from core.agent_harness.turns.headless_adapters import BufferOutputSink
-from core.agent_harness.turns.headless_build import DefaultHeadlessBuild
+from core.agent_harness import AgentSession, resolve_scheduled_skill
 from infrastructure.scheduling.scheduler.agent_runner import AgentPayload
 
 logger = logging.getLogger(__name__)
-
-_BLOCKED_TOOL_NAMES = frozenset(
-    {
-        "slack_send_message",
-        "telegram_send_message",
-        "rocketchat_send_message",
-        "buzz_send_message",
-        "propose_scheduled_delivery",
-    }
-)
 
 _SCHEDULED_SKILL_INSTRUCTIONS = """Scheduled recurring skill run.
 
@@ -35,36 +19,6 @@ this runner returns.
 Do not call propose_scheduled_delivery or offer to schedule again.
 Use read-only tools when data is required.
 """
-
-
-class _DeliveryStrippedToolProvider:
-    """Wrap a tool provider and remove delivery / reschedule tools."""
-
-    def __init__(self, inner: ToolProvider) -> None:
-        self._inner = inner
-
-    def action_tools(
-        self,
-        *,
-        confirm_fn: ConfirmFn | None,
-        is_tty: bool | None,
-        resolved_integrations: dict[str, Any] | None = None,
-    ) -> list[Any]:
-        return [
-            tool
-            for tool in self._inner.action_tools(
-                confirm_fn=confirm_fn,
-                is_tty=is_tty,
-                resolved_integrations=resolved_integrations,
-            )
-            if getattr(tool, "name", None) not in _BLOCKED_TOOL_NAMES
-        ]
-
-    def tool_resources(self) -> dict[str, Any]:
-        return self._inner.tool_resources()
-
-    def observer(self, *, message: str) -> ToolEventObserver:
-        return self._inner.observer(message=message)
 
 
 def run_scheduled_recurring_skill(payload: AgentPayload) -> str:
@@ -84,16 +38,12 @@ def run_scheduled_recurring_skill(payload: AgentPayload) -> str:
         f"{input_block}\n"
         f"Skill recipe:\n{resolved.body}"
     )
-
-    agent_session = AgentSession.start(
-        config=SCHEDULED_RUN_CONFIG, logger=logger, is_tty=False
+    result = AgentSession.run_headless_turn(
+        message,
+        logger=logger,
+        is_tty=False,
+        unattended=True,
     )
-    session = agent_session.bound_session
-    if session is None:
-        raise RuntimeError("Scheduled skill runner failed to bind a session.")
-    build = DefaultHeadlessBuild(session=session, output=BufferOutputSink(), logger=logger)
-    agent_session.attach_agent(build.agent(tools=_DeliveryStrippedToolProvider(build.tools())))
-    result = agent_session.chat(message)
     report = result.primary_response_text
     if not result.answered or not report:
         raise RuntimeError(
@@ -103,4 +53,4 @@ def run_scheduled_recurring_skill(payload: AgentPayload) -> str:
     return report
 
 
-__all__ = ["_BLOCKED_TOOL_NAMES", "run_scheduled_recurring_skill"]
+__all__ = ["run_scheduled_recurring_skill"]

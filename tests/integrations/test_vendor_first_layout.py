@@ -45,6 +45,9 @@ ALLOWED_FLAT_MODULES = frozenset(
         # (not a SaaS vendor). Routed by scheduled_agent_bootstrap like the
         # vendor digests, but owns no vendor package of its own.
         "manual_loop_runner.py",
+        # Cross-cutting scheduled-agent runner for pinned recurring skills
+        # (not a SaaS vendor). Routed by scheduled_agent_bootstrap.
+        "scheduled_skill_runner.py",
         # Cross-cutting credential-resolution infra (hydrates every vendor's org
         # creds from the tenant's Secrets Manager blob), not a vendor — the
         # Secrets Manager peer of webapp_vault.py.

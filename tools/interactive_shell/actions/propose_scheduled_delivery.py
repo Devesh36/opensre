@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.agent_harness import is_recurring_skill, normalize_skill_name
 from core.agent_harness.spi.session_state import (
     PendingScheduleOffer,
     clear_competing_pending_offers,
@@ -14,11 +15,6 @@ from core.tool import RegisteredTool, SideEffectLevel
 from core.tool_framework.utils import object_schema, string_property
 from infrastructure.scheduling.scheduler.credentials import requires_explicit_chat_id
 from infrastructure.scheduling.scheduler.types import Provider, TaskKind
-
-from core.agent_harness.prompts.skills.schedule import (
-    is_recurring_skill,
-    normalize_skill_name,
-)
 
 # Match surfaces.cli.commands.cron: Sentry kinds use `opensre sentry`, not cron add.
 _KIND_VALUES = frozenset(

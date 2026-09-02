@@ -21,12 +21,24 @@ from core.agent_harness.tools.tool_context import (
     ACTION_TOOL_CONTEXT_RESOURCE_KEY,
     ActionToolScope,
 )
+from core.tool import SideEffectLevel
+
+# Delivery / channel mutations are EXTERNAL. Also block schedule + slash so an
+# unattended tick cannot re-offer cron or dispatch /cron from inside the turn.
+_UNATTENDED_BLOCKED_NAMES = frozenset({"propose_scheduled_delivery", "slash_invoke"})
 
 ActionObserverFactory = Callable[[str], ToolEventObserver]
 # Return value is tools.interactive_shell.subprocess.SubprocessPresenter (surface-injected).
 
 
 _TOOL_INPUT_LOG_PREVIEW_LIMIT = 500
+
+
+def tool_allowed_for_unattended_run(tool: Any) -> bool:
+    """True when ``tool`` may run on a scheduled skill tick."""
+    if getattr(tool, "name", None) in _UNATTENDED_BLOCKED_NAMES:
+        return False
+    return getattr(tool, "side_effect_level", None) != SideEffectLevel.EXTERNAL
 
 
 def _tool_input_preview(value: Any) -> str:
@@ -53,6 +65,7 @@ class DefaultToolProvider:
         llm_provider_ports_factory: LlmProviderPortsFactory | None = None,
         task_cancel_ports_factory: TaskCancelPortsFactory | None = None,
         slash_ports_factory: SlashPortsFactory | None = None,
+        unattended: bool = False,
     ) -> None:
         self._session = session
         self._console = console
@@ -65,6 +78,7 @@ class DefaultToolProvider:
         self._llm_provider_ports_factory = llm_provider_ports_factory
         self._task_cancel_ports_factory = task_cancel_ports_factory
         self._slash_ports_factory = slash_ports_factory
+        self._unattended = unattended
         self._tool_scope: ActionToolScope | None = None
 
     def bind_session(self, session: Any) -> None:
@@ -131,13 +145,17 @@ class DefaultToolProvider:
         )
         self._tool_scope = ctx
         if self._precomputed_action_tools is not None:
-            return list(self._precomputed_action_tools)
-        resolved = (
-            resolved_integrations
-            if resolved_integrations is not None
-            else self._resolved_integrations()
-        )
-        return get_action_tools_from_integrations_view(ctx, resolved_integrations=resolved)
+            tools = list(self._precomputed_action_tools)
+        else:
+            resolved = (
+                resolved_integrations
+                if resolved_integrations is not None
+                else self._resolved_integrations()
+            )
+            tools = get_action_tools_from_integrations_view(ctx, resolved_integrations=resolved)
+        if self._unattended:
+            return [tool for tool in tools if tool_allowed_for_unattended_run(tool)]
+        return tools
 
     def tool_resources(self) -> dict[str, Any]:
         if self._tool_scope is None:

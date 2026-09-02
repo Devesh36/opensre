@@ -16,11 +16,10 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, timedelta
 
+from core.agent_harness import resolve_scheduled_skill
 from infrastructure.scheduling.scheduler.loop_constants import LOOP_PROMPT_PARAM
 from infrastructure.scheduling.scheduler.runners import SchedulerRunners
 from infrastructure.scheduling.scheduler.types import ScheduledTask, TaskKind
-
-from core.agent_harness.prompts.skills.schedule import resolve_scheduled_skill
 
 logger = logging.getLogger(__name__)
 

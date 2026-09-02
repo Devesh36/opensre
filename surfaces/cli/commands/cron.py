@@ -11,7 +11,7 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-from core.agent_harness.prompts.skills.schedule import pin_recurring_skill
+from core.agent_harness import pin_recurring_skill
 from infrastructure.scheduling.scheduler.credentials import requires_explicit_chat_id
 from infrastructure.scheduling.scheduler.types import Provider, TaskKind
 from infrastructure.terminal.theme import GLYPH_ERROR, GLYPH_SUCCESS

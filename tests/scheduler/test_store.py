@@ -184,7 +184,7 @@ class TestStore:
 
 class TestRecurringSkillStoreIdentity:
     def test_same_skill_slot_deduplicates_without_revision(self, store_path: Path) -> None:
-        from core.agent_harness.prompts.skills.schedule import skill_revision, find_action_skill
+        from core.agent_harness.prompts.skills.schedule import find_action_skill, skill_revision
 
         skill = find_action_skill("morning-report")
         assert skill is not None

@@ -151,6 +151,7 @@ class AgentSession:
         surface: str | None = None,
         is_tty: bool | None = None,
         tool_hooks: ToolExecutionHooks | None = None,
+        unattended: bool = False,
     ) -> AgentSession:
         """Return a session that is ready to :meth:`chat`.
 
@@ -195,6 +196,7 @@ class AgentSession:
             surface=surface,
             is_tty=is_tty,
             tool_hooks=tool_hooks,
+            unattended=unattended,
         )
         return agent_session
 
@@ -208,6 +210,7 @@ class AgentSession:
         prepare_session: Callable[[SessionCore], None] | None = None,
         logger: logging.Logger | None = None,
         is_tty: bool | None = None,
+        unattended: bool = False,
     ) -> TurnResult:
         """Run exactly one turn for ``message`` on a throwaway session.
 
@@ -222,6 +225,7 @@ class AgentSession:
             prepare_session=prepare_session,
             logger=logger,
             is_tty=is_tty,
+            unattended=unattended,
         ).chat(message)
 
     def startup(self) -> SessionStartupResult:
@@ -359,6 +363,7 @@ class AgentSession:
         surface: str | None = None,
         is_tty: bool | None = None,
         tool_hooks: ToolExecutionHooks | None = None,
+        unattended: bool = False,
     ) -> None:
         """Attach the agent built on the default port family (one construction recipe).
 
@@ -370,7 +375,12 @@ class AgentSession:
         from core.agent_harness.turns.headless_build import DefaultHeadlessBuild
 
         agent = DefaultHeadlessBuild(
-            session=session, output=output, console=console, logger=logger, surface=surface
+            session=session,
+            output=output,
+            console=console,
+            logger=logger,
+            surface=surface,
+            unattended=unattended,
         ).agent(tools=tools, prompts=prompts)
         agent.bind_turn(TurnBinding(is_tty=is_tty, tool_hooks=tool_hooks))
         self.attach_agent(agent)

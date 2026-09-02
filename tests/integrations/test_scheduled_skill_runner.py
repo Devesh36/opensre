@@ -1,40 +1,34 @@
-"""Tests for the scheduled recurring skill runner."""
+"""Tests for the scheduled recurring skill runner tool filter."""
 
 from __future__ import annotations
 
-from integrations.scheduled_skill_runner import (
-    _BLOCKED_TOOL_NAMES,
-    _DeliveryStrippedToolProvider,
-)
+from core.agent_harness.tools.tool_provider import tool_allowed_for_unattended_run
+from core.tool import SideEffectLevel
 
 
 class _FakeTool:
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, level: SideEffectLevel | None) -> None:
         self.name = name
+        self.side_effect_level = level
 
 
-class _FakeInnerProvider:
-    def action_tools(self, **_kwargs: object) -> list[_FakeTool]:
-        return [
-            _FakeTool("shell_run"),
-            _FakeTool("slack_send_message"),
-            _FakeTool("propose_scheduled_delivery"),
-        ]
-
-    def tool_resources(self) -> dict[str, object]:
-        return {}
-
-    def observer(self, *, message: str) -> object:
-        _ = message
-        return lambda _kind, _data: None
-
-
-def test_delivery_stripped_provider_removes_send_and_schedule_tools() -> None:
-    provider = _DeliveryStrippedToolProvider(_FakeInnerProvider())
-    names = {tool.name for tool in provider.action_tools(confirm_fn=None, is_tty=False)}
-    assert names == {"shell_run"}
-    assert _BLOCKED_TOOL_NAMES >= {
-        "slack_send_message",
-        "telegram_send_message",
-        "propose_scheduled_delivery",
-    }
+def test_unattended_run_strips_external_and_schedule_tools() -> None:
+    assert tool_allowed_for_unattended_run(_FakeTool("shell_run", SideEffectLevel.MUTATING)) is True
+    assert (
+        tool_allowed_for_unattended_run(_FakeTool("slack_read_messages", SideEffectLevel.READ_ONLY))
+        is True
+    )
+    assert (
+        tool_allowed_for_unattended_run(_FakeTool("slack_add_reaction", SideEffectLevel.EXTERNAL))
+        is False
+    )
+    assert (
+        tool_allowed_for_unattended_run(_FakeTool("slack_send_message", SideEffectLevel.EXTERNAL))
+        is False
+    )
+    assert (
+        tool_allowed_for_unattended_run(
+            _FakeTool("propose_scheduled_delivery", SideEffectLevel.MUTATING)
+        )
+        is False
+    )
