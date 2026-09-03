@@ -111,7 +111,7 @@ class DefaultHeadlessBuild:
     surface: str | None = None
     #: A host's reporter for swallowed exceptions (the REPL adds Sentry); default logs.
     error_reporter: ErrorReporter | None = None
-    #: Restrict tools to read-only + local ``shell_run`` fetches on unattended ticks.
+    #: Restrict unattended ticks to NONE / READ_ONLY tools.
     unattended: bool = False
 
     @cached_property

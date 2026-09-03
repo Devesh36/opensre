@@ -21,6 +21,7 @@ from core.agent_harness.prompts.skills.schedule import (
     normalize_skill_name,
     pin_recurring_skill,
     resolve_scheduled_skill,
+    scheduled_skill_context_block,
 )
 from core.agent_harness.session import SessionCore, SessionManager
 from core.agent_harness.turns.turn_results import ToolCallingTurnResult, TurnResult
@@ -37,4 +38,5 @@ __all__ = [
     "normalize_skill_name",
     "pin_recurring_skill",
     "resolve_scheduled_skill",
+    "scheduled_skill_context_block",
 ]

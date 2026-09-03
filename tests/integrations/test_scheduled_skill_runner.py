@@ -12,8 +12,8 @@ class _FakeTool:
         self.side_effect_level = level
 
 
-def test_unattended_run_allows_reads_and_local_fetches_only() -> None:
-    assert tool_allowed_for_unattended_run(_FakeTool("shell_run", SideEffectLevel.MUTATING)) is True
+def test_unattended_run_allows_read_only_tools_only() -> None:
+    assert tool_allowed_for_unattended_run(_FakeTool("shell_run", SideEffectLevel.MUTATING)) is False
     assert (
         tool_allowed_for_unattended_run(_FakeTool("slack_read_messages", SideEffectLevel.READ_ONLY))
         is True

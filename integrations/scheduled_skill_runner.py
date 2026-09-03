@@ -4,21 +4,26 @@ from __future__ import annotations
 
 import logging
 
-from core.agent_harness import AgentSession, resolve_scheduled_skill
+from core.agent_harness import (
+    AgentSession,
+    resolve_scheduled_skill,
+    scheduled_skill_context_block,
+)
 from infrastructure.scheduling.scheduler.agent_runner import AgentPayload
 
 logger = logging.getLogger(__name__)
 
 _SCHEDULED_SKILL_INSTRUCTIONS = """Scheduled recurring skill run.
 
-Follow the skill recipe below exactly for this unattended tick.
+Follow the skill recipe below for this unattended tick, using any
+pre-fetched data as the source of truth.
 Produce only the final report body text the scheduler should deliver.
 Do not send, post, notify, or message any channel from inside this turn; the
 scheduler will deliver the final report body to the configured channels after
 this runner returns.
 Do not call propose_scheduled_delivery or offer to schedule again.
-Use read-only tools, or shell_run for local data fetches. Do not mutate
-GitHub issues, run CLI/write tools, or change any external system.
+Use read-only tools only. Do not run shell commands, mutate GitHub issues,
+or change any external system.
 """
 
 
@@ -28,15 +33,20 @@ def run_scheduled_recurring_skill(payload: AgentPayload) -> str:
         str(payload.get("skill_name") or ""),
         str(payload.get("skill_revision") or ""),
     )
-    inputs = payload.get("skill_inputs") or {}
+    raw_inputs = payload.get("skill_inputs") or {}
+    inputs = raw_inputs if isinstance(raw_inputs, dict) else {}
     input_block = ""
-    if isinstance(inputs, dict) and inputs:
+    if inputs:
         rendered = "\n".join(f"- {key}: {value}" for key, value in sorted(inputs.items()))
         input_block = f"\nValidated inputs:\n{rendered}\n"
+    typed_inputs = {str(key): str(value) for key, value in inputs.items()}
+    fetch_block = scheduled_skill_context_block(resolved.name, typed_inputs)
+    fetch_section = f"\n{fetch_block}\n" if fetch_block else ""
     message = (
         f"{_SCHEDULED_SKILL_INSTRUCTIONS}\n"
         f"Skill: {resolved.name}\n"
-        f"{input_block}\n"
+        f"{input_block}"
+        f"{fetch_section}\n"
         f"Skill recipe:\n{resolved.body}"
     )
     result = AgentSession.run_headless_turn(

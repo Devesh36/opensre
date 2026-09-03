@@ -22,11 +22,10 @@ from core.agent_harness.tools.tool_context import (
 )
 from core.tool import SideEffectLevel
 
-# Fail-closed: unattended ticks may read, and may fetch via local shell_run
-# (morning-report weather/news). MUTATING chat/action tools (GitHub issue
-# writes, CLI, delivery, slash) stay blocked even when they are not EXTERNAL.
+# Fail-closed: unattended ticks may only use tools that cannot mutate the
+# machine or an external system. Morning-report weather/news is pre-fetched
+# by the scheduled runner, so shell_run is not required on the tick.
 _UNATTENDED_SAFE_LEVELS = frozenset({SideEffectLevel.NONE, SideEffectLevel.READ_ONLY})
-_UNATTENDED_ALLOWED_MUTATING_NAMES = frozenset({"shell_run"})
 _UNATTENDED_BLOCKED_NAMES = frozenset({"propose_scheduled_delivery", "slash_invoke"})
 
 ActionObserverFactory = Callable[[str], ToolEventObserver]
@@ -41,10 +40,7 @@ def tool_allowed_for_unattended_run(tool: Any) -> bool:
     name = getattr(tool, "name", None)
     if name in _UNATTENDED_BLOCKED_NAMES:
         return False
-    level = getattr(tool, "side_effect_level", None)
-    if level in _UNATTENDED_SAFE_LEVELS:
-        return True
-    return level == SideEffectLevel.MUTATING and name in _UNATTENDED_ALLOWED_MUTATING_NAMES
+    return getattr(tool, "side_effect_level", None) in _UNATTENDED_SAFE_LEVELS
 
 
 def _tool_input_preview(value: Any) -> str:
