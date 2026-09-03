@@ -25,12 +25,18 @@ from core.agent_harness.spi.accounting import SELF_RECORDING_ACTION_TOOL_NAMES
 from core.agent_harness.spi.task_plan import is_plan_diagnosis_prose
 from infrastructure.observability.trace.redaction import redact_sensitive
 from infrastructure.safety.terminal_output import strip_terminal_controls
-from infrastructure.terminal.theme import BOLD_SKILL, BRAND, DIM, HIGHLIGHT, SECONDARY
+from infrastructure.terminal.theme import (
+    BOLD_SKILL,
+    DIM,
+    SECONDARY,
+    TEXT,
+    reply_marker_style,
+)
 from infrastructure.text import is_data_blob
 from surfaces.interactive_shell.runtime import Session
 from surfaces.interactive_shell.runtime.core.state import SpinnerState
 from surfaces.interactive_shell.ui.streaming import render_note_block
-from surfaces.shared.terminal.output.console_state import get_investigation_spinner
+from surfaces.shared.terminal.output.console_state import get_turn_spinner
 from surfaces.shared.terminal.tables import print_command_output
 from tools.interactive_shell.action_names import ActionToolName
 from tools.interactive_shell.shell.display import format_shell_command_for_display
@@ -38,7 +44,7 @@ from tools.interactive_shell.shell.display import format_shell_command_for_displ
 # Tool labels whose payload is a runnable command.
 _COMMAND_TOOL_LABELS: frozenset[str] = frozenset({"Execute", "GitHub CLI", "opensre"})
 
-# Leads every tool-call line so a call reads apart from the ``∴`` reply and the
+# Leads every tool-call line so a call reads apart from the ``Ω`` reply and the
 # ``[n] ❯`` user row — the call → result → reply hierarchy Claude Code / Droid use.
 _TOOL_CALL_MARKER = "⏺"
 
@@ -62,8 +68,6 @@ _PYTHON_URL_RE = re.compile(r"https?://[^\s'\"`]+")
 
 _SIMPLE_TOOL_LABELS: dict[str, tuple[str, str]] = {
     ActionToolName.LLM_SET_PROVIDER: ("LLM provider", "target"),
-    ActionToolName.ALERT_SAMPLE: ("sample alert", "template"),
-    ActionToolName.INVESTIGATION_START: ("investigation", "alert_text"),
     ActionToolName.TASK_CANCEL: ("cancel task", "target"),
     ActionToolName.CLI_EXEC: ("opensre", "payload"),
     ActionToolName.CODE_IMPLEMENT: ("implementation", "task"),
@@ -78,13 +82,11 @@ _SKIP_PLAN_WORK_TOOLS: frozenset[str] = frozenset(
     }
 )
 
-#: Tools that render their own dedicated UI (the investigation lap/spinner
-#: progress). The generic live tool-call preview is suppressed for these so it
-#: does not duplicate that UI as a wall of text.
+#: Tools that render their own dedicated UI. The generic live tool-call preview
+#: is suppressed for these so it does not duplicate that UI as a wall of text.
 _SELF_RENDERING_TOOLS: frozenset[str] = frozenset(
     {
         ActionToolName.ASK_USER_CHOICE,
-        ActionToolName.INVESTIGATION_START,
         # shell_run / cli_exec stream their own ``$ <command>`` + output during
         # execution, and the running tool is folded into the status spinner row —
         # so a static ``Execute``/``opensre`` header here would print the command
@@ -339,10 +341,6 @@ def tool_call_display(tool_name: str, args: dict[str, Any]) -> tuple[str, str]:
         raw_args = args.get("args")
         parsed_args = [str(item).strip() for item in raw_args] if isinstance(raw_args, list) else []
         label, content = "command", " ".join([command, *parsed_args]).strip()
-    elif tool_name == ActionToolName.SYNTHETIC_RUN:
-        suite = str(args.get("suite", "")).strip()
-        scenario = str(args.get("scenario", "")).strip()
-        label, content = "synthetic test", f"{suite}:{scenario}" if scenario else suite
     else:
         simple = _SIMPLE_TOOL_LABELS.get(tool_name)
         if simple is not None:
@@ -445,7 +443,7 @@ class ActionRenderObserver:
         # Only relabel an already-running spinner; never activate one. Literal
         # slash turns suppress the spinner (turn_start skips ``start()``) and
         # never call ``stop()``, so activating it here would leave it on screen.
-        spinner = get_investigation_spinner()
+        spinner = get_turn_spinner()
         if spinner is not None and getattr(spinner, "streaming", False):
             spinner.set_phase(label)
 
@@ -458,7 +456,7 @@ class ActionRenderObserver:
         settled ``⏺`` copy. Only relabels an already-running spinner
         (see ``_set_spinner_phase``).
         """
-        spinner = get_investigation_spinner()
+        spinner = get_turn_spinner()
         if spinner is None or not getattr(spinner, "streaming", False):
             return
         args = data.get("input")
@@ -470,12 +468,12 @@ class ActionRenderObserver:
         spinner.set_active_action(text, action_id=_tool_event_id(data))
 
     def _clear_active_action(self, data: dict[str, Any]) -> None:
-        spinner = get_investigation_spinner()
+        spinner = get_turn_spinner()
         if spinner is not None:
             spinner.clear_active_action(_tool_event_id(data))
 
     def _has_active_action(self) -> bool:
-        spinner = get_investigation_spinner()
+        spinner = get_turn_spinner()
         return bool(spinner is not None and spinner.active_action)
 
     def _render_intermediate_message(self, data: dict[str, Any]) -> None:
@@ -496,7 +494,7 @@ class ActionRenderObserver:
             return
         self.console.print()
         # Intermediate narration is a working note: dim + indented, no glyph, so
-        # it reads apart from the recessed ``[n] ❯`` user row and bright ``∴`` reply.
+        # it reads apart from the recessed ``[n] ❯`` user row and bright ``Ω`` reply.
         # ``render_note_block`` sanitizes model text at ``_build_markdown_block``.
         render_note_block(self.console, content)
 
@@ -510,7 +508,7 @@ class ActionRenderObserver:
         # through Rich markup.
         line = Text()
         line.append("Skill ", style=BOLD_SKILL)
-        line.append(slug, style=HIGHLIGHT)
+        line.append(slug, style=str(TEXT))
         self.console.print()
         self.console.print(line)
 
@@ -519,16 +517,17 @@ class ActionRenderObserver:
         args = data.get("input")
         label, content = tool_call_display(name, args if isinstance(args, dict) else {})
         self.console.print()
-        # One line per call, led by ``⏺``: the label reads as the action and the
-        # payload (command / args) as its detail. A command tool separates the two
-        # with ``·`` so ``⏺ GitHub CLI · gh api …`` reads as a single unit.
+        # One warm accent (same as ``Ω``) on the glyph; recessed label + dim
+        # payload — Droid-style quiet tool chrome, not a second blue brand strip.
         line = Text()
-        line.append(f"{_TOOL_CALL_MARKER} ", style=str(HIGHLIGHT))
-        line.append(label, style=f"bold {HIGHLIGHT}")
+        line.append(f"{_TOOL_CALL_MARKER} ", style=reply_marker_style())
+        line.append(label, style=f"bold {TEXT}")
         if content:
             separator = " · " if label in _COMMAND_TOOL_LABELS else " "
             line.append(separator, style=str(DIM))
-            line.append(content, style=str(BRAND))
+            # Quiet payload that tracks the active palette (SECONDARY), so it
+            # never reads as an off-theme amber under a non-warm theme.
+            line.append(content, style=str(SECONDARY))
         self.console.print(line)
 
     def _render_tool_result(self, data: dict[str, Any]) -> None:
@@ -551,7 +550,7 @@ class ActionRenderObserver:
     def _render_skill_end(self, data: dict[str, Any]) -> None:
         """Print the ``↳`` child line under the skill's ``tool_start`` parent.
 
-        The next block (another call, a note, or the ``∴`` reply) opens with
+        The next block (another call, a note, or the ``Ω`` reply) opens with
         its own blank line — do not add one here or the gap doubles.
         """
         if self._pending_skill_calls.pop(str(data.get("id") or ""), None) is None:

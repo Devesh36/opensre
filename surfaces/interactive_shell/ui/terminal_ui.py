@@ -57,17 +57,17 @@ def render_prompt_region(session: Session, state: ReplState, spinner: SpinnerSta
 
     The top line is the pending confirmation prompt when one is active,
     otherwise the spinner, completion preview, or idle hint, followed by the
-    autonomy status line showing the active ``/auto`` level.
+    autonomy status line showing the active ``/auto`` level. A rendered task
+    plan has one blank row beneath it before this status chrome.
 
     When confirmation or exclusive-stdin structured input owns the keyboard,
     the free-text typing box (rule + ``[N] ❯``) is omitted so it does not
     compete with Ask User / option menus — free text is itself an option
     (``Or type your own answer...``), not a parallel composer.
 
-    The region always starts with one blank row so the hint/spinner line never
-    sits flush against whatever output scrolled above it. The row is constant
-    across all prompt states (no height delta between redraws) and is erased
-    with the rest of the region on submit (``erase_when_done=True``).
+    One leading blank row separates scrollback from status → Auto → composer,
+    matching Droid's row margin between transcript and chrome. Idle still has
+    no empty "Ready" placeholder under the banner.
     """
     if typing_box_hidden(session, state):
         # Same newline count as ``_prompt_message`` so confirmation does not
@@ -92,6 +92,7 @@ def render_prompt_region(session: Session, state: ReplState, spinner: SpinnerSta
         plan_overlay = strip_cpr_sequences(
             task_plan_overlay_ansi(plan, expanded=state.plan_expanded)
         )
+    # Keep one empty row between the pinned plan and the live status chrome.
     plan_prefix = f"{plan_overlay}\n\n" if plan_overlay else ""
 
     # A pending confirmation renders a stacked, arrow-navigable Yes/No choice
@@ -103,17 +104,19 @@ def render_prompt_region(session: Session, state: ReplState, spinner: SpinnerSta
     if state.is_ctrl_c_exit_hint_visible():
         prefix = prompt_rendering.ctrl_c_exit_hint_ansi()
     else:
+        inline_spinner = spinner.inline_spinner_ansi()
         prefix = strip_cpr_sequences(
             prompt_rendering.resolve_prompt_prefix_ansi(
-                inline_spinner=spinner.inline_spinner_ansi(),
+                inline_spinner=inline_spinner,
                 idle_hint=prompt_rendering.resolve_idle_hint_ansi(session),
             )
         )
     # Tools already paint a ``⏺`` line into scrollback; the live tool name is
     # folded into the spinner status row (same line as ``Invoking tools…``).
-    # Do not reserve a second action row here — that blank slot made the stack
-    # look sparse and filled mid-turn as the old composer-height jump.
-    return ANSI(f"\n{plan_prefix}{prefix}\n{auto_line}\n{base}")
+    # Leading blank = Droid row margin under the last transcript line.
+    if prefix:
+        return ANSI(f"\n{plan_prefix}{prefix}\n{auto_line}\n{base}")
+    return ANSI(f"\n{plan_prefix}{auto_line}\n{base}")
 
 
 _CONFIRM_HINT = "↑↓ Navigate • Enter confirm • Esc cancel"

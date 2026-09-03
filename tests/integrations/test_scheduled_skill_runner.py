@@ -12,7 +12,7 @@ class _FakeTool:
         self.side_effect_level = level
 
 
-def test_unattended_run_strips_external_and_schedule_tools() -> None:
+def test_unattended_run_allows_reads_and_local_fetches_only() -> None:
     assert tool_allowed_for_unattended_run(_FakeTool("shell_run", SideEffectLevel.MUTATING)) is True
     assert (
         tool_allowed_for_unattended_run(_FakeTool("slack_read_messages", SideEffectLevel.READ_ONLY))
@@ -28,7 +28,17 @@ def test_unattended_run_strips_external_and_schedule_tools() -> None:
     )
     assert (
         tool_allowed_for_unattended_run(
+            _FakeTool("execute_github_issue_mutation", SideEffectLevel.MUTATING)
+        )
+        is False
+    )
+    assert (
+        tool_allowed_for_unattended_run(_FakeTool("cli_command", SideEffectLevel.MUTATING)) is False
+    )
+    assert (
+        tool_allowed_for_unattended_run(
             _FakeTool("propose_scheduled_delivery", SideEffectLevel.MUTATING)
         )
         is False
     )
+    assert tool_allowed_for_unattended_run(_FakeTool("undeclared", None)) is False

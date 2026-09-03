@@ -41,9 +41,6 @@ from surfaces.interactive_shell.command_registry import SLASH_COMMANDS, dispatch
 from surfaces.interactive_shell.runtime.core import confirmation as controller_runtime
 from surfaces.interactive_shell.runtime.core import state as loop_state
 from surfaces.interactive_shell.runtime.core import turn_detection as loop_turn_detection
-from surfaces.interactive_shell.runtime.investigation_adapter import (
-    repl_investigation_launch_ports,
-)
 from surfaces.interactive_shell.runtime.startup import initial_input as startup_initial_input
 from surfaces.interactive_shell.session import Session
 from surfaces.interactive_shell.ui import input_prompt
@@ -180,6 +177,7 @@ def test_build_prompt_session_installs_growing_bordered_composer() -> None:
     from prompt_toolkit.layout.containers import (
         FloatContainer,
         HSplit,
+        VSplit,
         Window,
     )
 
@@ -198,7 +196,10 @@ def test_build_prompt_session_installs_growing_bordered_composer() -> None:
     assert isinstance(composer, HSplit)
     assert composer.height is None
     editable_row = composer.children[1]
-    editable_body = editable_row.children[1].get_container()
+    assert isinstance(editable_row, VSplit)
+    surface_body = editable_row.children[1]
+    assert isinstance(surface_body, HSplit)
+    editable_body = surface_body.children[0]
     default_buffer_slot = editable_body.children[0]
     assert default_buffer_slot.content.height.min == 1
     assert default_buffer_slot.content.height.max == 8
@@ -465,14 +466,15 @@ def test_build_prompt_style_tracks_active_theme() -> None:
 
 
 def test_completion_menu_current_item_uses_highlight_style() -> None:
-    from infrastructure.terminal.theme import BG, HIGHLIGHT
+    from infrastructure.terminal.theme import BG, HIGHLIGHT, INPUT_SURFACE
 
     set_active_theme("green")
     style = _build_prompt_style()
     attrs = style.get_attrs_for_style_str("class:repl-slash-command")
 
     assert attrs.color == HIGHLIGHT.lstrip("#")
-    assert attrs.bgcolor == BG.lstrip("#")
+    # Slash tokens sit on the composer plate, not the terminal bg.
+    assert attrs.bgcolor == str(INPUT_SURFACE).lstrip("#")
     assert attrs.bold is True
 
     attrs_menu = style.get_attrs_for_style_str("class:completion-menu.completion.current")
@@ -483,12 +485,25 @@ def test_completion_menu_current_item_uses_highlight_style() -> None:
     assert attrs_menu.bold is True
 
 
-def test_composer_uses_terminal_background_without_a_highlight_fill() -> None:
+def test_composer_uses_input_surface_fill() -> None:
+    """Composer plate uses INPUT_SURFACE — same role as Droid/Claude/Cursor input bg."""
+    from infrastructure.terminal.theme import INPUT_SURFACE
+
     set_active_theme("green")
     style = _build_prompt_style()
+    surface = str(INPUT_SURFACE).lstrip("#")
 
-    for style_name in ("class:frame", "class:composer", "class:composer-footer"):
-        assert not style.get_attrs_for_style_str(style_name).bgcolor
+    for style_name in (
+        "class:frame",
+        "class:frame.border",
+        "class:composer",
+        "class:composer-body",
+        "class:placeholder",
+    ):
+        assert style.get_attrs_for_style_str(style_name).bgcolor == surface
+
+    # Help line under the plate stays on terminal bg.
+    assert not style.get_attrs_for_style_str("class:composer-footer").bgcolor
 
 
 def test_lazy_rich_style_split_tracks_active_theme() -> None:
@@ -520,87 +535,6 @@ def test_lazy_rich_style_parses_as_real_rich_style() -> None:
     set_active_theme("blue")
     assert Style.parse(str(ui_theme.DIM)) != Style.null()
     assert Style.parse(str(ui_theme.BOLD_BRAND)) != Style.null()
-
-
-def test_shell_completer_path_completion_honors_mixed_case_prefix(tmp_path: Path) -> None:
-    """Regression: path fragments must not be lowercased before PathCompleter.
-
-    On case-sensitive filesystems, a lowered prefix can stop matching real directory
-    names (e.g. ``RePoRtS`` no longer matches prefix ``re``).
-    """
-    mixed_dir = tmp_path / "RePoRtS"
-    mixed_dir.mkdir()
-    (mixed_dir / "x.txt").write_text("x", encoding="utf-8")
-    partial = str(tmp_path / "Re")
-    line = f"/investigate {partial}"
-    completions = list(
-        ShellCompleter().get_completions(
-            Document(line, len(line)),
-            CompleteEvent(text_inserted=True),
-        )
-    )
-    assert completions
-    joined = " ".join(str(c.display) for c in completions)
-    assert "RePoRtS" in joined
-
-
-def test_shell_completer_investigate_includes_template_hints() -> None:
-    completions = list(
-        ShellCompleter().get_completions(
-            Document("/investigate ", len("/investigate ")),
-            CompleteEvent(text_inserted=True),
-        )
-    )
-    assert any(c.text == "generic" for c in completions)
-    assert any(c.text == "splunk" for c in completions)
-
-
-def test_run_text_investigation_uses_background_launcher_when_mode_enabled() -> None:
-    from rich.console import Console
-
-    from tools.interactive_shell.actions.investigation import (
-        run_text_investigation,
-    )
-
-    launches: list[tuple[str, str]] = []
-
-    def _fake_start_background_text_investigation(
-        *,
-        alert_text: str,
-        session: Session,
-        console: Console,
-        display_command: str,
-    ) -> str:
-        _ = (session, console)
-        launches.append((alert_text, display_command))
-        return "bg123"
-
-    def _unexpected_sample_launcher(
-        *,
-        template_name: str,
-        session: Session,
-        console: Console,
-        display_command: str,
-    ) -> str:
-        _ = (template_name, session, console, display_command)
-        raise AssertionError("sample launcher should not run")
-
-    session = Session()
-    session.terminal.background_mode_enabled = True
-    console = Console(file=io.StringIO(), force_terminal=False, highlight=False)
-
-    run_text_investigation(
-        "High CPU alert",
-        session,
-        console,
-        ports=repl_investigation_launch_ports(
-            start_background_text=_fake_start_background_text_investigation,
-            start_background_sample=_unexpected_sample_launcher,
-        ),
-    )
-
-    assert launches == [("High CPU alert", "background free-text investigation")]
-    assert session.task_registry.list_recent(10) == []
 
 
 def test_run_initial_input_dispatches_as_non_tty(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -774,27 +708,28 @@ class TestSpinnerState:
         assert spinner.streaming is False
         assert spinner.inline_spinner_ansi() == ""
 
-    def test_inline_spinner_thinking_uses_active_theme_highlight(self) -> None:
-        from infrastructure.terminal.theme import set_active_theme
+    def test_inline_spinner_thinking_uses_warm_reply_marker(self) -> None:
+        from infrastructure.terminal.theme import reply_marker_hex, set_active_theme
 
         set_active_theme("blue")
         spinner = loop_state.SpinnerState()
         spinner.start()
         spinner.set_phase(loop_state.SpinnerState.THINKING_PHASE)
         raw = spinner.inline_spinner_ansi()
-        assert _rgb(THEME_REGISTRY["blue"].HIGHLIGHT) in raw  # highlight — the Thinking accent
+        assert _rgb(reply_marker_hex()) in raw  # Factory-warm glyph accent
         assert _rgb(THEME_REGISTRY["green"].HIGHLIGHT) not in raw
 
-    def test_inline_spinner_invoking_tools_uses_brand(self) -> None:
-        from infrastructure.terminal.theme import set_active_theme
+    def test_inline_spinner_invoking_tools_uses_same_warm_accent(self) -> None:
+        from infrastructure.terminal.theme import reply_marker_hex, set_active_theme
 
         set_active_theme("blue")
         spinner = loop_state.SpinnerState()
         spinner.start()
         spinner.set_phase(loop_state.SpinnerState.INVOKING_TOOLS_PHASE)
         raw = spinner.inline_spinner_ansi()
-        assert _rgb(THEME_REGISTRY["blue"].BRAND) in raw  # blue BRAND
-        assert _rgb(THEME_REGISTRY["blue"].HIGHLIGHT) not in raw.split("(Press ESC")[0]
+        # One sunny accent for every phase — not a second cold brand strip.
+        assert _rgb(reply_marker_hex()) in raw
+        assert _rgb(THEME_REGISTRY["blue"].BRAND) not in raw.split("(Press ESC")[0]
 
     def test_streaming_inline_spinner_includes_glyph_and_token_count(self) -> None:
         spinner = loop_state.SpinnerState()

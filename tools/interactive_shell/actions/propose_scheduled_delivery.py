@@ -158,8 +158,8 @@ def execute_propose_scheduled_delivery_tool(
             }
         if skill_name == "morning-report":
             briefing_label = "morning-report"
-    elif kind == TaskKind.DAILY_SUMMARY.value:
-        briefing_label = "daily_summary"
+    elif kind == TaskKind.MANUAL_LOOP.value:
+        briefing_label = "manual_loop"
     if briefing_label:
         blocked = _briefing_precondition_error(
             label=briefing_label,
@@ -179,7 +179,6 @@ def execute_propose_scheduled_delivery_tool(
         skill_name=skill_name if kind == TaskKind.RECURRING_SKILL.value else "",
     )
     ctx.session.pending_schedule_offer = offer
-    # One pending affirmative at a time — schedule wins over investigate.
     clear_competing_pending_offers(ctx.session, keep_attr="pending_schedule_offer")
     body = offer.want_me_to_body()
     closer = f"**Want me to:** {body}?"
@@ -232,11 +231,12 @@ propose_scheduled_delivery_tool = RegisteredTool(
     description=(
         "Record a schedule offer the user has NOT yet accepted, and return the "
         "canonical Want me to: closer plus response_text (briefing + closer). "
-        "PRECONDITION for recurring_skill morning-report: weather/news shell_run "
-        "fetches must already have succeeded in this session, and briefing_text "
-        "must be the composed briefing. This tool schedules nothing and produces "
-        "no weather — calling it alone leaves the user with an empty offer. Do NOT "
-        "call /cron add until the user confirms; their yes becomes the slash command."
+        "PRECONDITION for recurring_skill morning-report and for manual_loop: "
+        "weather/news shell_run fetches must already have succeeded in this "
+        "session, and briefing_text must be the composed briefing. This tool "
+        "schedules nothing and produces no weather — calling it alone leaves "
+        "the user with an empty offer. Do NOT call /cron add until the user "
+        "confirms; their yes becomes the slash command."
     ),
     use_cases=[
         (
@@ -257,8 +257,8 @@ propose_scheduled_delivery_tool = RegisteredTool(
         properties={
             "kind": string_property(
                 description=(
-                    "Scheduled task kind, e.g. 'recurring_skill'. Must be a "
-                    f"cron-add kind: {', '.join(sorted(_KIND_VALUES))}."
+                    "Scheduled task kind, e.g. 'recurring_skill' or 'manual_loop'. "
+                    f"Must be a cron-add kind: {', '.join(sorted(_KIND_VALUES))}."
                 ),
                 min_length=1,
             ),
@@ -281,10 +281,11 @@ propose_scheduled_delivery_tool = RegisteredTool(
             ),
             "briefing_text": string_property(
                 description=(
-                    "Required for recurring_skill morning-report: the composed "
-                    "weather + headlines briefing already produced for the user. "
-                    "Returned in response_text ahead of the Want me to: closer so "
-                    "the user never sees an offer without the report."
+                    "Required for recurring_skill morning-report and for "
+                    "manual_loop: the composed weather + headlines briefing "
+                    "already produced for the user. Returned in response_text "
+                    "ahead of the Want me to: closer so the user never sees an "
+                    "offer without the report."
                 ),
             ),
             "skill_name": string_property(

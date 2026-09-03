@@ -17,7 +17,8 @@ Do not send, post, notify, or message any channel from inside this turn; the
 scheduler will deliver the final report body to the configured channels after
 this runner returns.
 Do not call propose_scheduled_delivery or offer to schedule again.
-Use read-only tools when data is required.
+Use read-only tools, or shell_run for local data fetches. Do not mutate
+GitHub issues, run CLI/write tools, or change any external system.
 """
 
 

@@ -9,7 +9,6 @@ from typing import Any
 from core.agent_harness.ports import (
     CancelCapableConsole,
     ConfirmFn,
-    InvestigationPortsFactory,
     LlmProviderPortsFactory,
     SlashPortsFactory,
     SubprocessPresenterFactory,
@@ -23,8 +22,11 @@ from core.agent_harness.tools.tool_context import (
 )
 from core.tool import SideEffectLevel
 
-# Delivery / channel mutations are EXTERNAL. Also block schedule + slash so an
-# unattended tick cannot re-offer cron or dispatch /cron from inside the turn.
+# Fail-closed: unattended ticks may read, and may fetch via local shell_run
+# (morning-report weather/news). MUTATING chat/action tools (GitHub issue
+# writes, CLI, delivery, slash) stay blocked even when they are not EXTERNAL.
+_UNATTENDED_SAFE_LEVELS = frozenset({SideEffectLevel.NONE, SideEffectLevel.READ_ONLY})
+_UNATTENDED_ALLOWED_MUTATING_NAMES = frozenset({"shell_run"})
 _UNATTENDED_BLOCKED_NAMES = frozenset({"propose_scheduled_delivery", "slash_invoke"})
 
 ActionObserverFactory = Callable[[str], ToolEventObserver]
@@ -36,9 +38,13 @@ _TOOL_INPUT_LOG_PREVIEW_LIMIT = 500
 
 def tool_allowed_for_unattended_run(tool: Any) -> bool:
     """True when ``tool`` may run on a scheduled skill tick."""
-    if getattr(tool, "name", None) in _UNATTENDED_BLOCKED_NAMES:
+    name = getattr(tool, "name", None)
+    if name in _UNATTENDED_BLOCKED_NAMES:
         return False
-    return getattr(tool, "side_effect_level", None) != SideEffectLevel.EXTERNAL
+    level = getattr(tool, "side_effect_level", None)
+    if level in _UNATTENDED_SAFE_LEVELS:
+        return True
+    return level == SideEffectLevel.MUTATING and name in _UNATTENDED_ALLOWED_MUTATING_NAMES
 
 
 def _tool_input_preview(value: Any) -> str:
@@ -61,7 +67,6 @@ class DefaultToolProvider:
         observer_factory: ActionObserverFactory | None = None,
         tool_action_logger: logging.Logger | None = None,
         subprocess_presenter_factory: SubprocessPresenterFactory | None = None,
-        investigation_ports_factory: InvestigationPortsFactory | None = None,
         llm_provider_ports_factory: LlmProviderPortsFactory | None = None,
         task_cancel_ports_factory: TaskCancelPortsFactory | None = None,
         slash_ports_factory: SlashPortsFactory | None = None,
@@ -74,7 +79,6 @@ class DefaultToolProvider:
         self._observer_factory = observer_factory
         self._tool_action_logger = tool_action_logger
         self._subprocess_presenter_factory = subprocess_presenter_factory
-        self._investigation_ports_factory = investigation_ports_factory
         self._llm_provider_ports_factory = llm_provider_ports_factory
         self._task_cancel_ports_factory = task_cancel_ports_factory
         self._slash_ports_factory = slash_ports_factory
@@ -110,10 +114,6 @@ class DefaultToolProvider:
                 True,
             )
 
-        investigation_ports = None
-        if self._investigation_ports_factory is not None:
-            investigation_ports = self._investigation_ports_factory()
-
         llm_provider_ports = None
         if self._llm_provider_ports_factory is not None:
             llm_provider_ports = self._llm_provider_ports_factory()
@@ -138,7 +138,6 @@ class DefaultToolProvider:
             history_start=len(getattr(self._session, "history", None) or []),
             turn_user_message=turn_user_message,
             subprocess_presenter=subprocess_presenter,
-            investigation_ports=investigation_ports,
             llm_provider_ports=llm_provider_ports,
             task_cancel_ports=task_cancel_ports,
             slash_ports=slash_ports,
