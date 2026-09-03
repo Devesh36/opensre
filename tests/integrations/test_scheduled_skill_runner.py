@@ -44,3 +44,7 @@ def test_unattended_run_allows_read_only_tools_only() -> None:
         is False
     )
     assert tool_allowed_for_unattended_run(_FakeTool("undeclared", None)) is False
+    assert (
+        tool_allowed_for_unattended_run(_FakeTool("execute_python_code", SideEffectLevel.READ_ONLY))
+        is False
+    )

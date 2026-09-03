@@ -26,7 +26,9 @@ from core.tool import SideEffectLevel
 # machine or an external system. Morning-report weather/news is pre-fetched
 # by the scheduled runner, so shell_run is not required on the tick.
 _UNATTENDED_SAFE_LEVELS = frozenset({SideEffectLevel.NONE, SideEffectLevel.READ_ONLY})
-_UNATTENDED_BLOCKED_NAMES = frozenset({"propose_scheduled_delivery", "slash_invoke"})
+_UNATTENDED_BLOCKED_NAMES = frozenset(
+    {"propose_scheduled_delivery", "slash_invoke", "execute_python_code"}
+)
 
 ActionObserverFactory = Callable[[str], ToolEventObserver]
 # Return value is tools.interactive_shell.subprocess.SubprocessPresenter (surface-injected).
