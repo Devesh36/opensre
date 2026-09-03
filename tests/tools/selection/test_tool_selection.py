@@ -21,8 +21,6 @@ from core.llm.types import SchemaDescribedTool
 from tests.core.agent._ci_gates import skip_or_fail
 from tools.registry import get_registered_tool_map
 
-pytestmark = [pytest.mark.live_llm, pytest.mark.integration]
-
 _TOOL_SELECTION_SYSTEM_PROMPT = (
     "You are selecting the first diagnostic tool for a live contract test. "
     "You must call exactly one of the provided tools. Do not answer in prose "
@@ -106,6 +104,20 @@ SELECTION_SCENARIOS: Sequence[SelectionScenario] = (
 )
 
 
+def test_selection_scenarios_reference_registered_tools() -> None:
+    """Every live-selection candidate and expected tool must be registered."""
+    tool_map = get_registered_tool_map()
+    for scenario in SELECTION_SCENARIOS:
+        missing = [
+            name
+            for name in (*scenario.candidate_tool_names, *scenario.expected_tool_names)
+            if name not in tool_map
+        ]
+        assert not missing, (
+            f"Scenario {scenario.scenario_id!r} references unregistered tools: {missing}"
+        )
+
+
 def _require_live_llm_credentials() -> None:
     settings: Any = None
     try:
@@ -141,6 +153,8 @@ def _require_live_llm_credentials() -> None:
         )
 
 
+@pytest.mark.live_llm
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "scenario",
     SELECTION_SCENARIOS,

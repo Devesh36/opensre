@@ -54,7 +54,8 @@ class TestScheduledTask:
         assert TaskKind.POSTHOG_METRIC_REPORT == "posthog_metric_report"
         assert TaskKind.WORK_ITEM_REMINDER == "work_item_reminder"
         assert TaskKind.WORK_ITEM_CHECKIN == "work_item_checkin"
-        assert len(TaskKind) == 7
+        assert TaskKind.RECURRING_SKILL == "recurring_skill"
+        assert len(TaskKind) == 8
 
     def test_all_providers(self) -> None:
         assert Provider.TELEGRAM == "telegram"
