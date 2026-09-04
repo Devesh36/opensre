@@ -111,6 +111,8 @@ class DefaultHeadlessBuild:
     surface: str | None = None
     #: A host's reporter for swallowed exceptions (the REPL adds Sentry); default logs.
     error_reporter: ErrorReporter | None = None
+    #: Restrict unattended ticks to NONE / READ_ONLY tools.
+    unattended: bool = False
 
     @cached_property
     def _console(self) -> Any:
@@ -144,6 +146,7 @@ class DefaultHeadlessBuild:
             self._console,
             tool_action_logger=self._logger,
             subprocess_presenter_factory=resolve_subprocess_presenter(),
+            unattended=self.unattended,
         )
 
     def prompts(self) -> PromptContextProvider:

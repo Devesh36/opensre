@@ -178,6 +178,31 @@ class TestStore:
         tasks = list_tasks(store_path)
         assert len(tasks) == 1
         assert tasks[0].id == "valid1"
+        assert tasks[0].skill_name == ""
+        assert tasks[0].skill_inputs == {}
+
+
+class TestRecurringSkillStoreIdentity:
+    def test_same_skill_slot_deduplicates_without_revision(self, store_path: Path) -> None:
+        from core.agent_harness.prompts.skills.schedule import find_action_skill, skill_revision
+
+        skill = find_action_skill("morning-report")
+        assert skill is not None
+        revision_a = skill_revision(skill)
+        revision_b = "1" * 64
+        base = {
+            "kind": TaskKind.RECURRING_SKILL,
+            "cron": "0 8 * * 1-5",
+            "timezone": "UTC",
+            "provider": Provider.SLACK,
+            "chat_id": "C0123ABCD",
+            "skill_name": "morning-report",
+            "skill_inputs": {},
+        }
+        first = add_task(ScheduledTask(**base, skill_revision=revision_a), store_path)
+        second = add_task(ScheduledTask(**base, skill_revision=revision_b), store_path)
+        assert first.id == second.id
+        assert len(list_tasks(store_path)) == 1
 
 
 class TestAddTaskDeduplicates:

@@ -19,6 +19,7 @@ class TaskKind(StrEnum):
     POSTHOG_METRIC_REPORT = "posthog_metric_report"
     WORK_ITEM_REMINDER = "work_item_reminder"
     WORK_ITEM_CHECKIN = "work_item_checkin"
+    RECURRING_SKILL = "recurring_skill"
 
 
 class TaskStatus(StrEnum):
@@ -76,6 +77,9 @@ class ScheduledTask(BaseModel):
     window_hours: int = 24
     enabled: bool = True
     params: dict[str, str] = Field(default_factory=dict)
+    skill_name: str = ""
+    skill_revision: str = ""
+    skill_inputs: dict[str, str] = Field(default_factory=dict)
     created_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
     last_run: str | None = None
     next_run: str | None = None

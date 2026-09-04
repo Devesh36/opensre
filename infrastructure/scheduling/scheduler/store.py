@@ -87,6 +87,8 @@ def _schedule_identity(entry: Mapping[str, Any]) -> tuple[Any, ...]:
         entry.get("provider"),
         entry.get("chat_id"),
         entry.get("window_hours"),
+        entry.get("skill_name") or "",
+        tuple(sorted((entry.get("skill_inputs") or {}).items())),
         tuple(sorted((entry.get("params") or {}).items())),
     )
 
