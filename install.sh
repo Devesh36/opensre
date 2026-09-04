@@ -626,6 +626,32 @@ prepare_and_verify_binary() {
   else
     verify_binary_version "$binary_path"
   fi
+
+  warm_first_launch "$binary_path"
+}
+
+warm_first_launch() {
+  local binary_path="$1"
+
+  # Codesign-cache warm-up is Darwin-only; Linux/Windows have no equivalent
+  # and would otherwise pay for a full registry/verifier/skills import.
+  [ "$(uname -s 2>/dev/null || true)" = "Darwin" ] || return 0
+
+  # macOS validates the code signature of every Mach-O image on its first
+  # dlopen and caches the result. The re-sign above resets that cache for all
+  # ~300 bundled libs, and ``--version`` (the fast path) loads only a few of
+  # them, so the user's first real ``opensre`` would pay ~10s of validation.
+  # ``_package-smoke`` imports the full tool registry, verifiers and skills,
+  # which loads essentially the whole set — so pay that cost here, under the
+  # installer spinner, instead of on the first launch. Best-effort: the binary
+  # already passed ``--version``, so a smoke failure warns rather than aborts.
+  run_with_dots "Preparing OpenSRE for first launch" package_smoke_quiet "$binary_path" \
+    || printf 'warning: first-launch warm-up did not complete; the first "%s" may start slowly.\n' "$BIN_NAME" >&2
+}
+
+package_smoke_quiet() {
+  # The smoke prints a JSON summary; only its exit status matters here.
+  "$1" _package-smoke >/dev/null 2>&1
 }
 
 extract_and_verify_binary() {
@@ -757,6 +783,7 @@ clear_macos_quarantine() {
 resign_macos_onedir_adhoc() {
   local binary_path="$1"
   local bundle_dir
+  local jobs
 
   # PyInstaller onedir: post-build dylib rewrites (or a stale CI signature) leave
   # Invalid Page codesign faults. Consumer Macs SIGKILL --version (exit 137).
@@ -766,10 +793,18 @@ resign_macos_onedir_adhoc() {
   [ -f "$binary_path" ] || return 0
   bundle_dir="$(cd "$(dirname "$binary_path")" && pwd)"
   clear_macos_quarantine "$bundle_dir"
+  # Nested libs are independent; parallelize with a small cap so large hosts
+  # do not stampede the disk. The main binary stays serial and last.
+  jobs="$(sysctl -n hw.ncpu 2>/dev/null || printf '4')"
+  if [ "$jobs" -gt 4 ]; then
+    jobs=4
+  fi
+  if [ "$jobs" -lt 1 ]; then
+    jobs=1
+  fi
   find "$bundle_dir" -type f \( -name '*.dylib' -o -name '*.so' -o -name '*.so.*' \) -print0 \
-    | while IFS= read -r -d '' lib; do
-        codesign --force --sign - "$lib" >/dev/null 2>&1 || true
-      done
+    | xargs -0 -P "$jobs" -n 1 codesign --force --sign - >/dev/null 2>&1 \
+    || true
   codesign --force --sign - "$binary_path" >/dev/null 2>&1 || true
 }
 

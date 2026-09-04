@@ -19,9 +19,14 @@ Order is load-bearing:
 
 from __future__ import annotations
 
+import importlib.util
+import logging
+import threading
 from typing import Any
 
 from surfaces.cli.invocation import resolve_command_parts
+
+_LOG = logging.getLogger(__name__)
 
 # Everything else is imported inside run(). Importing this module must stay
 # cheap: the entry point imports it at module scope, and ``opensre --version``
@@ -53,11 +58,41 @@ def _init_error_reporting(group: Any, argv: list[str], command: str) -> None:
     """
     from infrastructure.observability.errors.sentry import init_sentry
 
+    entrypoint = sentry_entrypoint_for(group, argv)
+    if command:
+        # Subcommands keep the init synchronous: ``debug sentry`` sends an
+        # event right after boot and must find the SDK ready.
+        try:
+            init_sentry(entrypoint=entrypoint)
+        except ModuleNotFoundError as exc:
+            if exc.name != "sentry_sdk" or command != "update":
+                raise
+        return
+
+    # Bare ``opensre`` opens the shell. The init (~0.3s: SDK setup plus the
+    # llm_cli exception classes it registers) runs on a thread so it never sits
+    # between the user and the prompt; only the presence check stays in line so
+    # a broken install still surfaces here. An error raised in that window is
+    # the accepted trade for a launch that does not wait on telemetry.
+    if not _sentry_sdk_installed():
+        raise ModuleNotFoundError("No module named 'sentry_sdk'", name="sentry_sdk")
+
+    def _init() -> None:
+        try:
+            init_sentry(entrypoint=entrypoint)
+        except Exception:  # noqa: BLE001 - telemetry must never take the CLI down
+            _LOG.debug("Sentry init failed; continuing without error reporting", exc_info=True)
+
+    threading.Thread(target=_init, name="sentry-init", daemon=True).start()
+
+
+def _sentry_sdk_installed() -> bool:
+    """Whether ``sentry_sdk`` can be imported, without paying for the import."""
     try:
-        init_sentry(entrypoint=sentry_entrypoint_for(group, argv))
-    except ModuleNotFoundError as exc:
-        if exc.name != "sentry_sdk" or command != "update":
-            raise
+        return importlib.util.find_spec("sentry_sdk") is not None
+    except ValueError:
+        # Already in ``sys.modules`` without a spec (test doubles): present.
+        return True
 
 
 def run(group: Any, argv: list[str]) -> None:
