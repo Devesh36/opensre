@@ -257,6 +257,71 @@ class TestClaimStore:
 class TestConcurrency:
     """Verify transaction fencing prevents duplicate claims."""
 
+    def test_concurrent_legacy_migration_rebuilds_once(
+        self,
+        db_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("""
+            CREATE TABLE task_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id TEXT NOT NULL,
+                fire_time TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                finished_at TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                posted_message_id TEXT DEFAULT '',
+                error TEXT DEFAULT '',
+                provider TEXT DEFAULT '',
+                UNIQUE(task_id, fire_time)
+            )
+        """)
+        conn.commit()
+        conn.close()
+
+        real_table_columns = claim_store._table_columns
+        unlocked_reads = threading.Barrier(2)
+
+        def _synchronize_unlocked_reads(
+            read_conn: sqlite3.Connection,
+            table: str = "task_runs",
+        ) -> set[str]:
+            columns = real_table_columns(read_conn, table)
+            if "attempt" not in columns and not read_conn.in_transaction:
+                unlocked_reads.wait(timeout=5)
+            return columns
+
+        real_migrate = claim_store._migrate_legacy_claim_table
+        migration_count = 0
+        count_lock = threading.Lock()
+
+        def _count_migration(
+            migration_conn: sqlite3.Connection,
+            columns: set[str],
+        ) -> None:
+            nonlocal migration_count
+            with count_lock:
+                migration_count += 1
+            real_migrate(migration_conn, columns)
+
+        monkeypatch.setattr(claim_store, "_table_columns", _synchronize_unlocked_reads)
+        monkeypatch.setattr(claim_store, "_migrate_legacy_claim_table", _count_migration)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            claims = list(
+                pool.map(
+                    lambda _: try_claim("task1", "2026-01-01T09:00", db_path=db_path),
+                    range(2),
+                )
+            )
+
+        assert migration_count == 1
+        assert sum(claim is not None for claim in claims) == 1
+        claim = next(claim for claim in claims if claim is not None)
+        assert complete_run(claim, status=TaskStatus.SUCCESS, db_path=db_path)
+
     def test_concurrent_reclaimers_only_one_wins(self, db_path: Path) -> None:
         _claimed(db_path, "task1", "2026-01-01T09:00")
         _expire_claim(db_path, "task1", "2026-01-01T09:00")

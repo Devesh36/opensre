@@ -81,14 +81,23 @@ def _connect(db_path: Path) -> sqlite3.Connection:
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
-    """Create or migrate the task-runs table."""
+    """Create or migrate task runs, rechecking under a write lock before changes."""
     columns = _table_columns(conn)
-    if not columns:
-        conn.execute(_TASK_RUNS_SCHEMA)
-    elif "attempt" not in columns:
-        _migrate_legacy_claim_table(conn, columns)
-    _add_missing_columns(conn)
-    conn.commit()
+    if {"attempt", "targets"} <= columns:
+        return
+
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        columns = _table_columns(conn)
+        if not columns:
+            conn.execute(_TASK_RUNS_SCHEMA)
+        elif "attempt" not in columns:
+            _migrate_legacy_claim_table(conn, columns)
+        _add_missing_columns(conn)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
 
 
 def _table_columns(conn: sqlite3.Connection, table: str = "task_runs") -> set[str]:
