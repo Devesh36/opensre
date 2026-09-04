@@ -12,7 +12,7 @@ from rich.console import Console
 from rich.table import Table
 
 from infrastructure.scheduling.scheduler.credentials import requires_explicit_chat_id
-from infrastructure.scheduling.scheduler.types import Provider, TaskKind, TaskRun
+from infrastructure.scheduling.scheduler.types import Provider, TaskKind, TaskRun, TaskStatus
 from infrastructure.terminal.theme import GLYPH_ERROR, GLYPH_SUCCESS
 from surfaces.cli.commands.scheduling import validate_cron_and_timezone
 
@@ -282,6 +282,15 @@ def _delivered_targets(run: TaskRun) -> str:
     return f"{sum(1 for outcome in run.targets if outcome.ok)}/{len(run.targets)}"
 
 
+def _run_status_label(run: TaskRun) -> str:
+    """Describe whether a run was abandoned or recovered by a later attempt."""
+    if run.status is TaskStatus.ABANDONED:
+        return "abandoned"
+    if run.attempt > 1:
+        return f"reclaimed/{run.status.value}"
+    return run.status.value
+
+
 @cron_command.command(name="logs")
 @click.argument("task_id")
 @click.option(
@@ -308,6 +317,7 @@ def cron_logs(task_id: str, limit: int) -> None:
 
     table = Table(show_header=True, header_style="bold")
     table.add_column("Started")
+    table.add_column("Attempt")
     table.add_column("Status")
     table.add_column("Targets")
     table.add_column("Message ID")
@@ -318,14 +328,14 @@ def cron_logs(task_id: str, limit: int) -> None:
             "green"
             if run.status.value == "success"
             else "red"
-            if run.status.value == "failed"
+            if run.status.value in {"failed", "abandoned"}
             else ""
         )
+        status_label = _run_status_label(run)
         table.add_row(
             run.started_at,
-            f"[{status_style}]{run.status.value}[/{status_style}]"
-            if status_style
-            else run.status.value,
+            str(run.attempt),
+            f"[{status_style}]{status_label}[/{status_style}]" if status_style else status_label,
             _delivered_targets(run),
             run.posted_message_id or "—",
             run.error[:50] if run.error else "—",

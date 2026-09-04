@@ -7,8 +7,13 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from infrastructure.scheduling.scheduler.types import Provider, TaskKind
-from surfaces.cli.commands.cron import _KIND_CHOICES, _PROVIDER_CHOICES, cron_command
+from infrastructure.scheduling.scheduler.types import Provider, TaskKind, TaskRun, TaskStatus
+from surfaces.cli.commands.cron import (
+    _KIND_CHOICES,
+    _PROVIDER_CHOICES,
+    _run_status_label,
+    cron_command,
+)
 
 
 def test_cron_add_provider_choices_match_full_provider_enum() -> None:
@@ -51,6 +56,25 @@ def test_cron_logs_rejects_non_positive_limit() -> None:
     result = runner.invoke(cron_command, ["logs", "task-123", "--limit", "0"])
     assert result.exit_code != 0
     assert "not in the range" in result.output
+
+
+def test_cron_log_status_identifies_reclaimed_attempts() -> None:
+    assert _run_status_label(TaskRun(task_id="t", fire_time="f")) == "pending"
+    assert (
+        _run_status_label(
+            TaskRun(
+                task_id="t",
+                fire_time="f",
+                status=TaskStatus.SUCCESS,
+                attempt=2,
+            )
+        )
+        == "reclaimed/success"
+    )
+    assert (
+        _run_status_label(TaskRun(task_id="t", fire_time="f", status=TaskStatus.ABANDONED))
+        == "abandoned"
+    )
 
 
 def test_cron_add_allows_slack_without_chat_id(

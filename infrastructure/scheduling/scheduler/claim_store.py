@@ -1,8 +1,4 @@
-"""SQLite-backed execution claims and run history.
-
-The UNIQUE(task_id, fire_time) constraint prevents double-posting when
-multiple scheduler instances race for the same tick.
-"""
+"""SQLite-backed leased execution claims and run history."""
 
 from __future__ import annotations
 
@@ -11,9 +7,11 @@ import logging
 import sqlite3
 import time
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from config.constants import OPENSRE_HOME_DIR
 from infrastructure.scheduling.scheduler.types import DeliveryOutcome, TaskRun, TaskStatus
@@ -34,6 +32,39 @@ _MIGRATION_RETRY_DELAY_SECONDS = 0.1
 #: reads as "history unknown", and a failed-only retry refuses to run rather
 #: than widening to every destination.
 _TARGETED_RUN_SCAN_LIMIT = 50
+_CLAIM_LEASE_SECONDS = 30 * 60
+_TASK_RUNS_SCHEMA = """
+    CREATE TABLE task_runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id TEXT NOT NULL,
+        fire_time TEXT NOT NULL,
+        attempt INTEGER NOT NULL DEFAULT 1,
+        started_at TEXT NOT NULL,
+        finished_at TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        posted_message_id TEXT DEFAULT '',
+        error TEXT DEFAULT '',
+        provider TEXT DEFAULT '',
+        targets TEXT DEFAULT '',
+        owner_token TEXT NOT NULL DEFAULT '',
+        lease_expires_at TEXT NOT NULL DEFAULT '',
+        UNIQUE(task_id, fire_time, attempt)
+    )
+"""
+_RUN_COLUMNS = (
+    "task_id, fire_time, started_at, finished_at, status, posted_message_id, "
+    "error, provider, targets, attempt"
+)
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionClaim:
+    """Fenced identity for one scheduled execution attempt."""
+
+    task_id: str
+    fire_time: str
+    attempt: int
+    owner_token: str
 
 
 def _default_db_path() -> Path:
@@ -50,28 +81,38 @@ def _connect(db_path: Path) -> sqlite3.Connection:
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
-    """Create the task_runs table if it does not exist."""
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS task_runs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            task_id TEXT NOT NULL,
-            fire_time TEXT NOT NULL,
-            started_at TEXT NOT NULL,
-            finished_at TEXT,
-            status TEXT NOT NULL DEFAULT 'pending',
-            posted_message_id TEXT DEFAULT '',
-            error TEXT DEFAULT '',
-            provider TEXT DEFAULT '',
-            targets TEXT DEFAULT '',
-            UNIQUE(task_id, fire_time)
-        )
-    """)
+    """Create or migrate the task-runs table."""
+    columns = _table_columns(conn)
+    if not columns:
+        conn.execute(_TASK_RUNS_SCHEMA)
+    elif "attempt" not in columns:
+        _migrate_legacy_claim_table(conn, columns)
     _add_missing_columns(conn)
     conn.commit()
 
 
+def _table_columns(conn: sqlite3.Connection, table: str = "task_runs") -> set[str]:
+    return {str(row[1]) for row in conn.execute(f"PRAGMA table_info({table})")}
+
+
 def _has_targets_column(conn: sqlite3.Connection) -> bool:
-    return "targets" in {str(row[1]) for row in conn.execute("PRAGMA table_info(task_runs)")}
+    return "targets" in _table_columns(conn)
+
+
+def _migrate_legacy_claim_table(conn: sqlite3.Connection, legacy_columns: set[str]) -> None:
+    """Rebuild the pre-lease table so reclaimed attempts retain their history."""
+    conn.execute("ALTER TABLE task_runs RENAME TO task_runs_legacy")
+    conn.execute(_TASK_RUNS_SCHEMA)
+    targets = "targets" if "targets" in legacy_columns else "''"
+    conn.execute(
+        "INSERT INTO task_runs "
+        "(id, task_id, fire_time, attempt, started_at, finished_at, status, "
+        "posted_message_id, error, provider, targets, owner_token, lease_expires_at) "
+        f"SELECT id, task_id, fire_time, 1, started_at, finished_at, status, "
+        f"posted_message_id, error, provider, {targets}, '', started_at "
+        "FROM task_runs_legacy"
+    )
+    conn.execute("DROP TABLE task_runs_legacy")
 
 
 def _add_missing_columns(conn: sqlite3.Connection) -> None:
@@ -108,34 +149,72 @@ def _add_missing_columns(conn: sqlite3.Connection) -> None:
             return
 
 
-def try_claim(task_id: str, fire_time: str, db_path: Path | None = None) -> bool:
-    """Attempt to claim a task execution slot.
-
-    Returns True if this instance won the claim (INSERT succeeded).
-    Returns False if another instance already claimed it (UNIQUE violation).
-    """
+def try_claim(task_id: str, fire_time: str, db_path: Path | None = None) -> ExecutionClaim | None:
+    """Claim a task tick or reclaim it when the current lease has expired."""
     path = db_path or _default_db_path()
     conn = _connect(path)
     try:
         _ensure_schema(conn)
-        now = datetime.now(UTC).isoformat()
-        cursor = conn.execute(
-            "INSERT OR IGNORE INTO task_runs (task_id, fire_time, started_at, status) "
-            "VALUES (?, ?, ?, ?)",
-            (task_id, fire_time, now, TaskStatus.RUNNING.value),
+        conn.execute("BEGIN IMMEDIATE")
+        now = datetime.now(UTC)
+        now_text = now.isoformat()
+        lease_text = (now + timedelta(seconds=_CLAIM_LEASE_SECONDS)).isoformat()
+        row = conn.execute(
+            "SELECT attempt, status, lease_expires_at FROM task_runs "
+            "WHERE task_id = ? AND fire_time = ? ORDER BY attempt DESC LIMIT 1",
+            (task_id, fire_time),
+        ).fetchone()
+
+        if row is not None:
+            attempt = int(row[0])
+            status = TaskStatus(row[1])
+            lease = _parse_datetime(row[2])
+            if status is not TaskStatus.RUNNING or (lease is not None and lease >= now):
+                conn.rollback()
+                return None
+            conn.execute(
+                "UPDATE task_runs SET status = ?, finished_at = ?, error = ? "
+                "WHERE task_id = ? AND fire_time = ? AND attempt = ? AND status = ?",
+                (
+                    TaskStatus.ABANDONED.value,
+                    now_text,
+                    "claim lease expired",
+                    task_id,
+                    fire_time,
+                    attempt,
+                    TaskStatus.RUNNING.value,
+                ),
+            )
+            attempt += 1
+        else:
+            attempt = 1
+
+        owner_token = uuid4().hex
+        conn.execute(
+            "INSERT INTO task_runs "
+            "(task_id, fire_time, attempt, started_at, status, owner_token, "
+            "lease_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                task_id,
+                fire_time,
+                attempt,
+                now_text,
+                TaskStatus.RUNNING.value,
+                owner_token,
+                lease_text,
+            ),
         )
         conn.commit()
-        # rowcount == 1 means our INSERT went through; 0 means IGNORE fired
-        return cursor.rowcount == 1
+        return ExecutionClaim(task_id, fire_time, attempt, owner_token)
     except sqlite3.IntegrityError:
-        return False
+        conn.rollback()
+        return None
     finally:
         conn.close()
 
 
 def complete_run(
-    task_id: str,
-    fire_time: str,
+    claim: ExecutionClaim,
     *,
     status: TaskStatus,
     posted_message_id: str = "",
@@ -143,7 +222,7 @@ def complete_run(
     provider: str = "",
     targets: Sequence[DeliveryOutcome] = (),
     db_path: Path | None = None,
-) -> None:
+) -> bool:
     """Mark a claimed run as completed, recording each destination's outcome.
 
     ``targets`` is stored in the order it is given, which is the order the run
@@ -154,10 +233,11 @@ def complete_run(
     try:
         _ensure_schema(conn)
         now = datetime.now(UTC).isoformat()
-        conn.execute(
+        cursor = conn.execute(
             "UPDATE task_runs SET finished_at = ?, status = ?, "
             "posted_message_id = ?, error = ?, provider = ?, targets = ? "
-            "WHERE task_id = ? AND fire_time = ?",
+            "WHERE task_id = ? AND fire_time = ? AND attempt = ? "
+            "AND owner_token = ? AND status = ?",
             (
                 now,
                 status.value,
@@ -165,11 +245,23 @@ def complete_run(
                 error,
                 provider,
                 _encode_targets(targets),
-                task_id,
-                fire_time,
+                claim.task_id,
+                claim.fire_time,
+                claim.attempt,
+                claim.owner_token,
+                TaskStatus.RUNNING.value,
             ),
         )
         conn.commit()
+        completed = cursor.rowcount == 1
+        if not completed:
+            logger.warning(
+                "Completion rejected for reclaimed task %s fire_time=%s attempt=%d",
+                claim.task_id,
+                claim.fire_time,
+                claim.attempt,
+            )
+        return completed
     finally:
         conn.close()
 
@@ -205,7 +297,18 @@ def _row_to_task_run(row: tuple[Any, ...]) -> TaskRun:
         error=row[6] or "",
         provider=row[7] or "",
         targets=_decode_targets(row[8]),
+        attempt=int(row[9] or 1),
     )
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
 
 
 def get_runs(task_id: str, limit: int = 20, db_path: Path | None = None) -> list[TaskRun]:
@@ -215,8 +318,7 @@ def get_runs(task_id: str, limit: int = 20, db_path: Path | None = None) -> list
     try:
         _ensure_schema(conn)
         cursor = conn.execute(
-            "SELECT task_id, fire_time, started_at, finished_at, status, "
-            "posted_message_id, error, provider, targets "
+            f"SELECT {_RUN_COLUMNS} "
             "FROM task_runs WHERE task_id = ? ORDER BY started_at DESC LIMIT ?",
             (task_id, limit),
         )
@@ -236,8 +338,7 @@ def get_latest_finished_run(task_id: str, db_path: Path | None = None) -> TaskRu
     try:
         _ensure_schema(conn)
         cursor = conn.execute(
-            "SELECT task_id, fire_time, started_at, finished_at, status, "
-            "posted_message_id, error, provider, targets "
+            f"SELECT {_RUN_COLUMNS} "
             "FROM task_runs WHERE task_id = ? AND status IN (?, ?) "
             "ORDER BY COALESCE(finished_at, started_at) DESC LIMIT 1",
             (task_id, TaskStatus.SUCCESS.value, TaskStatus.FAILED.value),
@@ -267,8 +368,7 @@ def get_latest_targeted_run(task_id: str, db_path: Path | None = None) -> TaskRu
     try:
         _ensure_schema(conn)
         cursor = conn.execute(
-            "SELECT task_id, fire_time, started_at, finished_at, status, "
-            "posted_message_id, error, provider, targets "
+            f"SELECT {_RUN_COLUMNS} "
             "FROM task_runs WHERE task_id = ? AND status IN (?, ?) "
             "AND targets IS NOT NULL AND targets != '' "
             "ORDER BY COALESCE(finished_at, started_at) DESC LIMIT ?",
@@ -313,6 +413,7 @@ def delete_runs(task_id: str, db_path: Path | None = None) -> int:
 __all__ = [
     "complete_run",
     "delete_runs",
+    "ExecutionClaim",
     "get_latest_finished_run",
     "get_latest_targeted_run",
     "get_runs",
