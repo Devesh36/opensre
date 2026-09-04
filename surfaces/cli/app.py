@@ -17,12 +17,12 @@ from typing import TYPE_CHECKING
 import click
 
 from config.constants.product import RELEASE_STAGE_BANNER
-from config.version import get_opensre_version
 from surfaces.cli import startup
 from surfaces.cli.group import LazyRichGroup, ThemeParamType
 from surfaces.cli.host import CLI_HOST_CONTEXT_KEY, CliHost, ShellLauncher, cli_host
 from surfaces.cli.invocation import (
     ensure_utf8_stdio,
+    is_fast_help_invocation,
     is_fast_version_invocation,
     print_fast_version,
     resolve_command_parts,
@@ -150,7 +150,7 @@ def _run_without_subcommand(
     context_settings={"help_option_names": ["-h", "--help"]},
     invoke_without_command=True,
 )
-@click.version_option(version=get_opensre_version(), prog_name="opensre")
+@click.version_option(prog_name="opensre")
 @click.option(
     "--json", "-j", "json_output", is_flag=True, help="Emit machine-readable JSON output."
 )
@@ -255,8 +255,9 @@ def main(argv: list[str] | None = None, *, host: CliHost | None = None) -> int:
     if is_fast_version_invocation(cli_argv):
         print_fast_version(cli_argv)
         return 0
-
-    startup.run(cli, cli_argv)
+    fast_help = is_fast_help_invocation(cli, cli_argv)
+    if not fast_help:
+        startup.run(cli, cli_argv)
     StructuredError = load_structured_error_type()
 
     try:
@@ -308,12 +309,14 @@ def main(argv: list[str] | None = None, *, host: CliHost | None = None) -> int:
                 _sentry_sdk.flush(timeout=2)
         raise
     finally:
-        # Drain pending events so one-shot runs do not lose them, and stay
-        # non-blocking when the worker is idle.
-        if analytics_needs_flush():
-            shutdown_analytics(flush=True, timeout=_ANALYTICS_FLUSH_TIMEOUT_SECONDS)
-        else:
-            shutdown_analytics(flush=False)
+        # Help never starts analytics; importing the provider here would
+        # resolve the git version and fingerprint just to ask if a flush
+        # is needed.
+        if not fast_help:
+            if analytics_needs_flush():
+                shutdown_analytics(flush=True, timeout=_ANALYTICS_FLUSH_TIMEOUT_SECONDS)
+            else:
+                shutdown_analytics(flush=False)
     return 0
 
 

@@ -183,3 +183,129 @@ def test_fast_version_answers_without_the_terminal_stack() -> None:
 
     # Assert
     assert "TERMINAL_MODULES 0" in result.stdout, result.stdout
+
+
+def test_fast_help_invocation_detects_help_flags() -> None:
+    from surfaces.cli.invocation import is_fast_help_invocation
+
+    assert is_fast_help_invocation(cli, ["--help"])
+    assert is_fast_help_invocation(cli, ["-h"])
+    assert is_fast_help_invocation(cli, ["doctor", "--help"])
+    assert is_fast_help_invocation(cli, ["ask", "--allowed-tool", "grafana_query", "--help"])
+    assert not is_fast_help_invocation(cli, [])
+    assert not is_fast_help_invocation(cli, ["doctor"])
+    assert not is_fast_help_invocation(cli, ["--version"])
+
+
+def test_fast_help_invocation_ignores_help_tokens_used_as_values() -> None:
+    """``--help`` / ``-h`` bound as option values or ``--`` operands are not help."""
+    from surfaces.cli.invocation import is_fast_help_invocation, resolve_command_parts
+
+    assert not is_fast_help_invocation(cli, ["ask", "--allowed-tool", "--help", "prompt"])
+    assert not is_fast_help_invocation(cli, ["ask", "--allowed-tool", "-h", "prompt"])
+    assert not is_fast_help_invocation(cli, ["ask", "--", "--help"])
+    assert not is_fast_help_invocation(cli, ["--theme", "--help"])
+    assert resolve_command_parts(cli, ["ask", "--allowed-tool", "--help", "prompt"]) == ["ask"]
+    assert resolve_command_parts(cli, ["ask", "--", "--help"]) == ["ask"]
+
+
+def test_help_flag_skips_full_startup(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Root ``--help`` must not install adapters or Sentry (kubernetes/boto3)."""
+
+    def fail_bootstrap(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("--help should not bootstrap the full CLI")
+
+    monkeypatch.setattr("infrastructure.observability.errors.sentry.init_sentry", fail_bootstrap)
+    monkeypatch.setattr(
+        "surfaces.shared.terminal.output.boundary.install_product_adapters",
+        fail_bootstrap,
+    )
+    monkeypatch.setattr("surfaces.cli.app.shutdown_analytics", lambda **_kw: None)
+
+    from surfaces.cli.app import main
+
+    assert main(["--help"]) == 0
+
+
+def test_help_as_option_value_still_runs_startup(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Click binds ``--help`` to ``--allowed-tool``; that is not a help invocation."""
+    started: list[bool] = []
+
+    monkeypatch.setattr(
+        "surfaces.cli.app.startup.run",
+        lambda *_a, **_k: started.append(True),
+    )
+    monkeypatch.setattr("surfaces.cli.app.shutdown_analytics", lambda **_kw: None)
+    monkeypatch.setattr(
+        "surfaces.cli.ask.approval.unknown_allowed_tools",
+        lambda _v: ("--help",),
+    )
+
+    from surfaces.cli.app import main
+
+    rc = main(["ask", "--allowed-tool", "--help", "prompt"])
+    assert started
+    assert rc != 0
+
+
+def test_fast_help_does_not_import_vendor_sdks() -> None:
+    """``opensre --help`` must not pay kubernetes/boto3/Sentry import tax."""
+    probe = (
+        "import sys; from surfaces.cli.__main__ import main; main(['--help']); "
+        "heavy = [n for n in sys.modules if n.split('.')[0] in "
+        "{'kubernetes', 'boto3', 'botocore', 'sentry_sdk', 'litellm'}]; "
+        "cmds = [n for n in sys.modules if n.startswith('surfaces.cli.commands.') "
+        "and n not in {'surfaces.cli.commands', 'surfaces.cli.commands.command_specs'}]; "
+        "print('HEAVY', ','.join(sorted(heavy)[:12]) or 'none'); "
+        "print('CMDS', ','.join(sorted(cmds)) or 'none')"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "HEAVY none" in result.stdout, result.stdout + result.stderr
+    assert "CMDS none" in result.stdout, result.stdout + result.stderr
+
+
+def test_subcommand_help_still_loads_that_command(capsys: pytest.CaptureFixture[str]) -> None:
+    """``opensre ask --help`` must print real options from the ask command module."""
+    from surfaces.cli.app import main
+
+    rc = main(["ask", "--help"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "--allowed-tool" in out
+    assert "dangerously-bypass-approvals" in out
+
+
+def test_ask_help_does_not_import_the_agent_harness() -> None:
+    """Ask help is the Click adapter; the harness loads when ask actually runs."""
+    probe = (
+        "import sys; from surfaces.cli.__main__ import main; main(['ask', '--help']); "
+        "heavy = [n for n in sys.modules if n.startswith('core.agent_harness')]; "
+        "print('HARNESS', ','.join(sorted(heavy)[:8]) or 'none')"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "HARNESS none" in result.stdout, result.stdout + result.stderr
+
+
+def test_help_does_not_resolve_the_git_version() -> None:
+    """Root help must not read git / package metadata just to exist."""
+    probe = (
+        "import sys; from surfaces.cli.__main__ import main; main(['--help']); "
+        "print('BUILD_INFO', 'config.runtime_metadata.build_info' in sys.modules)"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "BUILD_INFO False" in result.stdout, result.stdout + result.stderr
