@@ -13,7 +13,7 @@ Integration-setup offers follow the same pattern via
 from __future__ import annotations
 
 import shlex
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 from config.constants.slash_commands import INTEGRATIONS_SETUP_PREFIX
@@ -61,6 +61,8 @@ class PendingScheduleOffer:
     timezone: str
     provider: str
     chat_id: str = ""
+    skill_name: str = ""
+    skill_inputs: dict[str, str] = field(default_factory=dict)
 
     def to_slash_command(self) -> str:
         """Literal slash the action driver dispatches without an LLM round-trip."""
@@ -75,6 +77,24 @@ class PendingScheduleOffer:
             "--provider",
             self.provider,
         ]
+        if self.kind == "recurring_skill":
+            skill = self.skill_name.strip()
+            if skill:
+                args.extend(["--skill", skill])
+            if skill == "morning-report":
+                city = self.skill_inputs.get("city", "").strip()
+                if city:
+                    args.extend(["--city", city])
+            elif skill == "github-ci-health":
+                for key, flag in (
+                    ("owner", "--owner"),
+                    ("repo", "--repo"),
+                    ("branch", "--branch"),
+                    ("pr_number", "--pr"),
+                ):
+                    value = self.skill_inputs.get(key, "").strip()
+                    if value:
+                        args.extend([flag, value])
         chat = self.chat_id.strip()
         if chat:
             args.extend(["--chat-id", chat])
@@ -95,7 +115,12 @@ class PendingScheduleOffer:
         chat = self.chat_id.strip()
         if chat:
             dest = f"{self.provider} ({chat})"
-        return f"schedule this as a recurring {self.kind} {cadence} to {dest}"
+        label = (
+            (self.skill_name.strip() or "recurring skill")
+            if self.kind == "recurring_skill"
+            else self.kind
+        )
+        return f"schedule this as a recurring {label} {cadence} to {dest}"
 
 
 @dataclass(frozen=True, slots=True)

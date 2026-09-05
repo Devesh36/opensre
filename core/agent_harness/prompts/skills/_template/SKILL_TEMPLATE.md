@@ -12,7 +12,7 @@ To create a new skill:
    self-sufficient: what the skill does, which tool(s) it drives, and append
    "Multi-step; load before acting." for data-dependent chains.
 5. Add `recurring: <human schedule>` (e.g. "weekdays 09:00") only when the
-   skill ends with a propose_scheduled_delivery offer.
+   skill ends with a propose_scheduled_delivery offer using kind recurring_skill.
 6. Optional report template: a sibling file named <folder>_report.md is
    appended automatically to the body that skill_view returns.
 7. Section order below is the house style (see github_ci_fix for a

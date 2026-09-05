@@ -16,6 +16,13 @@ from __future__ import annotations
 
 from core.agent_harness.harness import AgentSession, SessionConfig
 from core.agent_harness.ports import OutputSink
+from core.agent_harness.prompts.skills.schedule import (
+    is_recurring_skill,
+    normalize_skill_name,
+    pin_recurring_skill,
+    resolve_scheduled_skill,
+    validate_skill_inputs,
+)
 from core.agent_harness.session import SessionCore, SessionManager
 from core.agent_harness.turns.turn_results import ToolCallingTurnResult, TurnResult
 
@@ -27,4 +34,9 @@ __all__ = [
     "SessionManager",
     "ToolCallingTurnResult",
     "TurnResult",
+    "is_recurring_skill",
+    "normalize_skill_name",
+    "pin_recurring_skill",
+    "resolve_scheduled_skill",
+    "validate_skill_inputs",
 ]

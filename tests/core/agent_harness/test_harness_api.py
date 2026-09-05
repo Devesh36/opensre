@@ -32,6 +32,11 @@ ROOT_API = frozenset(
         "SessionManager",
         "ToolCallingTurnResult",
         "TurnResult",
+        "is_recurring_skill",
+        "normalize_skill_name",
+        "pin_recurring_skill",
+        "resolve_scheduled_skill",
+        "validate_skill_inputs",
     }
 )
 

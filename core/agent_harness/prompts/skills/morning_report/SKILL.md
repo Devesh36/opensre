@@ -99,10 +99,12 @@ Examples:
    "yes" expands to the tool's slash_preview with no LLM round-trip.
    Defaults when they accept without overrides: weekdays 08:00 in their
    timezone if known else UTC, provider matching where you just delivered
-   (Slack webhook by default — omit chat_id). Kind is daily_summary.
+   (Slack webhook by default — omit chat_id). Kind is recurring_skill with
+   skill_name morning-report.
    Example after Slack webhook delivery:
-     → propose_scheduled_delivery(kind="daily_summary", cron="0 8 * * 1-5",
-         timezone="UTC", provider="slack",
+     → propose_scheduled_delivery(kind="recurring_skill", skill_name="morning-report",
+         city="<city used for the weather fetch>",
+         cron="0 8 * * 1-5", timezone="UTC", provider="slack",
          briefing_text="<FULL composed weather + headlines briefing>")
      → show the tool's response_text (briefing + Want me to: …)
    Pass chat_id only when you have a concrete Telegram/Discord/Rocket.Chat

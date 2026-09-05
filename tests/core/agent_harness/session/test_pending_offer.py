@@ -15,6 +15,96 @@ from tools.interactive_shell.actions.propose_scheduled_delivery import (
 )
 
 
+def test_pending_recurring_skill_offer_includes_skill_flag() -> None:
+    offer = PendingScheduleOffer(
+        kind="recurring_skill",
+        skill_name="morning-report",
+        cron="0 8 * * 1-5",
+        timezone="Europe/Amsterdam",
+        provider="slack",
+    )
+    assert offer.to_slash_command() == (
+        "/cron add --kind recurring_skill --cron '0 8 * * 1-5' "
+        "--tz Europe/Amsterdam --provider slack --skill morning-report"
+    )
+
+
+def test_pending_morning_report_offer_preserves_city() -> None:
+    offer = PendingScheduleOffer(
+        kind="recurring_skill",
+        skill_name="morning-report",
+        skill_inputs={"city": "New Delhi"},
+        cron="0 8 * * 1-5",
+        timezone="Asia/Kolkata",
+        provider="slack",
+    )
+
+    assert offer.to_slash_command() == (
+        "/cron add --kind recurring_skill --cron '0 8 * * 1-5' "
+        "--tz Asia/Kolkata --provider slack --skill morning-report --city 'New Delhi'"
+    )
+
+
+def test_pending_github_ci_health_offer_preserves_repository_scope() -> None:
+    offer = PendingScheduleOffer(
+        kind="recurring_skill",
+        skill_name="github-ci-health",
+        skill_inputs={
+            "owner": "Tracer-Cloud",
+            "repo": "opensre",
+            "branch": "feature/ci health",
+        },
+        cron="0 8 * * 1-5",
+        timezone="Europe/Istanbul",
+        provider="slack",
+    )
+
+    assert offer.to_slash_command() == (
+        "/cron add --kind recurring_skill --cron '0 8 * * 1-5' "
+        "--tz Europe/Istanbul --provider slack --skill github-ci-health "
+        "--owner Tracer-Cloud --repo opensre --branch 'feature/ci health'"
+    )
+
+
+def test_propose_github_ci_health_offer_requires_and_preserves_scope() -> None:
+    session = InMemorySessionState()
+    ctx = ActionToolScope(session=session, console=object())
+
+    missing = execute_propose_scheduled_delivery_tool(
+        {
+            "kind": "recurring_skill",
+            "skill_name": "github-ci-health",
+            "cron": "0 8 * * 1-5",
+            "provider": "interactive_shell",
+        },
+        ctx,
+    )
+    assert missing == {"ok": False, "error": "owner and repo are required for github-ci-health."}
+
+    result = execute_propose_scheduled_delivery_tool(
+        {
+            "kind": "recurring_skill",
+            "skill_name": "github-ci-health",
+            "cron": "0 8 * * 1-5",
+            "timezone": "Europe/Istanbul",
+            "provider": "interactive_shell",
+            "owner": "Tracer-Cloud",
+            "repo": "opensre",
+            "pr_number": "5961",
+        },
+        ctx,
+    )
+
+    assert result["ok"] is True
+    assert session.pending_schedule_offer is not None
+    assert session.pending_schedule_offer.skill_inputs == {
+        "owner": "Tracer-Cloud",
+        "repo": "opensre",
+        "pr_number": "5961",
+    }
+    assert "--owner Tracer-Cloud --repo opensre --pr 5961" in result["slash_preview"]
+
+
 def test_pending_offer_to_slash_omits_slack_chat_id() -> None:
     offer = PendingScheduleOffer(
         kind="manual_loop",
@@ -74,18 +164,23 @@ def test_propose_tool_sets_session_pending_offer() -> None:
     )
     result = execute_propose_scheduled_delivery_tool(
         {
-            "kind": "manual_loop",
+            "kind": "recurring_skill",
+            "skill_name": "morning-report",
             "cron": "0 8 * * 1-5",
             "timezone": "UTC",
             "provider": "slack",
             "chat_id": "C0123ABCD",
             "briefing_text": briefing,
+            "city": "Amsterdam",
         },
         ctx,
     )
     assert result["ok"] is True
     assert session.pending_schedule_offer is not None
-    assert session.pending_schedule_offer.kind == "manual_loop"
+    assert session.pending_schedule_offer.kind == "recurring_skill"
+    assert session.pending_schedule_offer.skill_name == "morning-report"
+    assert session.pending_schedule_offer.skill_inputs == {"city": "Amsterdam"}
+    assert "--city Amsterdam" in result["slash_preview"]
     assert result["closer"].startswith("**Want me to:**")
     assert "Weather — Amsterdam" in result["response_text"]
     assert result["closer"] in result["response_text"]
@@ -97,7 +192,8 @@ def test_propose_alone_without_briefing_work_is_rejected() -> None:
     ctx = ActionToolScope(session=session, console=object())
     result = execute_propose_scheduled_delivery_tool(
         {
-            "kind": "manual_loop",
+            "kind": "recurring_skill",
+            "skill_name": "morning-report",
             "cron": "0 8 * * 1-5",
             "timezone": "UTC",
             "provider": "slack",

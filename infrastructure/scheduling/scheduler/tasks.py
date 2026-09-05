@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 
+from core.agent_harness import resolve_scheduled_skill
 from infrastructure.scheduling.scheduler.loop_constants import LOOP_PROMPT_PARAM
 from infrastructure.scheduling.scheduler.runners import SchedulerRunners
 from infrastructure.scheduling.scheduler.types import ScheduledTask, TaskKind
@@ -35,6 +36,7 @@ def build_message(task: ScheduledTask, runners: SchedulerRunners) -> str:
         TaskKind.POSTHOG_METRIC_REPORT: _build_posthog_metric_report,
         TaskKind.WORK_ITEM_REMINDER: _build_work_item_reminder,
         TaskKind.WORK_ITEM_CHECKIN: _build_work_item_checkin,
+        TaskKind.RECURRING_SKILL: _build_recurring_skill,
     }
     builder = builders.get(task.kind)
     if builder is None:
@@ -188,6 +190,23 @@ def _build_manual_loop(task: ScheduledTask, runners: SchedulerRunners) -> str:
         raise RuntimeError(
             f"Manual loop failed for task {task.id}. Check logs for details."
         ) from exc
+
+
+def _build_recurring_skill(task: ScheduledTask, runners: SchedulerRunners) -> str:
+    """Run a pinned recurring action skill via the headless agent path."""
+    skill_name = task.skill_name.strip()
+    if not skill_name:
+        raise RuntimeError(f"Recurring skill task {task.id} is missing skill_name.")
+    resolve_scheduled_skill(skill_name, task.skill_revision)
+    return runners.agent(
+        {
+            "source": "scheduled_recurring_skill",
+            "task_id": task.id,
+            "skill_name": skill_name,
+            "skill_revision": task.skill_revision,
+            "skill_inputs": dict(task.skill_inputs),
+        }
+    )
 
 
 __all__ = ["build_message"]
