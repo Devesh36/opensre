@@ -176,11 +176,11 @@ def get_task(task_id: str, store_path: Path | None = None) -> ScheduledTask | No
 def _schedule_identity(entry: Mapping[str, Any]) -> tuple[Any, ...]:
     """What makes two rows the same schedule.
 
-    Full configuration, not just the slot: two rows differing in destination or
-    params are separate reports, and merging them would drop one the user asked
-    for. Identity deliberately excludes ``id``, ``name`` and the run bookkeeping
-    (``created_at``, ``last_run``, ``next_run``), which differ between two
-    confirmations of the same schedule.
+    Full configuration, not just the slot: two rows differing in destination,
+    skill revision, or params are separate reports, and merging them would drop
+    one the user asked for. Identity deliberately excludes ``id``, ``name`` and
+    the run bookkeeping (``created_at``, ``last_run``, ``next_run``), which differ
+    between two confirmations of the same schedule.
     """
     return (
         entry.get("kind"),
@@ -190,6 +190,7 @@ def _schedule_identity(entry: Mapping[str, Any]) -> tuple[Any, ...]:
         entry.get("chat_id"),
         entry.get("window_hours"),
         entry.get("skill_name") or "",
+        entry.get("skill_revision") or "",
         tuple(sorted((entry.get("skill_inputs") or {}).items())),
         tuple(sorted((entry.get("params") or {}).items())),
     )
