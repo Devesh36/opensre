@@ -11,7 +11,7 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-from core.agent_harness import pin_recurring_skill
+from core.agent_harness import pin_recurring_skill, validate_skill_inputs
 from infrastructure.scheduling.scheduler.credentials import requires_explicit_chat_id
 from infrastructure.scheduling.scheduler.types import Provider, TaskKind, TaskRun
 from infrastructure.terminal.theme import GLYPH_ERROR, GLYPH_SUCCESS
@@ -106,6 +106,7 @@ def cron_command() -> None:
 @click.option(
     "--pr", "pr_number", type=click.IntRange(min=1), default=None, help="Optional GitHub PR filter."
 )
+@click.option("--city", type=str, default="", help="Optional city for the morning-report skill.")
 def cron_add(
     name: str,
     kind: str,
@@ -119,6 +120,7 @@ def cron_add(
     repo: str,
     branch: str,
     pr_number: int | None,
+    city: str,
 ) -> None:
     """Add a new scheduled delivery task."""
     from infrastructure.scheduling.scheduler.types import ScheduledTask
@@ -139,8 +141,13 @@ def cron_add(
             raise click.ClickException(str(exc)) from exc
     elif skill_name.strip():
         raise click.ClickException("--skill is only valid with --kind recurring_skill.")
-    skill_inputs = _github_ci_health_inputs(
-        pinned_name, owner=owner, repo=repo, branch=branch, pr_number=pr_number
+    skill_inputs = _recurring_skill_inputs(
+        pinned_name,
+        city=city,
+        owner=owner,
+        repo=repo,
+        branch=branch,
+        pr_number=pr_number,
     )
 
     task = ScheduledTask(
@@ -178,23 +185,36 @@ def cron_add(
     _console.print(f"  Provider: {added.provider.value}  Chat: {added.chat_id}")
 
 
-def _github_ci_health_inputs(
+def _recurring_skill_inputs(
     skill_name: str,
     *,
+    city: str,
     owner: str,
     repo: str,
     branch: str,
     pr_number: int | None,
 ) -> dict[str, str]:
-    """Validate and serialize inputs for the recurring GitHub CI health skill."""
+    """Validate and serialize inputs for the selected recurring skill."""
+    normalized_city = city.strip()
     values_supplied = bool(owner.strip() or repo.strip() or branch.strip() or pr_number)
+    if skill_name == "morning-report":
+        if values_supplied:
+            raise click.UsageError(
+                "--owner, --repo, --branch, and --pr are only valid with "
+                "--kind recurring_skill --skill github-ci-health."
+            )
+        return validate_skill_inputs({"city": normalized_city} if normalized_city else {})
+    if normalized_city:
+        raise click.UsageError(
+            "--city is only valid with --kind recurring_skill --skill morning-report."
+        )
     if skill_name != "github-ci-health":
         if values_supplied:
             raise click.UsageError(
                 "--owner, --repo, --branch, and --pr are only valid with "
                 "--kind recurring_skill --skill github-ci-health."
             )
-        return {}
+        return validate_skill_inputs({})
     if not owner.strip() or not repo.strip():
         raise click.UsageError("--owner and --repo are required for skill github-ci-health.")
     if branch.strip() and pr_number is not None:
@@ -204,7 +224,7 @@ def _github_ci_health_inputs(
         params["branch"] = branch.strip()
     if pr_number is not None:
         params["pr_number"] = str(pr_number)
-    return params
+    return validate_skill_inputs(params)
 
 
 @cron_command.command(name="list")

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.agent_harness import is_recurring_skill, normalize_skill_name
+from core.agent_harness import is_recurring_skill, normalize_skill_name, validate_skill_inputs
 from core.agent_harness.spi.session_state import (
     PendingScheduleOffer,
     clear_competing_pending_offers,
@@ -206,6 +206,11 @@ def execute_propose_scheduled_delivery_tool(
             "ok": False,
             "error": "city is only valid for morning-report.",
         }
+
+    try:
+        skill_inputs = validate_skill_inputs(skill_inputs)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
 
     offer = PendingScheduleOffer(
         kind=kind,

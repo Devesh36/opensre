@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from core.agent_harness import pin_recurring_skill
 from infrastructure.scheduling.scheduler.credentials import (
     resolve_slack_credentials,
     resolve_slack_default_chat_id,
@@ -38,6 +39,10 @@ from infrastructure.scheduling.scheduler.types import Provider, ScheduledTask, T
 _ONBOARDING_LOOP_SOURCE = "onboarding"
 _MANUAL_LOOP_SOURCE = "manual"
 _MANUAL_LOOP_CREATED_BY = "interactive_shell"
+_LEGACY_MORNING_REPORT_PROMPT = (
+    "Summarize the reliability picture for the last 24 hours: notable "
+    "alerts, error spikes, and anything on-call should know this morning."
+)
 _TIME_RE = re.compile(
     r"^(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?\s*(?P<meridiem>am|pm)?$",
     re.IGNORECASE,
@@ -62,6 +67,7 @@ class StarterLoop:
     timezone: str
     window_hours: int
     prompt: str = ""
+    skill_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,15 +126,12 @@ STARTER_LOOPS: tuple[StarterLoop, ...] = (
     StarterLoop(
         slug="morning-report",
         name="Morning report",
-        description="Weekday reliability digest for the last 24 hours.",
-        kind=TaskKind.MANUAL_LOOP,
+        description="Weekday weather and news briefing.",
+        kind=TaskKind.RECURRING_SKILL,
         cron="0 8 * * 1-5",
         timezone="UTC",
         window_hours=24,
-        prompt=(
-            "Summarize the reliability picture for the last 24 hours: notable "
-            "alerts, error spikes, and anything on-call should know this morning."
-        ),
+        skill_name="morning-report",
     ),
     StarterLoop(
         slug="weekly-alert-audit",
@@ -159,6 +162,7 @@ _KIND_LABELS: dict[TaskKind, str] = {
     TaskKind.SENTRY_MORNING_DIGEST: "Sentry morning digest",
     TaskKind.SENTRY_UPTIME_WATCH: "Sentry uptime watch",
     TaskKind.GITHUB_PR_SWEEP: "GitHub PR sweep",
+    TaskKind.RECURRING_SKILL: "Recurring skill",
 }
 
 
@@ -498,14 +502,18 @@ def seed_starter_loops(store_path: Path | None = None) -> list[ScheduledTask]:
     posting to a user's chat destination. Users can create an active loop with
     ``/loops add`` or the natural-language schedule flow.
     """
-    existing_slugs = {
-        task.params.get(LOOP_SLUG_PARAM, "").strip()
+    existing_by_slug = {
+        task.params.get(LOOP_SLUG_PARAM, "").strip(): task
         for task in list_tasks(store_path)
         if task.params.get(LOOP_SOURCE_PARAM) == _ONBOARDING_LOOP_SOURCE
     }
     added: list[ScheduledTask] = []
     for starter in STARTER_LOOPS:
-        if starter.slug in existing_slugs:
+        existing = existing_by_slug.get(starter.slug)
+        if existing is not None:
+            upgraded = _upgrade_legacy_skill_starter(existing, starter, store_path=store_path)
+            if upgraded is not None:
+                added.append(upgraded)
             continue
         params = {
             LOOP_SLUG_PARAM: starter.slug,
@@ -515,6 +523,10 @@ def seed_starter_loops(store_path: Path | None = None) -> list[ScheduledTask]:
         }
         if starter.prompt:
             params[LOOP_PROMPT_PARAM] = starter.prompt
+        skill_name = ""
+        skill_revision = ""
+        if starter.skill_name:
+            skill_name, skill_revision = pin_recurring_skill(starter.skill_name)
         task = ScheduledTask(
             name=starter.name,
             kind=starter.kind,
@@ -524,11 +536,47 @@ def seed_starter_loops(store_path: Path | None = None) -> list[ScheduledTask]:
             window_hours=starter.window_hours,
             enabled=False,
             params=params,
+            skill_name=skill_name,
+            skill_revision=skill_revision,
         )
         stored_task = add_task(task, store_path)
         record_scheduler_task_operation("scheduled_loop_seeded", stored_task)
         added.append(stored_task)
     return added
+
+
+def _upgrade_legacy_skill_starter(
+    task: ScheduledTask,
+    starter: StarterLoop,
+    *,
+    store_path: Path | None,
+) -> ScheduledTask | None:
+    """Upgrade only an untouched disabled onboarding prompt to its named skill."""
+    if (
+        not starter.skill_name
+        or task.enabled
+        or task.kind is not TaskKind.MANUAL_LOOP
+        or task.params.get(LOOP_SOURCE_PARAM) != _ONBOARDING_LOOP_SOURCE
+        or task.params.get(LOOP_PROMPT_PARAM) != _LEGACY_MORNING_REPORT_PROMPT
+        or task.skill_name
+    ):
+        return None
+
+    skill_name, skill_revision = pin_recurring_skill(starter.skill_name)
+    task.kind = TaskKind.RECURRING_SKILL
+    task.skill_name = skill_name
+    task.skill_revision = skill_revision
+    task.skill_inputs = {}
+    task.params.pop(LOOP_PROMPT_PARAM, None)
+    task.params[LOOP_DESCRIPTION_PARAM] = starter.description
+    if not update_task(task, store_path):
+        return None
+    record_scheduler_task_operation(
+        "scheduled_loop_upgraded",
+        task,
+        extra={"from_kind": TaskKind.MANUAL_LOOP.value},
+    )
+    return task
 
 
 def _summarize_group(

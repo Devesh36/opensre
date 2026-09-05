@@ -81,7 +81,11 @@ class PendingScheduleOffer:
             skill = self.skill_name.strip()
             if skill:
                 args.extend(["--skill", skill])
-            if skill == "github-ci-health":
+            if skill == "morning-report":
+                city = self.skill_inputs.get("city", "").strip()
+                if city:
+                    args.extend(["--city", city])
+            elif skill == "github-ci-health":
                 for key, flag in (
                     ("owner", "--owner"),
                     ("repo", "--repo"),
