@@ -753,6 +753,8 @@ jobs:
         with:
           filters: |
             packaging:
+              - "README.md"
+              - "LICENSE"
               - "pyproject.toml"
               - "uv.lock"
               - "bootstrap/**"
@@ -762,6 +764,7 @@ jobs:
               - "infrastructure/**"
               - "integrations/**"
               - "surfaces/**"
+              - "tests/**"
               - "tools/**"
               - ".github/workflows/ci.yml"
               - ".github/workflows/release.yml"
