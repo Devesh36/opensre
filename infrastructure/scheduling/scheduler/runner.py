@@ -15,6 +15,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, cast
 
+from infrastructure.scheduling.scheduler.claim_store import get_expired_claims
 from infrastructure.scheduling.scheduler.executor import execute_task
 from infrastructure.scheduling.scheduler.operation_log import (
     record_scheduler_execution_operation,
@@ -40,6 +41,8 @@ TaskFilter = Callable[[ScheduledTask], bool]
 # Populated by EVENT_JOB_SUBMITTED before each job runs (job_id -> fire_time).
 _pending_fire_times: dict[str, str] = {}
 _pending_fire_times_lock = threading.Lock()
+_RECOVERY_JOB_ID = "scheduler-claim-recovery"
+_RECOVERY_INTERVAL_SECONDS = 60
 
 
 def _make_trigger(task: ScheduledTask) -> Any:
@@ -137,6 +140,50 @@ def _scheduled_job(task_id: str, runners: SchedulerRunners) -> None:
         update_task(task)
 
 
+def _recover_expired_tasks(
+    runners: SchedulerRunners,
+    *,
+    task_filter: TaskFilter | None = None,
+) -> None:
+    """Resubmit expired scheduled ticks through the normal fenced executor."""
+    for expired in get_expired_claims():
+        task = get_task(expired.task_id)
+        if task is None or not task.enabled:
+            continue
+        if task_filter is not None and not task_filter(task):
+            continue
+        result = execute_task(task, expired.fire_time, runners)
+        logger.info(
+            "Recovered expired task %s fire_time=%s result=%s",
+            expired.task_id,
+            expired.fire_time,
+            result,
+        )
+
+
+def _register_recovery_job(
+    scheduler: Any,
+    runners: SchedulerRunners,
+    *,
+    task_filter: TaskFilter | None = None,
+) -> None:
+    """Install the periodic recovery sweep on a live APScheduler instance."""
+    from apscheduler.triggers.interval import IntervalTrigger
+
+    scheduler.add_job(
+        _recover_expired_tasks,
+        trigger=IntervalTrigger(seconds=_RECOVERY_INTERVAL_SECONDS),
+        args=[runners],
+        kwargs={"task_filter": task_filter},
+        id=_RECOVERY_JOB_ID,
+        name="scheduler:expired-claim-recovery",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        next_run_time=datetime.now(UTC),
+    )
+
+
 def _register_jobs(
     scheduler: Any,
     runners: SchedulerRunners,
@@ -218,7 +265,7 @@ def resync_scheduler_jobs(
         add_listener=False,
     )
     desired_ids = _desired_task_ids(task_filter=task_filter)
-    for job_id in existing_ids - desired_ids:
+    for job_id in existing_ids - desired_ids - {_RECOVERY_JOB_ID}:
         try:
             scheduler.remove_job(job_id)
             record_scheduler_service_operation(
@@ -228,6 +275,10 @@ def resync_scheduler_jobs(
             )
         except Exception as exc:  # noqa: BLE001
             logger.debug("Failed to remove stale scheduler job %s: %s", job_id, exc)
+    if enabled_count > 0:
+        _register_recovery_job(scheduler, runners, task_filter=task_filter)
+    elif _RECOVERY_JOB_ID in existing_ids:
+        scheduler.remove_job(_RECOVERY_JOB_ID)
     logger.info("Scheduler resynced with %d enabled task(s)", enabled_count)
     record_scheduler_service_operation("scheduler_resynced", task_count=enabled_count)
     return enabled_count
@@ -281,6 +332,7 @@ def start_background_scheduler(
     if enabled_count == 0:
         record_scheduler_service_operation("scheduler_idle", task_count=0)
         return None, 0
+    _register_recovery_job(scheduler, runners, task_filter=task_filter)
     scheduler.start()
     logger.info("Scheduler started with %d task(s). Waiting for triggers...", enabled_count)
     record_scheduler_service_operation("scheduler_started", task_count=enabled_count)
@@ -323,6 +375,8 @@ def start_scheduler(runners: SchedulerRunners, *, idle_when_empty: bool = False)
         logger.warning("No enabled tasks found. Scheduler has nothing to run.")
         record_scheduler_service_operation("scheduler_idle", task_count=0)
         raise SystemExit("No enabled tasks found. Add tasks with `opensre cron add` first.")
+    if enabled_count > 0:
+        _register_recovery_job(scheduler, runners)
 
     stop_event = threading.Event()
 

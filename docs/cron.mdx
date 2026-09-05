@@ -180,6 +180,10 @@ and attempt key. Each attempt has a 30-minute lease and a random owner token:
 5. Completion is accepted only from the attempt's owner token, so an old
    worker cannot overwrite a reclaimed attempt
 
+The scheduler also runs a recovery sweep every minute, including after a
+restart. It finds expired running attempts and resubmits their original
+fire-time keys through the same claim path.
+
 This prevents concurrent duplicate claims and recovers ticks after worker
 crashes. A crash after an external provider accepts a message but before the
 completion is recorded can still result in a duplicate on reclaim; preventing

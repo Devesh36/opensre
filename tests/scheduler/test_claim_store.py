@@ -9,11 +9,13 @@ from pathlib import Path
 
 import pytest
 
-from infrastructure.scheduling.scheduler import claim_store
+from infrastructure.scheduling.scheduler import claim_store, migrations
 from infrastructure.scheduling.scheduler.claim_store import (
     ExecutionClaim,
+    ExpiredClaim,
     complete_run,
     delete_runs,
+    get_expired_claims,
     get_latest_finished_run,
     get_latest_targeted_run,
     get_runs,
@@ -88,6 +90,16 @@ class TestClaimStore:
         assert second.owner_token != first.owner_token
         assert get_runs("task1", db_path=db_path)[0].status is TaskStatus.RUNNING
         assert get_runs("task1", db_path=db_path)[1].status is TaskStatus.ABANDONED
+
+    def test_expired_claims_are_visible_to_the_scheduler_recovery_sweep(
+        self, db_path: Path
+    ) -> None:
+        _claimed(db_path, "task1", "2026-01-01T09:00")
+        _expire_claim(db_path, "task1", "2026-01-01T09:00")
+
+        assert get_expired_claims(db_path=db_path) == [
+            ExpiredClaim(task_id="task1", fire_time="2026-01-01T09:00")
+        ]
 
     def test_stale_owner_cannot_complete_after_reclaim(self, db_path: Path) -> None:
         first = try_claim("task1", "2026-01-01T09:00", db_path=db_path)
@@ -182,7 +194,7 @@ class TestClaimStore:
         # start-ordered lookback of five would drop the finished row.
         conn = claim_store._connect(db_path)
         try:
-            claim_store._ensure_schema(conn)
+            migrations.apply_migrations(conn)
             conn.execute(
                 "INSERT INTO task_runs "
                 "(task_id, fire_time, started_at, finished_at, status) "
@@ -281,7 +293,7 @@ class TestConcurrency:
         conn.commit()
         conn.close()
 
-        real_table_columns = claim_store._table_columns
+        real_table_columns = migrations._table_columns
         unlocked_reads = threading.Barrier(2)
 
         def _synchronize_unlocked_reads(
@@ -293,7 +305,7 @@ class TestConcurrency:
                 unlocked_reads.wait(timeout=5)
             return columns
 
-        real_migrate = claim_store._migrate_legacy_claim_table
+        real_migrate = migrations._migrate_legacy_claim_table
         migration_count = 0
         count_lock = threading.Lock()
 
@@ -306,8 +318,8 @@ class TestConcurrency:
                 migration_count += 1
             real_migrate(migration_conn, columns)
 
-        monkeypatch.setattr(claim_store, "_table_columns", _synchronize_unlocked_reads)
-        monkeypatch.setattr(claim_store, "_migrate_legacy_claim_table", _count_migration)
+        monkeypatch.setattr(migrations, "_table_columns", _synchronize_unlocked_reads)
+        monkeypatch.setattr(migrations, "_migrate_legacy_claim_table", _count_migration)
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             claims = list(
@@ -450,7 +462,7 @@ class TestPerTargetOutcomes:
         conn.execute("ALTER TABLE task_runs ADD COLUMN targets TEXT DEFAULT ''")
         conn.commit()
 
-        real_has_column = claim_store._has_targets_column
+        real_has_column = migrations._has_targets_column
         calls = {"count": 0}
 
         def _lie_on_first_call(check_conn: sqlite3.Connection) -> bool:
@@ -460,9 +472,9 @@ class TestPerTargetOutcomes:
             # nothing about the recovery path.
             return False if calls["count"] == 1 else real_has_column(check_conn)
 
-        monkeypatch.setattr(claim_store, "_has_targets_column", _lie_on_first_call)
+        monkeypatch.setattr(migrations, "_has_targets_column", _lie_on_first_call)
 
-        claim_store._add_missing_columns(conn)  # must not raise
+        migrations._add_missing_columns(conn)  # must not raise
         assert calls["count"] == 2
 
     def test_a_winner_committing_after_our_timeout_is_picked_up_on_retry(
@@ -501,9 +513,9 @@ class TestPerTargetOutcomes:
             checks["count"] += 1
             return checks["count"] > 2
 
-        monkeypatch.setattr(claim_store, "_has_targets_column", _column_appears_on_the_retry)
+        monkeypatch.setattr(migrations, "_has_targets_column", _column_appears_on_the_retry)
 
-        claim_store._add_missing_columns(_AlterFailsConnection(conn))  # must not raise
+        migrations._add_missing_columns(_AlterFailsConnection(conn))  # must not raise
 
         # Pre-check, post-timeout recheck, then the retry's own pre-check.
         assert checks["count"] == 3
@@ -513,7 +525,7 @@ class TestPerTargetOutcomes:
     ) -> None:
         """A writer stuck past the budget surfaces the real error rather than
         retrying forever."""
-        monkeypatch.setattr(claim_store, "_MIGRATION_TIMEOUT_SECONDS", 0.2)
+        monkeypatch.setattr(migrations, "_MIGRATION_TIMEOUT_SECONDS", 0.2)
         conn = sqlite3.connect(str(db_path))
         conn.execute("""
             CREATE TABLE task_runs (
@@ -532,7 +544,7 @@ class TestPerTargetOutcomes:
         conn.commit()
 
         with pytest.raises(sqlite3.OperationalError, match="database is locked"):
-            claim_store._add_missing_columns(_AlterFailsConnection(conn))
+            migrations._add_missing_columns(_AlterFailsConnection(conn))
 
 
 class TestLatestTargetedRun:

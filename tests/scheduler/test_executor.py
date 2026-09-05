@@ -24,6 +24,8 @@ from infrastructure.scheduling.scheduler.claim_store import get_runs
 from infrastructure.scheduling.scheduler.executor import execute_task
 from infrastructure.scheduling.scheduler.local_delivery import get_loop_messages
 from infrastructure.scheduling.scheduler.loop_constants import LOOP_CHANNELS_PARAM
+from infrastructure.scheduling.scheduler.runner import _recover_expired_tasks
+from infrastructure.scheduling.scheduler.store import add_task
 from infrastructure.scheduling.scheduler.types import (
     Provider,
     ScheduledTask,
@@ -178,6 +180,35 @@ class TestExecutor:
         assert [run.status for run in runs] == [TaskStatus.SUCCESS, TaskStatus.ABANDONED]
         assert runs[0].attempt == 2
         assert adapter.calls == 2
+
+    def test_scheduler_recovery_sweep_resubmits_the_original_fire_time(
+        self, tmp_path: Path
+    ) -> None:
+        from infrastructure.scheduling.scheduler.claim_store import get_runs, try_claim
+
+        task = ScheduledTask(
+            id="test_sweep_recovery",
+            kind=TaskKind.MANUAL_LOOP,
+            cron="0 9 * * *",
+            provider=Provider.SLACK,
+            chat_id="C123",
+        )
+        fire_time = "2026-01-01T09:00"
+        add_task(task, tmp_path / "tasks.json")
+        assert try_claim(task.id, fire_time, db_path=tmp_path / "scheduler.db") is not None
+        _expire_claim(tmp_path / "scheduler.db", task.id, fire_time)
+        adapters = _install_fake_bundle()
+
+        with patch(
+            "infrastructure.scheduling.scheduler.executor.build_message",
+            return_value="Scheduled report",
+        ):
+            _recover_expired_tasks(real_runners())
+
+        runs = get_runs(task.id)
+        assert [run.status for run in runs] == [TaskStatus.SUCCESS, TaskStatus.ABANDONED]
+        assert runs[0].attempt == 2
+        assert len(adapters[Provider.SLACK].calls) == 1
 
     def test_telegram_delivery_success(self) -> None:
         adapters = _install_fake_bundle()
