@@ -157,6 +157,65 @@ def test_cron_add_persists_github_ci_health_scope(
     }
 
 
+def test_cron_add_persists_morning_report_city(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from infrastructure.scheduling.scheduler import store as scheduler_store
+    from infrastructure.scheduling.scheduler.store import list_tasks
+
+    store = tmp_path / "scheduler_tasks.json"
+    monkeypatch.setattr(scheduler_store, "_default_store_path", lambda: store)
+
+    result = CliRunner().invoke(
+        cron_command,
+        [
+            "add",
+            "--kind",
+            "recurring_skill",
+            "--skill",
+            "morning-report",
+            "--cron",
+            "0 8 * * 1-5",
+            "--provider",
+            "interactive_shell",
+            "--city",
+            "New Delhi",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    task = list_tasks(store)[0]
+    assert task.skill_name == "morning-report"
+    assert task.skill_revision
+    assert task.skill_inputs == {"city": "New Delhi"}
+
+
+def test_cron_add_rejects_city_for_unrelated_skill() -> None:
+    result = CliRunner().invoke(
+        cron_command,
+        [
+            "add",
+            "--kind",
+            "recurring_skill",
+            "--skill",
+            "github-ci-health",
+            "--cron",
+            "0 8 * * 1-5",
+            "--provider",
+            "interactive_shell",
+            "--owner",
+            "acme",
+            "--repo",
+            "api",
+            "--city",
+            "Paris",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "--city is only valid" in result.output
+
+
 def test_cron_add_requires_repository_scope_for_github_ci_health() -> None:
     result = CliRunner().invoke(
         cron_command,

@@ -19,10 +19,16 @@ import pytest
 import infrastructure.scheduling.scheduler.delivery_bundle as delivery_bundle
 from config.constants import OPENSRE_OPERATIONS_LOG_PATH_ENV
 from infrastructure.observability.operations_log import read_operations
+from infrastructure.scheduling.scheduler.claim_store import get_runs
 from infrastructure.scheduling.scheduler.executor import execute_task
 from infrastructure.scheduling.scheduler.local_delivery import get_loop_messages
 from infrastructure.scheduling.scheduler.loop_constants import LOOP_CHANNELS_PARAM
-from infrastructure.scheduling.scheduler.types import Provider, ScheduledTask, TaskKind
+from infrastructure.scheduling.scheduler.types import (
+    Provider,
+    ScheduledTask,
+    TaskKind,
+    TaskStatus,
+)
 from tests.scheduler._bundle import real_runners
 
 #: Generous enough to survive a loaded CI shard; a real hang still fails fast.
@@ -441,6 +447,36 @@ class TestExecutor:
             result = execute_task(task, "2026-01-01T09:00", real_runners())
 
         assert result is False
+
+    @pytest.mark.parametrize(
+        ("skill_name", "skill_revision", "error_text"),
+        [
+            ("missing-skill-xyz", "abc123", "not installed"),
+            ("morning-report", "0" * 64, "changed since it was scheduled"),
+        ],
+    )
+    def test_invalid_recurring_skill_is_visible_in_run_history(
+        self,
+        skill_name: str,
+        skill_revision: str,
+        error_text: str,
+    ) -> None:
+        task = ScheduledTask(
+            id=f"invalid-{skill_name}",
+            kind=TaskKind.RECURRING_SKILL,
+            cron="0 8 * * 1-5",
+            provider=Provider.INTERACTIVE_SHELL,
+            skill_name=skill_name,
+            skill_revision=skill_revision,
+        )
+
+        result = execute_task(task, "2026-01-01T09:00", real_runners())
+
+        assert result is False
+        runs = get_runs(task.id)
+        assert len(runs) == 1
+        assert runs[0].status is TaskStatus.FAILED
+        assert error_text in runs[0].error
 
     def test_delivery_failure_records_error(self) -> None:
         adapters = _install_fake_bundle()

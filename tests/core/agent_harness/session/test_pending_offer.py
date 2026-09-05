@@ -29,6 +29,22 @@ def test_pending_recurring_skill_offer_includes_skill_flag() -> None:
     )
 
 
+def test_pending_morning_report_offer_preserves_city() -> None:
+    offer = PendingScheduleOffer(
+        kind="recurring_skill",
+        skill_name="morning-report",
+        skill_inputs={"city": "New Delhi"},
+        cron="0 8 * * 1-5",
+        timezone="Asia/Kolkata",
+        provider="slack",
+    )
+
+    assert offer.to_slash_command() == (
+        "/cron add --kind recurring_skill --cron '0 8 * * 1-5' "
+        "--tz Asia/Kolkata --provider slack --skill morning-report --city 'New Delhi'"
+    )
+
+
 def test_pending_github_ci_health_offer_preserves_repository_scope() -> None:
     offer = PendingScheduleOffer(
         kind="recurring_skill",
@@ -164,6 +180,7 @@ def test_propose_tool_sets_session_pending_offer() -> None:
     assert session.pending_schedule_offer.kind == "recurring_skill"
     assert session.pending_schedule_offer.skill_name == "morning-report"
     assert session.pending_schedule_offer.skill_inputs == {"city": "Amsterdam"}
+    assert "--city Amsterdam" in result["slash_preview"]
     assert result["closer"].startswith("**Want me to:**")
     assert "Weather — Amsterdam" in result["response_text"]
     assert result["closer"] in result["response_text"]
