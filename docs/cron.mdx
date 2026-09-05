@@ -113,8 +113,10 @@ destinations it is about to re-deliver to before it sends.
 
 ### `opensre cron logs <task_id>`
 
-Show execution history for a task (newest first). Displays start time, status,
-delivered targets, message ID, and any errors.
+Show execution history for a task (newest first). Displays start time, attempt,
+status, delivered targets, message ID, and any errors. A status such as
+`reclaimed/success` means a later worker recovered an expired claim;
+`abandoned` means the earlier worker stopped before completing.
 
 A task with more than one destination delivers to all of them at once, so one
 slow channel does not delay the rest. The **Targets** column counts how many
@@ -165,20 +167,27 @@ Cron expressions are validated at `cron add` time using APScheduler's
 
 ## Dedup Semantics
 
-The scheduler uses a SQLite-backed claim store with a
-`UNIQUE(task_id, fire_time)` constraint:
+The scheduler uses a SQLite-backed claim store with a unique task, fire-time,
+and attempt key. Each attempt has a 30-minute lease and a random owner token:
 
 1. When a cron tick fires, `EVENT_JOB_SUBMITTED` captures
    `scheduled_run_times[0]` and the job uses that UTC-normalized `fire_time`
    for the claim key
-2. The executor attempts an `INSERT OR IGNORE` into the claim table
-3. If the insert succeeds (rowcount = 1), this instance won the claim and
-   delivers
-4. If the insert is ignored (rowcount = 0), another instance already claimed
-   it — skip
+2. The executor creates an attempt with a 30-minute lease and owner token
+3. If the current attempt is still leased, another instance skips the tick
+4. If the lease expired, the old attempt is marked `abandoned` and one new
+   worker creates the next attempt
+5. Completion is accepted only from the attempt's owner token, so an old
+   worker cannot overwrite a reclaimed attempt
 
-This ensures exactly-once delivery even when multiple scheduler instances run
-concurrently (for example on a laptop and a hosted process).
+The scheduler also runs a recovery sweep every minute, including after a
+restart. It finds expired running attempts and resubmits their original
+fire-time keys through the same claim path.
+
+This prevents concurrent duplicate claims and recovers ticks after worker
+crashes. A crash after an external provider accepts a message but before the
+completion is recorded can still result in a duplicate on reclaim; preventing
+that case requires provider-specific idempotency support.
 
 ## Credential Resolution
 

@@ -233,7 +233,7 @@ class TestRegisterJobs:
         count = resync_scheduler_jobs(scheduler, real_runners())
 
         assert count == 1
-        assert set(scheduler.jobs) == {"keep"}
+        assert set(scheduler.jobs) == {"keep", "scheduler-claim-recovery"}
 
     def test_refresh_starts_when_scheduler_was_idle(
         self,

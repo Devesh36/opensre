@@ -185,7 +185,7 @@ class TestStore:
 
 
 class TestRecurringSkillStoreIdentity:
-    def test_same_skill_slot_deduplicates_without_revision(self, store_path: Path) -> None:
+    def test_changed_skill_revision_updates_existing_schedule(self, store_path: Path) -> None:
         from core.agent_harness.prompts.skills.schedule import find_action_skill, skill_revision
 
         skill = find_action_skill("morning-report")
@@ -203,8 +203,11 @@ class TestRecurringSkillStoreIdentity:
         }
         first = add_task(ScheduledTask(**base, skill_revision=revision_a), store_path)
         second = add_task(ScheduledTask(**base, skill_revision=revision_b), store_path)
+        stored = list_tasks(store_path)
         assert first.id == second.id
-        assert len(list_tasks(store_path)) == 1
+        assert second.skill_revision == revision_b
+        assert len(stored) == 1
+        assert stored[0].skill_revision == revision_b
 
 
 class TestAddTaskDeduplicates:

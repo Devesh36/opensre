@@ -178,9 +178,9 @@ def _schedule_identity(entry: Mapping[str, Any]) -> tuple[Any, ...]:
 
     Full configuration, not just the slot: two rows differing in destination or
     params are separate reports, and merging them would drop one the user asked
-    for. Identity deliberately excludes ``id``, ``name`` and the run bookkeeping
-    (``created_at``, ``last_run``, ``next_run``), which differ between two
-    confirmations of the same schedule.
+    for. Identity deliberately excludes ``id``, ``name``, skill revision, and the
+    run bookkeeping (``created_at``, ``last_run``, ``next_run``), which differ
+    between two confirmations of the same schedule.
     """
     return (
         entry.get("kind"),
@@ -196,7 +196,7 @@ def _schedule_identity(entry: Mapping[str, Any]) -> tuple[Any, ...]:
 
 
 def add_task(task: ScheduledTask, store_path: Path | None = None) -> ScheduledTask:
-    """Persist a scheduled task, or return the identical one already stored.
+    """Persist a scheduled task, or update the matching schedule's skill revision.
 
     Confirming the same schedule twice is one schedule. Without this, every
     confirmation appended a row — a real install reached 37 byte-identical
@@ -207,17 +207,23 @@ def add_task(task: ScheduledTask, store_path: Path | None = None) -> ScheduledTa
     with lock:
         raw = _load_for_write(path)
         wanted = _schedule_identity(task.model_dump(mode="json"))
-        existing = next(
-            (entry for entry in raw if _schedule_identity(entry) == wanted),
+        existing_index = next(
+            (index for index, entry in enumerate(raw) if _schedule_identity(entry) == wanted),
             None,
         )
-        if existing is not None:
-            return ScheduledTask.model_validate(existing)
-        raw.append(task.model_dump(mode="json"))
+        if existing_index is not None:
+            existing = raw[existing_index]
+            if existing.get("skill_revision", "") == task.skill_revision:
+                return ScheduledTask.model_validate(existing)
+            existing["skill_revision"] = task.skill_revision
+            stored_task = ScheduledTask.model_validate(existing)
+        else:
+            raw.append(task.model_dump(mode="json"))
+            stored_task = task
         _save_raw(path, raw)
-    # A new task changed the schedule: wake any running scheduler to resync.
+    # A new task or pinned revision changed the schedule: wake the scheduler to resync.
     reload_signal.request_scheduler_reload()
-    return task
+    return stored_task
 
 
 def remove_task(task_id: str, store_path: Path | None = None) -> bool:
