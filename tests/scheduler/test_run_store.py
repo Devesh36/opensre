@@ -80,13 +80,13 @@ class TestClaimStore:
 
     def test_claim_can_be_renewed_only_by_its_current_owner(self, db_path: Path) -> None:
         first = _claimed(db_path, "task1", "2026-01-01T09:00")
-        assert renew_claim(first, db_path=db_path)
+        assert renew_claim(first, db_path=db_path) is not None
 
         _expire_claim(db_path, "task1", "2026-01-01T09:00")
         second = _claimed(db_path, "task1", "2026-01-01T09:00")
 
-        assert not renew_claim(first, db_path=db_path)
-        assert renew_claim(second, db_path=db_path)
+        assert renew_claim(first, db_path=db_path) is None
+        assert renew_claim(second, db_path=db_path) is not None
 
     def test_expired_lease_is_abandoned_and_reclaimed(self, db_path: Path) -> None:
         first = try_claim("task1", "2026-01-01T09:00", db_path=db_path)

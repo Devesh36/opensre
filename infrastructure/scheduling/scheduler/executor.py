@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable
+from datetime import UTC, datetime
 
 from infrastructure.scheduling.scheduler.delivery_bundle import resolve_delivery_adapter
 from infrastructure.scheduling.scheduler.delivery_plan import (
@@ -40,6 +41,7 @@ class _ClaimHeartbeat:
 
     def __init__(self, claim: ExecutionClaim) -> None:
         self._claim = claim
+        self._lease_expires_at = claim.lease_expires_at
         self._stop = threading.Event()
         self._lost = threading.Event()
         self._thread = threading.Thread(
@@ -64,8 +66,11 @@ class _ClaimHeartbeat:
     def _run(self) -> None:
         """Renew until asked to stop or until the claim is no longer owned."""
         while not self._stop.wait(claim_heartbeat_interval_seconds()):
+            if datetime.now(UTC) >= self._lease_expires_at:
+                self._mark_lost()
+                return
             try:
-                renewed = renew_claim(self._claim)
+                renewed_until = renew_claim(self._claim)
             except Exception:  # noqa: BLE001
                 logger.warning(
                     "Failed to renew claim for task %s fire_time=%s",
@@ -73,17 +78,24 @@ class _ClaimHeartbeat:
                     self._claim.fire_time,
                     exc_info=True,
                 )
-                continue
-            if not renewed:
-                if self._stop.is_set():
+                if datetime.now(UTC) >= self._lease_expires_at:
+                    self._mark_lost()
                     return
-                self._lost.set()
-                logger.warning(
-                    "Stopping heartbeat after losing claim for task %s fire_time=%s",
-                    self._claim.task_id,
-                    self._claim.fire_time,
-                )
+                continue
+            if renewed_until is None:
+                self._mark_lost()
                 return
+            self._lease_expires_at = renewed_until
+
+    def _mark_lost(self) -> None:
+        if self._stop.is_set():
+            return
+        self._lost.set()
+        logger.warning(
+            "Stopping heartbeat after losing claim for task %s fire_time=%s",
+            self._claim.task_id,
+            self._claim.fire_time,
+        )
 
 
 def execute_task(

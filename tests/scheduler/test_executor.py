@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -34,6 +35,7 @@ from infrastructure.scheduling.scheduler.types import (
     TaskStatus,
 )
 from tests.scheduler._bundle import real_runners
+from tests.utils.polling import wait_until
 
 #: Generous enough to survive a loaded CI shard; a real hang still fails fast.
 _SYNC_TIMEOUT_SECONDS = 15.0
@@ -148,9 +150,9 @@ class TestExecutor:
         renewed_after_expiry = threading.Event()
         real_renew_claim = scheduler_executor.renew_claim
 
-        def _renew_and_signal(claim: Any) -> bool:
+        def _renew_and_signal(claim: Any) -> datetime | None:
             result = real_renew_claim(claim)
-            if result and expiry_forced.is_set():
+            if result is not None and expiry_forced.is_set():
                 renewed_after_expiry.set()
             return result
 
@@ -193,9 +195,9 @@ class TestExecutor:
         adapters = _install_fake_bundle()
         ownership_lost = threading.Event()
 
-        def _claim_is_lost(_claim: Any) -> bool:
+        def _claim_is_lost(_claim: Any) -> datetime | None:
             ownership_lost.set()
-            return False
+            return None
 
         def _build_until_ownership_loss(*_args: object) -> str:
             assert ownership_lost.wait(timeout=_SYNC_TIMEOUT_SECONDS)
@@ -227,13 +229,13 @@ class TestExecutor:
         recovered = threading.Event()
         renewal_attempts = 0
 
-        def _renew_with_transient_error(_claim: Any) -> bool:
+        def _renew_with_transient_error(_claim: Any) -> datetime | None:
             nonlocal renewal_attempts
             renewal_attempts += 1
             if renewal_attempts == 1:
                 raise sqlite3.OperationalError("temporary lock")
             recovered.set()
-            return True
+            return datetime.now(UTC) + timedelta(minutes=30)
 
         def _build_until_recovery(*_args: object) -> str:
             assert recovered.wait(timeout=_SYNC_TIMEOUT_SECONDS)
@@ -257,6 +259,32 @@ class TestExecutor:
 
         assert renewal_attempts >= 2
         assert len(adapters[Provider.SLACK].calls) == 1
+
+    def test_persistent_heartbeat_errors_fence_the_expired_claim(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        claim = scheduler_executor.ExecutionClaim(
+            task_id="test_expiring_heartbeat",
+            fire_time="2026-01-01T09:00",
+            attempt=1,
+            owner_token="owner-token",
+            lease_expires_at=datetime.now(UTC) + timedelta(milliseconds=40),
+        )
+        heartbeat = scheduler_executor._ClaimHeartbeat(claim)
+        monkeypatch.setattr(scheduler_executor, "claim_heartbeat_interval_seconds", lambda: 0.01)
+
+        def _renew_with_persistent_error(_claim: Any) -> datetime | None:
+            raise sqlite3.OperationalError("database unavailable")
+
+        monkeypatch.setattr(scheduler_executor, "renew_claim", _renew_with_persistent_error)
+        heartbeat.start()
+        try:
+            wait_until(heartbeat.lost, timeout=_SYNC_TIMEOUT_SECONDS, interval=0.01)
+        finally:
+            heartbeat.stop()
+
+        assert heartbeat.lost()
 
     @pytest.mark.parametrize("delivery_succeeds", [True, False])
     def test_recovered_one_shot_finalizes_only_after_success(

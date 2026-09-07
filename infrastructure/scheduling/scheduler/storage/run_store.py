@@ -38,6 +38,7 @@ class ExecutionClaim:
     fire_time: str
     attempt: int
     owner_token: str
+    lease_expires_at: datetime
     target_filter: frozenset[tuple[Provider, str]] | None = None
 
 
@@ -108,7 +109,14 @@ def try_claim(
                     json.dumps(sorted(target_filter) if target_filter is not None else None),
                 ),
             )
-            return ExecutionClaim(task_id, fire_time, attempt, owner_token, target_filter)
+            return ExecutionClaim(
+                task_id,
+                fire_time,
+                attempt,
+                owner_token,
+                now + timedelta(seconds=_CLAIM_LEASE_SECONDS),
+                target_filter,
+            )
     except sqlite3.IntegrityError:
         return None
 
@@ -118,17 +126,17 @@ def claim_heartbeat_interval_seconds() -> float:
     return _CLAIM_LEASE_SECONDS / 3
 
 
-def renew_claim(claim: ExecutionClaim, db_path: Path | None = None) -> bool:
-    """Extend an active claim lease while its owner token is still fenced in."""
+def renew_claim(claim: ExecutionClaim, db_path: Path | None = None) -> datetime | None:
+    """Extend an active claim and return its new expiry while still fenced in."""
     now = datetime.now(UTC)
-    lease_text = (now + timedelta(seconds=_CLAIM_LEASE_SECONDS)).isoformat()
+    lease_expires_at = now + timedelta(seconds=_CLAIM_LEASE_SECONDS)
     with database.transaction(db_path) as conn:
         cursor = conn.execute(
             "UPDATE task_runs SET lease_expires_at = ? "
             "WHERE task_id = ? AND fire_time = ? AND attempt = ? "
             "AND owner_token = ? AND status = ?",
             (
-                lease_text,
+                lease_expires_at.isoformat(),
                 claim.task_id,
                 claim.fire_time,
                 claim.attempt,
@@ -136,7 +144,7 @@ def renew_claim(claim: ExecutionClaim, db_path: Path | None = None) -> bool:
                 TaskStatus.RUNNING.value,
             ),
         )
-        return cursor.rowcount == 1
+        return lease_expires_at if cursor.rowcount == 1 else None
 
 
 def _decode_target_filter(raw: str) -> frozenset[tuple[Provider, str]] | None:
@@ -368,5 +376,7 @@ __all__ = [
     "get_latest_finished_run",
     "get_latest_targeted_run",
     "get_runs",
+    "claim_heartbeat_interval_seconds",
+    "renew_claim",
     "try_claim",
 ]
