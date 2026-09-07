@@ -755,7 +755,10 @@ jobs:
             packaging:
               - "README.md"
               - "LICENSE"
+              - "MANIFEST.in"
               - "pyproject.toml"
+              - "setup.cfg"
+              - "setup.py"
               - "uv.lock"
               - "bootstrap/**"
               - "config/**"

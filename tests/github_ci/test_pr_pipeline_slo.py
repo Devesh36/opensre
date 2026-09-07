@@ -182,7 +182,10 @@ def test_package_preflight_builds_and_smokes_changed_distribution_artifacts() ->
     assert {
         "README.md",
         "LICENSE",
+        "MANIFEST.in",
         "pyproject.toml",
+        "setup.cfg",
+        "setup.py",
         "uv.lock",
         "surfaces/**",
         "tests/**",
