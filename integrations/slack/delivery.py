@@ -85,7 +85,8 @@ def _post_via_incoming_webhook(
         debug_print(f"Slack incoming webhook failed: {safe_error}")
         return False
     if not 200 <= response.status_code < 300:
-        safe_body = redact_token(response.text[:_LOG_BODY_MAX_LEN], webhook_url)
+        redacted_body = redact_token(response.text, webhook_url)
+        safe_body = redacted_body[:_LOG_BODY_MAX_LEN]
         debug_print(f"Slack incoming webhook failed: HTTP {response.status_code}: {safe_body}")
         return False
     debug_print("Slack message posted via incoming webhook.")

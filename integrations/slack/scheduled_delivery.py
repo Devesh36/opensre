@@ -61,7 +61,9 @@ class SlackScheduledDelivery:
                 return False, f"Slack API error: {safe_error}", ""
             if not HTTPStatus.OK <= response.status_code < HTTPStatus.MULTIPLE_CHOICES:
                 error_text = (
-                    response.text[:200] if response.text else f"HTTP {response.status_code}"
+                    redact_slack_token(response.text, access_token)[:200]
+                    if response.text
+                    else f"HTTP {response.status_code}"
                 )
                 safe_error = redact_slack_token(error_text, access_token)
                 return False, f"Slack HTTP error: {safe_error}", ""

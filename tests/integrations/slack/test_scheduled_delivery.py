@@ -57,3 +57,31 @@ def test_scheduled_slack_errors_redact_access_token(
     assert token not in error
     assert "<redacted>" in error
     assert message_id == ""
+
+
+def test_scheduled_slack_http_body_redacts_before_truncation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    token = "ACCESS_TOKEN_UNIQUE_SUFFIX"
+    body_prefix = "x" * (180 - len("upstream failure: "))
+
+    monkeypatch.setattr(
+        "integrations.slack.scheduled_delivery.resolve_slack_credentials",
+        lambda _params: {"access_token": token},
+    )
+    monkeypatch.setattr(
+        "integrations.slack.scheduled_delivery.post_json",
+        lambda *_args, **_kwargs: DeliveryResponse(
+            ok=True,
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            text=f"upstream failure: {body_prefix}{token}",
+        ),
+    )
+
+    ok, error, message_id = SlackScheduledDelivery().deliver(_task(), "hello")
+
+    assert ok is False
+    assert token not in error
+    assert token[:6] not in error
+    assert "<redacted>" in error
+    assert message_id == ""
