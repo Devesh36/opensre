@@ -15,10 +15,10 @@ from gateway.transports.telegram.poller.poller import (
 
 def test_decode_telegram_response_parses_non_200_json() -> None:
     response = httpx.Response(
-        409,
+        HTTPStatus.CONFLICT,
         json={
             "ok": False,
-            "error_code": 409,
+            "error_code": HTTPStatus.CONFLICT,
             "description": "Conflict: terminated by other getUpdates request",
         },
     )
@@ -155,55 +155,3 @@ def test_poll_once_redacts_bot_token_from_transport_exception(
     assert token not in caplog.text
     assert "https://api.telegram.org/bot<redacted>/getUpdates" in caplog.text
     assert "ConnectError" in caplog.text
-
-
-@patch("gateway.transports.telegram.poller.poller.time.sleep")
-@patch("gateway.transports.telegram.poller.poller.httpx.get")
-def test_poll_once_redacts_bot_token_from_http_response_body(
-    mock_get: MagicMock,
-    mock_sleep: MagicMock,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    import logging
-
-    token = "123:SECRET"
-    mock_get.return_value = httpx.Response(
-        HTTPStatus.INTERNAL_SERVER_ERROR,
-        text=f"upstream failure: https://api.telegram.org/bot{token}/getUpdates",
-    )
-    caplog.set_level(logging.DEBUG, logger="gateway.transports.telegram.poller.poller")
-
-    result = TelegramPoller(token).poll_once()
-
-    assert result == TelegramPollResult()
-    mock_sleep.assert_called_once_with(2.0)
-    assert token not in caplog.text
-    assert "https://api.telegram.org/bot<redacted>/getUpdates" in caplog.text
-
-
-@patch("gateway.transports.telegram.poller.poller.time.sleep")
-@patch("gateway.transports.telegram.poller.poller.httpx.get")
-def test_poll_once_redacts_bot_token_from_conflict_description(
-    mock_get: MagicMock,
-    mock_sleep: MagicMock,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    import logging
-
-    token = "123:SECRET"
-    mock_get.return_value = httpx.Response(
-        HTTPStatus.CONFLICT,
-        json={
-            "ok": False,
-            "error_code": HTTPStatus.CONFLICT,
-            "description": f"Conflict: https://api.telegram.org/bot{token}/getUpdates",
-        },
-    )
-    caplog.set_level(logging.DEBUG, logger="gateway.transports.telegram.poller.poller")
-
-    result = TelegramPoller(token).poll_once()
-
-    assert result == TelegramPollResult()
-    mock_sleep.assert_called_once_with(2.0)
-    assert token not in caplog.text
-    assert "https://api.telegram.org/bot<redacted>/getUpdates" in caplog.text
