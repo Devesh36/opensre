@@ -7,12 +7,14 @@ from infrastructure.scheduling.scheduler.storage.database import (
 from infrastructure.scheduling.scheduler.storage.run_store import (
     ExecutionClaim,
     ExpiredClaim,
+    claim_heartbeat_interval_seconds,
     complete_run,
     delete_runs,
     get_expired_claims,
     get_latest_finished_run,
     get_latest_targeted_run,
     get_runs,
+    renew_claim,
     try_claim,
 )
 from infrastructure.scheduling.scheduler.storage.task_store import (
@@ -27,6 +29,7 @@ from infrastructure.scheduling.scheduler.storage.task_store import (
 __all__ = [
     "add_task",
     "complete_run",
+    "claim_heartbeat_interval_seconds",
     "default_run_database_path",
     "default_task_store_path",
     "delete_runs",
@@ -36,6 +39,7 @@ __all__ = [
     "get_latest_finished_run",
     "get_latest_targeted_run",
     "get_runs",
+    "renew_claim",
     "get_task",
     "list_tasks",
     "remove_task",

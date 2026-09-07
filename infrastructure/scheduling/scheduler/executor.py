@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 
 from infrastructure.scheduling.scheduler.delivery_bundle import resolve_delivery_adapter
 from infrastructure.scheduling.scheduler.delivery_plan import (
@@ -16,7 +17,9 @@ from infrastructure.scheduling.scheduler.operation_log import record_scheduler_e
 from infrastructure.scheduling.scheduler.runners import SchedulerRunners
 from infrastructure.scheduling.scheduler.storage import (
     ExecutionClaim,
+    claim_heartbeat_interval_seconds,
     complete_run,
+    renew_claim,
     try_claim,
 )
 from infrastructure.scheduling.scheduler.tasks import build_message
@@ -28,6 +31,52 @@ from infrastructure.scheduling.scheduler.types import (
 )
 
 logger = logging.getLogger(__name__)
+_CLAIM_HEARTBEAT_JOIN_TIMEOUT_SECONDS = 5.0
+
+
+class _ClaimHeartbeat:
+    """Renew a claimed execution until its executor exits or loses fencing."""
+
+    def __init__(self, claim: ExecutionClaim) -> None:
+        self._claim = claim
+        self._stop = threading.Event()
+        self._thread = threading.Thread(
+            target=self._run,
+            name=f"scheduler-claim-heartbeat-{claim.task_id}",
+            daemon=True,
+        )
+
+    def start(self) -> None:
+        """Start renewing the claim in the background."""
+        self._thread.start()
+
+    def stop(self) -> None:
+        """Stop renewing the claim and wait briefly for the heartbeat to exit."""
+        self._stop.set()
+        self._thread.join(timeout=_CLAIM_HEARTBEAT_JOIN_TIMEOUT_SECONDS)
+
+    def _run(self) -> None:
+        """Renew until asked to stop or until the claim is no longer owned."""
+        while not self._stop.wait(claim_heartbeat_interval_seconds()):
+            try:
+                renewed = renew_claim(self._claim)
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "Failed to renew claim for task %s fire_time=%s",
+                    self._claim.task_id,
+                    self._claim.fire_time,
+                    exc_info=True,
+                )
+                continue
+            if not renewed:
+                if self._stop.is_set():
+                    return
+                logger.warning(
+                    "Stopping heartbeat after losing claim for task %s fire_time=%s",
+                    self._claim.task_id,
+                    self._claim.fire_time,
+                )
+                return
 
 
 def execute_task(
@@ -68,6 +117,29 @@ def execute_task(
         )
         return False
 
+    heartbeat = _ClaimHeartbeat(claim)
+    heartbeat.start()
+    try:
+        return _execute_claimed_task(
+            claim,
+            task,
+            fire_time,
+            runners,
+            target_filter=target_filter,
+        )
+    finally:
+        heartbeat.stop()
+
+
+def _execute_claimed_task(
+    claim: ExecutionClaim,
+    task: ScheduledTask,
+    fire_time: str,
+    runners: SchedulerRunners,
+    *,
+    target_filter: frozenset[TargetKey] | None,
+) -> bool:
+    """Build and deliver a task while its claim heartbeat is active."""
     logger.info("Executing task %s (kind=%s, fire_time=%s)", task.id, task.kind, fire_time)
     record_scheduler_execution_operation(
         "scheduled_task_execution_started",

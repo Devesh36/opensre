@@ -104,6 +104,33 @@ def try_claim(task_id: str, fire_time: str, db_path: Path | None = None) -> Exec
         return None
 
 
+def claim_heartbeat_interval_seconds() -> float:
+    """Return a renewal interval that leaves two lease intervals of safety."""
+    return _CLAIM_LEASE_SECONDS / 3
+
+
+def renew_claim(claim: ExecutionClaim, db_path: Path | None = None) -> bool:
+    """Extend an active claim lease while its owner token is still fenced in."""
+    now = datetime.now(UTC)
+    lease_text = (now + timedelta(seconds=_CLAIM_LEASE_SECONDS)).isoformat()
+    with database.transaction(db_path) as conn:
+        cursor = conn.execute(
+            "UPDATE task_runs SET lease_expires_at = ? "
+            "WHERE task_id = ? AND fire_time = ? AND attempt = ? "
+            "AND owner_token = ? AND status = ?",
+            (
+                lease_text,
+                claim.task_id,
+                claim.fire_time,
+                claim.attempt,
+                claim.owner_token,
+                TaskStatus.RUNNING.value,
+            ),
+        )
+        renewed = cursor.rowcount == 1
+        return renewed
+
+
 def get_expired_claims(
     *, limit: int = _EXPIRED_CLAIM_SCAN_LIMIT, db_path: Path | None = None
 ) -> list[ExpiredClaim]:

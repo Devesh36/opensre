@@ -18,6 +18,7 @@ from unittest.mock import patch
 import pytest
 
 import infrastructure.scheduling.scheduler.delivery_bundle as delivery_bundle
+import infrastructure.scheduling.scheduler.executor as scheduler_executor
 from config.constants import OPENSRE_OPERATIONS_LOG_PATH_ENV
 from infrastructure.observability.operations_log import read_operations
 from infrastructure.scheduling.scheduler.executor import execute_task
@@ -73,6 +74,22 @@ class _CrashOnceAdapter:
         return True, "", "recovered-message"
 
 
+class _SlowAdapter:
+    """Holds one delivery open so lease renewal can be observed during delivery."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.started = threading.Event()
+        self.release = threading.Event()
+
+    def deliver(self, _task: ScheduledTask, _message: str) -> tuple[bool, str, str]:
+        self.calls += 1
+        self.started.set()
+        if not self.release.wait(timeout=_SYNC_TIMEOUT_SECONDS):
+            return False, "delivery did not finish", ""
+        return True, "", f"message-{self.calls}"
+
+
 def _install_fake_bundle() -> dict[Provider, _FakeAdapter]:
     """Install a fake adapter for every provider; return them to configure/inspect."""
     adapters = {provider: _FakeAdapter() for provider in _DELIVERY_PROVIDERS}
@@ -119,6 +136,56 @@ def _expire_claim(db_path: Path, task_id: str, fire_time: str) -> None:
 
 @pytest.mark.usefixtures("_tmp_stores")
 class TestExecutor:
+    def test_heartbeat_keeps_a_slow_delivery_from_being_reclaimed(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        adapter = _SlowAdapter()
+        _install_bundle({Provider.SLACK: adapter})
+        monkeypatch.setattr(scheduler_executor, "claim_heartbeat_interval_seconds", lambda: 0.01)
+        expiry_forced = threading.Event()
+        renewed_after_expiry = threading.Event()
+        real_renew_claim = scheduler_executor.renew_claim
+
+        def _renew_and_signal(claim: Any) -> bool:
+            result = real_renew_claim(claim)
+            if result and expiry_forced.is_set():
+                renewed_after_expiry.set()
+            return result
+
+        monkeypatch.setattr(scheduler_executor, "renew_claim", _renew_and_signal)
+        task = ScheduledTask(
+            id="test_slow_delivery_heartbeat",
+            kind=TaskKind.MANUAL_LOOP,
+            cron="0 9 * * *",
+            provider=Provider.SLACK,
+            chat_id="C123",
+        )
+        fire_time = "2026-01-01T09:00"
+        first_result: list[bool] = []
+
+        with patch(
+            "infrastructure.scheduling.scheduler.executor.build_message",
+            return_value="Scheduled report",
+        ):
+            worker = threading.Thread(
+                target=lambda: first_result.append(execute_task(task, fire_time, real_runners()))
+            )
+            worker.start()
+            assert adapter.started.wait(timeout=_SYNC_TIMEOUT_SECONDS)
+            _expire_claim(tmp_path / "scheduler.db", task.id, fire_time)
+            expiry_forced.set()
+            assert renewed_after_expiry.wait(timeout=_SYNC_TIMEOUT_SECONDS)
+
+            assert execute_task(task, fire_time, real_runners()) is False
+            adapter.release.set()
+            worker.join(timeout=_SYNC_TIMEOUT_SECONDS)
+
+        assert not worker.is_alive()
+        assert first_result == [True]
+        assert adapter.calls == 1
+
     def test_crash_before_build_is_recovered_by_a_new_attempt(self, tmp_path: Path) -> None:
         from infrastructure.scheduling.scheduler.storage.run_store import get_runs, try_claim
 

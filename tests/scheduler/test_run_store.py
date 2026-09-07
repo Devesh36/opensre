@@ -19,6 +19,7 @@ from infrastructure.scheduling.scheduler.storage.run_store import (
     get_latest_finished_run,
     get_latest_targeted_run,
     get_runs,
+    renew_claim,
     try_claim,
 )
 from infrastructure.scheduling.scheduler.types import DeliveryOutcome, Provider, TaskStatus
@@ -76,6 +77,16 @@ class TestClaimStore:
 
         assert first is not None
         assert try_claim("task1", "2026-01-01T09:00", db_path=db_path) is None
+
+    def test_claim_can_be_renewed_only_by_its_current_owner(self, db_path: Path) -> None:
+        first = _claimed(db_path, "task1", "2026-01-01T09:00")
+        assert renew_claim(first, db_path=db_path)
+
+        _expire_claim(db_path, "task1", "2026-01-01T09:00")
+        second = _claimed(db_path, "task1", "2026-01-01T09:00")
+
+        assert not renew_claim(first, db_path=db_path)
+        assert renew_claim(second, db_path=db_path)
 
     def test_expired_lease_is_abandoned_and_reclaimed(self, db_path: Path) -> None:
         first = try_claim("task1", "2026-01-01T09:00", db_path=db_path)
