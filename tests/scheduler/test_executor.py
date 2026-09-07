@@ -219,6 +219,45 @@ class TestExecutor:
 
         assert adapters[Provider.SLACK].calls == []
 
+    def test_transient_heartbeat_error_does_not_abort_execution(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        adapters = _install_fake_bundle()
+        recovered = threading.Event()
+        renewal_attempts = 0
+
+        def _renew_with_transient_error(_claim: Any) -> bool:
+            nonlocal renewal_attempts
+            renewal_attempts += 1
+            if renewal_attempts == 1:
+                raise sqlite3.OperationalError("temporary lock")
+            recovered.set()
+            return True
+
+        def _build_until_recovery(*_args: object) -> str:
+            assert recovered.wait(timeout=_SYNC_TIMEOUT_SECONDS)
+            return "Scheduled report"
+
+        monkeypatch.setattr(scheduler_executor, "claim_heartbeat_interval_seconds", lambda: 0.01)
+        monkeypatch.setattr(scheduler_executor, "renew_claim", _renew_with_transient_error)
+        task = ScheduledTask(
+            id="test_transient_heartbeat",
+            kind=TaskKind.MANUAL_LOOP,
+            cron="0 9 * * *",
+            provider=Provider.SLACK,
+            chat_id="C123",
+        )
+
+        with patch(
+            "infrastructure.scheduling.scheduler.executor.build_message",
+            side_effect=_build_until_recovery,
+        ):
+            assert execute_task(task, "2026-01-01T09:00", real_runners()) is True
+
+        assert renewal_attempts >= 2
+        assert len(adapters[Provider.SLACK].calls) == 1
+
     @pytest.mark.parametrize("delivery_succeeds", [True, False])
     def test_recovered_one_shot_finalizes_only_after_success(
         self, tmp_path: Path, delivery_succeeds: bool

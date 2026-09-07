@@ -67,14 +67,13 @@ class _ClaimHeartbeat:
             try:
                 renewed = renew_claim(self._claim)
             except Exception:  # noqa: BLE001
-                self._lost.set()
                 logger.warning(
                     "Failed to renew claim for task %s fire_time=%s",
                     self._claim.task_id,
                     self._claim.fire_time,
                     exc_info=True,
                 )
-                return
+                continue
             if not renewed:
                 if self._stop.is_set():
                     return
