@@ -29,6 +29,73 @@ def test_cron_add_kind_choices_exclude_sentry_kinds() -> None:
     }
 
 
+def test_cron_add_manual_loop_requires_prompt() -> None:
+    result = CliRunner().invoke(
+        cron_command,
+        [
+            "add",
+            "--kind",
+            "manual_loop",
+            "--cron",
+            "0 9 * * *",
+            "--provider",
+            "interactive_shell",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "--prompt is required" in result.output
+
+
+def test_cron_add_rejects_prompt_for_non_manual_loop() -> None:
+    result = CliRunner().invoke(
+        cron_command,
+        [
+            "add",
+            "--kind",
+            "github_pr_sweep",
+            "--cron",
+            "0 9 * * *",
+            "--provider",
+            "interactive_shell",
+            "--prompt",
+            "Check open incidents.",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "--prompt is only valid" in result.output
+
+
+def test_cron_add_persists_manual_loop_prompt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from infrastructure.scheduling.scheduler.loop_constants import LOOP_PROMPT_PARAM
+    from infrastructure.scheduling.scheduler.storage import task_store as scheduler_store
+    from infrastructure.scheduling.scheduler.storage.task_store import list_tasks
+
+    store = tmp_path / "scheduler_tasks.json"
+    monkeypatch.setattr(scheduler_store, "default_task_store_path", lambda: store)
+
+    result = CliRunner().invoke(
+        cron_command,
+        [
+            "add",
+            "--kind",
+            "manual_loop",
+            "--cron",
+            "0 9 * * *",
+            "--provider",
+            "interactive_shell",
+            "--prompt",
+            "  Check open incidents.  ",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert list_tasks(store)[0].params == {LOOP_PROMPT_PARAM: "Check open incidents."}
+
+
 def test_cron_add_rejects_non_positive_window() -> None:
     runner = CliRunner()
     result = runner.invoke(
@@ -100,6 +167,8 @@ def test_cron_add_allows_slack_without_chat_id(
             "manual_loop",
             "--cron",
             "0 8 * * 1-5",
+            "--prompt",
+            "Check open incidents.",
             "--tz",
             "Europe/Amsterdam",
             "--provider",
@@ -129,6 +198,8 @@ def test_cron_add_persists_loop_name(tmp_path: Path, monkeypatch: pytest.MonkeyP
             "manual_loop",
             "--cron",
             "0 8 * * 1-5",
+            "--prompt",
+            "Check open incidents.",
             "--provider",
             "slack",
         ],
@@ -297,6 +368,8 @@ def test_cron_add_rejects_github_scope_for_an_unrelated_kind() -> None:
             "manual_loop",
             "--cron",
             "0 8 * * *",
+            "--prompt",
+            "Check open incidents.",
             "--provider",
             "interactive_shell",
             "--owner",
@@ -330,6 +403,8 @@ def test_cron_add_allows_interactive_shell_without_chat_id(
             "manual_loop",
             "--cron",
             "0 8 * * 1-5",
+            "--prompt",
+            "Check open incidents.",
             "--provider",
             "interactive_shell",
         ],
@@ -349,6 +424,8 @@ def test_cron_add_still_requires_chat_id_for_telegram() -> None:
             "manual_loop",
             "--cron",
             "0 8 * * 1-5",
+            "--prompt",
+            "Check open incidents.",
             "--provider",
             "telegram",
         ],

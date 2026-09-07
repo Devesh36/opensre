@@ -61,6 +61,7 @@ class PendingScheduleOffer:
     timezone: str
     provider: str
     chat_id: str = ""
+    prompt: str = ""
     skill_name: str = ""
     skill_inputs: dict[str, str] = field(default_factory=dict)
 
@@ -77,6 +78,10 @@ class PendingScheduleOffer:
             "--provider",
             self.provider,
         ]
+        if self.kind == "manual_loop":
+            prompt = self.prompt.strip()
+            if prompt:
+                args.extend(["--prompt", prompt])
         if self.kind == "recurring_skill":
             skill = self.skill_name.strip()
             if skill:

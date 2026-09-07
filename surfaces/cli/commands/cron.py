@@ -13,6 +13,7 @@ from rich.table import Table
 
 from core.agent_harness import pin_recurring_skill, validate_skill_inputs
 from infrastructure.scheduling.scheduler.credentials import requires_explicit_chat_id
+from infrastructure.scheduling.scheduler.loop_constants import LOOP_PROMPT_PARAM
 from infrastructure.scheduling.scheduler.types import Provider, TaskKind, TaskRun, TaskStatus
 from infrastructure.terminal.theme import GLYPH_ERROR, GLYPH_SUCCESS
 from surfaces.cli.commands.scheduling import validate_cron_and_timezone
@@ -93,6 +94,13 @@ def cron_command() -> None:
     help="Lookback window in hours for the report (must be >= 1).",
 )
 @click.option(
+    "--prompt",
+    type=str,
+    default="",
+    show_default=False,
+    help="Instruction to execute on each manual_loop run.",
+)
+@click.option(
     "--skill",
     "skill_name",
     type=str,
@@ -115,6 +123,7 @@ def cron_add(
     provider: str,
     chat_id: str,
     window_hours: int,
+    prompt: str,
     skill_name: str,
     owner: str,
     repo: str,
@@ -130,6 +139,12 @@ def cron_add(
     _validate_chat_id_for_provider(provider, chat_id)
 
     task_kind = TaskKind(kind)
+    normalized_prompt = prompt.strip()
+    if task_kind == TaskKind.MANUAL_LOOP:
+        if not normalized_prompt:
+            raise click.ClickException("--prompt is required when --kind is manual_loop.")
+    elif normalized_prompt:
+        raise click.ClickException("--prompt is only valid with --kind manual_loop.")
     pinned_name = ""
     pinned_revision = ""
     if task_kind == TaskKind.RECURRING_SKILL:
@@ -149,6 +164,7 @@ def cron_add(
         branch=branch,
         pr_number=pr_number,
     )
+    task_params = {LOOP_PROMPT_PARAM: normalized_prompt} if normalized_prompt else {}
 
     task = ScheduledTask(
         name=name.strip(),
@@ -161,6 +177,7 @@ def cron_add(
         skill_name=pinned_name,
         skill_revision=pinned_revision,
         skill_inputs=skill_inputs,
+        params=task_params,
     )
 
     from infrastructure.scheduling.scheduler.operation_log import record_scheduler_task_operation

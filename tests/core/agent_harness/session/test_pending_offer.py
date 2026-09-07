@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from core.agent_harness.prompts.memory.conversation import expand_affirmative_follow_up
@@ -111,9 +113,11 @@ def test_pending_offer_to_slash_omits_slack_chat_id() -> None:
         cron="0 8 * * 1-5",
         timezone="Europe/Amsterdam",
         provider="slack",
+        prompt="Check open incidents.",
     )
     assert offer.to_slash_command() == (
-        "/cron add --kind manual_loop --cron '0 8 * * 1-5' --tz Europe/Amsterdam --provider slack"
+        "/cron add --kind manual_loop --cron '0 8 * * 1-5' "
+        "--tz Europe/Amsterdam --provider slack --prompt 'Check open incidents.'"
     )
 
 
@@ -124,6 +128,7 @@ def test_yes_uses_pending_schedule_not_prose() -> None:
         timezone="UTC",
         provider="telegram",
         chat_id="-100123",
+        prompt="Check open incidents.",
     )
     history = [
         (
@@ -135,7 +140,8 @@ def test_yes_uses_pending_schedule_not_prose() -> None:
     expanded = expand_affirmative_follow_up("yes", history, pending_schedule=pending)
     assert expanded == (
         "/cron add --kind manual_loop --cron '0 9 * * 1' "
-        "--tz UTC --provider telegram --chat-id -100123"
+        "--tz UTC --provider telegram --prompt 'Check open incidents.' "
+        "--chat-id -100123"
     )
     assert "1-5" not in expanded
     assert "same channel" not in expanded
@@ -186,6 +192,47 @@ def test_propose_tool_sets_session_pending_offer() -> None:
     assert result["closer"] in result["response_text"]
 
 
+def test_propose_manual_loop_offer_preserves_prompt_through_confirmation() -> None:
+    session = InMemorySessionState()
+    session.record(
+        "shell",
+        "curl -s 'wttr.in/Amsterdam?format=3'",
+        ok=True,
+        response_text="Amsterdam: ☀️ +20°C",
+    )
+    session.record(
+        "shell",
+        "curl -s 'https://feeds.bbci.co.uk/news/rss.xml' | head",
+        ok=True,
+        response_text="Some headline",
+    )
+    ctx = ActionToolScope(session=session, console=object())
+    prompt = "Check open incidents and summarize production risk."
+
+    result = execute_propose_scheduled_delivery_tool(
+        {
+            "kind": "manual_loop",
+            "cron": "0 8 * * 1-5",
+            "timezone": "UTC",
+            "provider": "interactive_shell",
+            "prompt": prompt,
+            "briefing_text": (
+                "Good morning! Weather — Amsterdam: ☀️ +20°C\nTop headlines:\n- Some headline"
+            ),
+        },
+        ctx,
+    )
+
+    assert result["ok"] is True
+    assert session.pending_schedule_offer is not None
+    assert session.pending_schedule_offer.prompt == prompt
+    assert f"--prompt '{prompt}'" in result["slash_preview"]
+    expanded = expand_affirmative_follow_up(
+        "yes", [], pending_schedule=session.pending_schedule_offer
+    )
+    assert f"--prompt '{prompt}'" in expanded
+
+
 def test_propose_alone_without_briefing_work_is_rejected() -> None:
     """User symptom: 'give me a morning report' → only Want me to, no weather."""
     session = InMemorySessionState()
@@ -216,6 +263,7 @@ def test_run_turn_consumes_pending_schedule_on_yes() -> None:
         cron="0 8 * * 1-5",
         timezone="UTC",
         provider="slack",
+        prompt="Check open incidents.",
     )
     seen: list[str] = []
 
@@ -243,7 +291,7 @@ def test_run_turn_consumes_pending_schedule_on_yes() -> None:
 
 
 def test_a_confirmed_schedule_survives_the_literal_slash_dispatcher(
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The cron expression must reach the CLI as ONE argument.
 
@@ -258,17 +306,27 @@ def test_a_confirmed_schedule_survives_the_literal_slash_dispatcher(
 
     from core.agent_harness.session.pending_offer import PendingScheduleOffer
     from core.agent_harness.turns.action_driver import _literal_slash_tool_call
+    from infrastructure.scheduling.scheduler.storage import task_store as scheduler_store
     from surfaces.cli.commands.cron import cron_add
 
     class _SlashTool:
         name = "slash_invoke"
 
+    monkeypatch.setattr(
+        scheduler_store,
+        "default_task_store_path",
+        lambda: tmp_path / "scheduler_tasks.json",
+    )
+
     offer = PendingScheduleOffer(
-        kind="manual_loop", cron="0 8 * * 1-5", timezone="UTC", provider="slack"
+        kind="manual_loop",
+        cron="0 8 * * 1-5",
+        timezone="UTC",
+        provider="interactive_shell",
+        prompt="Check open incidents.",
     )
 
     # Act
-    monkeypatch.setenv("SLACK_WEBHOOK_URL", "https://hooks.slack.test/services/T/B/x")
     call = _literal_slash_tool_call(offer.to_slash_command(), [_SlashTool()])
 
     # Assert
@@ -321,6 +379,7 @@ def test_slash_tool_rebuild_keeps_cron_expression_for_dispatch() -> None:
         cron="0 8 * * 1-5",
         timezone="Europe/Amsterdam",
         provider="slack",
+        prompt="Check open incidents.",
     )
     call = _literal_slash_tool_call(offer.to_slash_command(), [_SlashTool()])
     assert call is not None
@@ -423,7 +482,11 @@ def test_a_failed_schedule_keeps_the_offer_for_a_second_try() -> None:
 
     session = InMemorySessionState()
     session.pending_schedule_offer = PendingScheduleOffer(
-        kind="manual_loop", cron="0 8 * * 1-5", timezone="UTC", provider="slack"
+        kind="manual_loop",
+        cron="0 8 * * 1-5",
+        timezone="UTC",
+        provider="slack",
+        prompt="Check open incidents.",
     )
 
     def _execute_failing(_text: str, **_kwargs: object) -> ToolCallingTurnResult:
@@ -459,7 +522,11 @@ def test_a_successful_schedule_consumes_the_offer() -> None:
 
     session = InMemorySessionState()
     session.pending_schedule_offer = PendingScheduleOffer(
-        kind="manual_loop", cron="0 8 * * 1-5", timezone="UTC", provider="slack"
+        kind="manual_loop",
+        cron="0 8 * * 1-5",
+        timezone="UTC",
+        provider="slack",
+        prompt="Check open incidents.",
     )
 
     def _execute_ok(_text: str, **_kwargs: object) -> ToolCallingTurnResult:
@@ -513,6 +580,7 @@ def test_a_stale_fetch_from_an_earlier_turn_does_not_unlock_the_offer() -> None:
             "cron": "0 8 * * 1-5",
             "provider": "slack",
             "chat_id": "C0123ABCD",
+            "prompt": "Check open incidents.",
             "briefing_text": "Good morning! Weather — Amsterdam: +20C\nTop headlines:\n- one",
         },
         ctx,
