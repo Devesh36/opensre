@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from http import HTTPStatus
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -167,7 +168,7 @@ def test_poll_once_redacts_bot_token_from_http_response_body(
 
     token = "123:SECRET"
     mock_get.return_value = httpx.Response(
-        500,
+        HTTPStatus.INTERNAL_SERVER_ERROR,
         text=f"upstream failure: https://api.telegram.org/bot{token}/getUpdates",
     )
     caplog.set_level(logging.DEBUG, logger="gateway.transports.telegram.poller.poller")
@@ -191,10 +192,10 @@ def test_poll_once_redacts_bot_token_from_conflict_description(
 
     token = "123:SECRET"
     mock_get.return_value = httpx.Response(
-        409,
+        HTTPStatus.CONFLICT,
         json={
             "ok": False,
-            "error_code": 409,
+            "error_code": HTTPStatus.CONFLICT,
             "description": f"Conflict: https://api.telegram.org/bot{token}/getUpdates",
         },
     )
