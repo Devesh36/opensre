@@ -186,6 +186,233 @@ class TestExecutor:
         assert first_result == [True]
         assert adapter.calls == 1
 
+    def test_ownership_loss_skips_external_delivery(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        adapters = _install_fake_bundle()
+        ownership_lost = threading.Event()
+
+        def _claim_is_lost(_claim: Any) -> bool:
+            ownership_lost.set()
+            return False
+
+        def _build_until_ownership_loss(*_args: object) -> str:
+            assert ownership_lost.wait(timeout=_SYNC_TIMEOUT_SECONDS)
+            return "Scheduled report"
+
+        monkeypatch.setattr(scheduler_executor, "claim_heartbeat_interval_seconds", lambda: 0.01)
+        monkeypatch.setattr(scheduler_executor, "renew_claim", _claim_is_lost)
+        task = ScheduledTask(
+            id="test_lost_heartbeat",
+            kind=TaskKind.MANUAL_LOOP,
+            cron="0 9 * * *",
+            provider=Provider.SLACK,
+            chat_id="C123",
+        )
+
+        with patch(
+            "infrastructure.scheduling.scheduler.executor.build_message",
+            side_effect=_build_until_ownership_loss,
+        ):
+            assert execute_task(task, "2026-01-01T09:00", real_runners()) is False
+
+        assert adapters[Provider.SLACK].calls == []
+
+    @pytest.mark.parametrize("delivery_succeeds", [True, False])
+    def test_recovered_one_shot_finalizes_only_after_success(
+        self, tmp_path: Path, delivery_succeeds: bool
+    ) -> None:
+        from infrastructure.scheduling.scheduler.storage import get_task, try_claim
+
+        task = add_task(
+            ScheduledTask(
+                kind=TaskKind.MANUAL_LOOP,
+                cron="0 9 * * *",
+                provider=Provider.SLACK,
+                params={"disable_after_success": "true"},
+            )
+        )
+        assert try_claim(task.id, "old-tick") is not None
+        _expire_claim(tmp_path / "scheduler.db", task.id, "old-tick")
+        adapters = _install_fake_bundle()
+        adapters[Provider.SLACK].result = (
+            (True, "", "message") if delivery_succeeds else (False, "unavailable", "")
+        )
+        with patch(
+            "infrastructure.scheduling.scheduler.executor.build_message", return_value="report"
+        ):
+            _recover_expired_tasks(real_runners())
+        stored = get_task(task.id)
+        assert stored is not None
+        assert stored.enabled is not delivery_succeeds
+        assert (stored.last_run is not None) is delivery_succeeds
+        assert get_runs(task.id)[0].status is (
+            TaskStatus.SUCCESS if delivery_succeeds else TaskStatus.FAILED
+        )
+
+    @pytest.mark.parametrize("ineligible", ["disabled", "missing", "filtered"])
+    def test_recovery_skips_ineligible_claims_before_limiting(
+        self, tmp_path: Path, ineligible: str
+    ) -> None:
+        from infrastructure.scheduling.scheduler.storage import get_task, try_claim
+
+        blocked = ScheduledTask(
+            id="blocked",
+            kind=TaskKind.MANUAL_LOOP,
+            cron="0 9 * * *",
+            provider=Provider.TELEGRAM,
+            enabled=ineligible != "disabled",
+            chat_id="blocked",
+        )
+        if ineligible != "missing":
+            add_task(blocked)
+        task = add_task(
+            ScheduledTask(
+                kind=TaskKind.MANUAL_LOOP,
+                cron="0 9 * * *",
+                provider=Provider.SLACK,
+                chat_id="eligible",
+            )
+        )
+        for index in range(100):
+            assert try_claim(blocked.id, f"old-{index}") is not None
+        assert try_claim(task.id, "eligible-tick") is not None
+        with sqlite3.connect(tmp_path / "scheduler.db") as conn:
+            conn.execute(
+                "UPDATE task_runs SET lease_expires_at = ? WHERE task_id = ?",
+                ("2020-01-01T00:00:00+00:00", blocked.id),
+            )
+            conn.execute(
+                "UPDATE task_runs SET lease_expires_at = ? WHERE task_id = ?",
+                ("2021-01-01T00:00:00+00:00", task.id),
+            )
+        adapters = _install_fake_bundle()
+
+        def accepts_task(candidate: ScheduledTask) -> bool:
+            return candidate.provider is Provider.SLACK
+
+        with patch(
+            "infrastructure.scheduling.scheduler.executor.build_message", return_value="report"
+        ):
+            _recover_expired_tasks(
+                real_runners(), task_filter=accepts_task if ineligible == "filtered" else None
+            )
+        assert len(adapters[Provider.SLACK].calls) == 1
+        assert not adapters[Provider.TELEGRAM].calls
+        assert get_runs(task.id)[0].status is TaskStatus.SUCCESS
+        assert all(run.status is TaskStatus.RUNNING for run in get_runs(blocked.id, limit=100))
+        stored = get_task(task.id)
+        assert stored is not None and stored.last_run is not None
+
+    @pytest.mark.parametrize("mutation", ["pause_and_edit", "delete"])
+    def test_completion_preserves_concurrent_task_changes(self, mutation: str) -> None:
+        from concurrent.futures import ThreadPoolExecutor
+
+        from infrastructure.scheduling.scheduler.runner import _scheduled_job
+        from infrastructure.scheduling.scheduler.storage import get_task, remove_task, update_task
+
+        task = add_task(
+            ScheduledTask(
+                kind=TaskKind.MANUAL_LOOP,
+                cron="0 9 * * *",
+                provider=Provider.SLACK,
+                chat_id="original",
+            )
+        )
+        started = threading.Event()
+        release = threading.Event()
+
+        def build_while_editing(*_args: object) -> str:
+            started.set()
+            assert release.wait(_SYNC_TIMEOUT_SECONDS)
+            return "report"
+
+        _install_fake_bundle()
+        with (
+            patch(
+                "infrastructure.scheduling.scheduler.executor.build_message", build_while_editing
+            ),
+            ThreadPoolExecutor(max_workers=1) as pool,
+        ):
+            future = pool.submit(_scheduled_job, task.id, real_runners())
+            try:
+                assert started.wait(_SYNC_TIMEOUT_SECONDS)
+                if mutation == "delete":
+                    assert remove_task(task.id)
+                else:
+                    edited = get_task(task.id)
+                    assert edited is not None
+                    edited.enabled = False
+                    edited.chat_id = "edited"
+                    edited.cron = "0 10 * * *"
+                    edited.params = {"loop_prompt": "new prompt"}
+                    assert update_task(edited)
+            finally:
+                release.set()
+            future.result(timeout=_SYNC_TIMEOUT_SECONDS)
+        stored = get_task(task.id)
+        if mutation == "delete":
+            assert stored is None
+        else:
+            assert stored is not None
+            assert stored.enabled is False
+            assert stored.chat_id == "edited"
+            assert stored.cron == "0 10 * * *"
+            assert stored.params == {"loop_prompt": "new prompt"}
+            assert stored.last_run is not None
+
+    def test_failed_only_retry_retains_scope_after_crash(self, tmp_path: Path) -> None:
+        from infrastructure.scheduling.scheduler.runner import run_task_now
+
+        task = add_task(
+            ScheduledTask(
+                kind=TaskKind.MANUAL_LOOP,
+                cron="0 9 * * *",
+                provider=Provider.SLACK,
+                params={
+                    "delivery_targets": json.dumps(
+                        [
+                            {"provider": "slack", "chat_id": "C123"},
+                            {"provider": "telegram", "chat_id": "456"},
+                        ]
+                    )
+                },
+            )
+        )
+        adapters = _install_fake_bundle()
+        adapters[Provider.TELEGRAM].result = (False, "unavailable", "")
+        with patch(
+            "infrastructure.scheduling.scheduler.executor.build_message", return_value="report"
+        ):
+            assert execute_task(task, "2026-01-01T09:00Z", real_runners())
+        assert len(adapters[Provider.SLACK].calls) == 1
+        with (
+            patch(
+                "infrastructure.scheduling.scheduler.executor.build_message",
+                side_effect=KeyboardInterrupt,
+            ),
+            pytest.raises(KeyboardInterrupt),
+        ):
+            run_task_now(task.id, real_runners(), only_failed=True)
+        crashed = get_runs(task.id)[0]
+        assert crashed.status is TaskStatus.RUNNING
+        _expire_claim(tmp_path / "scheduler.db", task.id, crashed.fire_time)
+        adapters[Provider.TELEGRAM].calls.clear()
+        adapters[Provider.TELEGRAM].result = (True, "", "recovered")
+        with patch(
+            "infrastructure.scheduling.scheduler.executor.build_message", return_value="report"
+        ):
+            _recover_expired_tasks(real_runners())
+        assert len(adapters[Provider.SLACK].calls) == 1
+        assert len(adapters[Provider.TELEGRAM].calls) == 1
+        recovered = get_runs(task.id)[0]
+        assert recovered.attempt == 2
+        assert recovered.status is TaskStatus.SUCCESS
+        assert [(target.provider, target.chat_id) for target in recovered.targets] == [
+            (Provider.TELEGRAM, "456")
+        ]
+
     def test_crash_before_build_is_recovered_by_a_new_attempt(self, tmp_path: Path) -> None:
         from infrastructure.scheduling.scheduler.storage.run_store import get_runs, try_claim
 

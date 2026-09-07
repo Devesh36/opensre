@@ -22,6 +22,7 @@ from infrastructure.scheduling.scheduler.storage.task_store import (
     default_task_store_path,
     get_task,
     list_tasks,
+    record_task_success,
     remove_task,
     update_task,
 )
@@ -42,6 +43,7 @@ __all__ = [
     "renew_claim",
     "get_task",
     "list_tasks",
+    "record_task_success",
     "remove_task",
     "run_database_path",
     "try_claim",

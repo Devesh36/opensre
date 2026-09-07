@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Callable
 
 from infrastructure.scheduling.scheduler.delivery_bundle import resolve_delivery_adapter
 from infrastructure.scheduling.scheduler.delivery_plan import (
@@ -40,6 +41,7 @@ class _ClaimHeartbeat:
     def __init__(self, claim: ExecutionClaim) -> None:
         self._claim = claim
         self._stop = threading.Event()
+        self._lost = threading.Event()
         self._thread = threading.Thread(
             target=self._run,
             name=f"scheduler-claim-heartbeat-{claim.task_id}",
@@ -55,22 +57,28 @@ class _ClaimHeartbeat:
         self._stop.set()
         self._thread.join(timeout=_CLAIM_HEARTBEAT_JOIN_TIMEOUT_SECONDS)
 
+    def lost(self) -> bool:
+        """Return whether renewal failed or the claim was fenced out."""
+        return self._lost.is_set()
+
     def _run(self) -> None:
         """Renew until asked to stop or until the claim is no longer owned."""
         while not self._stop.wait(claim_heartbeat_interval_seconds()):
             try:
                 renewed = renew_claim(self._claim)
             except Exception:  # noqa: BLE001
+                self._lost.set()
                 logger.warning(
                     "Failed to renew claim for task %s fire_time=%s",
                     self._claim.task_id,
                     self._claim.fire_time,
                     exc_info=True,
                 )
-                continue
+                return
             if not renewed:
                 if self._stop.is_set():
                     return
+                self._lost.set()
                 logger.warning(
                     "Stopping heartbeat after losing claim for task %s fire_time=%s",
                     self._claim.task_id,
@@ -101,7 +109,7 @@ def execute_task(
         False if the claim was lost (another instance handled it) or delivery failed.
     """
     # Attempt to claim this execution slot
-    claim = try_claim(task.id, fire_time)
+    claim = try_claim(task.id, fire_time, target_filter=target_filter)
     if claim is None:
         logger.info(
             "Task %s fire_time=%s already claimed by another instance",
@@ -125,7 +133,7 @@ def execute_task(
             task,
             fire_time,
             runners,
-            target_filter=target_filter,
+            heartbeat,
         )
     finally:
         heartbeat.stop()
@@ -136,8 +144,7 @@ def _execute_claimed_task(
     task: ScheduledTask,
     fire_time: str,
     runners: SchedulerRunners,
-    *,
-    target_filter: frozenset[TargetKey] | None,
+    heartbeat: _ClaimHeartbeat,
 ) -> bool:
     """Build and deliver a task while its claim heartbeat is active."""
     logger.info("Executing task %s (kind=%s, fire_time=%s)", task.id, task.kind, fire_time)
@@ -148,6 +155,16 @@ def _execute_claimed_task(
         status=TaskStatus.RUNNING,
     )
     _emit_analytics_started(task)
+
+    if claim.target_filter == frozenset():
+        _record_failure(
+            claim,
+            task,
+            fire_time,
+            "No delivery destinations authorized for this attempt; run the task explicitly.",
+            stage="delivery_scope",
+        )
+        return False
 
     # Build the message
     try:
@@ -188,7 +205,20 @@ def _execute_claimed_task(
         return True
 
     # Fan out to every destination the task resolves to, concurrently.
-    result = _deliver_all(task, message, target_filter=target_filter)
+    if heartbeat.lost():
+        logger.info(
+            "Skipping delivery for task %s fire_time=%s after losing claim ownership",
+            task.id,
+            fire_time,
+        )
+        return False
+
+    result = _deliver_all(
+        task,
+        message,
+        target_filter=claim.target_filter,
+        can_deliver=lambda: not heartbeat.lost(),
+    )
     message_id = result.message_id()
     error = result.error()
 
@@ -265,8 +295,14 @@ def _record_work_item_reminder_delivery(task: ScheduledTask) -> None:
         )
 
 
-def _deliver_single(target: DeliveryTarget, message: str) -> tuple[bool, str, str]:
+def _deliver_single(
+    target: DeliveryTarget,
+    message: str,
+    can_deliver: Callable[[], bool] | None = None,
+) -> tuple[bool, str, str]:
     """Deliver one message to one destination via its installed adapter."""
+    if can_deliver is not None and not can_deliver():
+        return False, "claim ownership lost", ""
     adapter = resolve_delivery_adapter(target.provider)
     if adapter is None:
         return False, f"Unsupported provider: {target.provider}", ""
@@ -274,11 +310,19 @@ def _deliver_single(target: DeliveryTarget, message: str) -> tuple[bool, str, st
 
 
 def _deliver_all(
-    task: ScheduledTask, message: str, *, target_filter: frozenset[TargetKey] | None = None
+    task: ScheduledTask,
+    message: str,
+    *,
+    target_filter: frozenset[TargetKey] | None = None,
+    can_deliver: Callable[[], bool] | None = None,
 ) -> FanOutResult:
     """Resolve ``task``'s destinations once and deliver to all of them at once."""
     plan = resolve_delivery_plan(task, only=target_filter)
-    return deliver_plan(plan, message, _deliver_single)
+    return deliver_plan(
+        plan,
+        message,
+        lambda target, content: _deliver_single(target, content, can_deliver),
+    )
 
 
 def _target_outcome_summary(result: FanOutResult) -> tuple[str, ...]:

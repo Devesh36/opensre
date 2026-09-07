@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -13,7 +13,7 @@ from typing import Any
 from uuid import uuid4
 
 import infrastructure.scheduling.scheduler.storage.database as database
-from infrastructure.scheduling.scheduler.types import DeliveryOutcome, TaskRun, TaskStatus
+from infrastructure.scheduling.scheduler.types import DeliveryOutcome, Provider, TaskRun, TaskStatus
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,7 @@ class ExecutionClaim:
     fire_time: str
     attempt: int
     owner_token: str
+    target_filter: frozenset[tuple[Provider, str]] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,7 +49,13 @@ class ExpiredClaim:
     fire_time: str
 
 
-def try_claim(task_id: str, fire_time: str, db_path: Path | None = None) -> ExecutionClaim | None:
+def try_claim(
+    task_id: str,
+    fire_time: str,
+    db_path: Path | None = None,
+    *,
+    target_filter: frozenset[tuple[Provider, str]] | None = None,
+) -> ExecutionClaim | None:
     """Claim a task tick or reclaim it when the current lease has expired."""
     try:
         with database.transaction(db_path, immediate=True) as conn:
@@ -56,7 +63,7 @@ def try_claim(task_id: str, fire_time: str, db_path: Path | None = None) -> Exec
             now_text = now.isoformat()
             lease_text = (now + timedelta(seconds=_CLAIM_LEASE_SECONDS)).isoformat()
             row = conn.execute(
-                "SELECT attempt, status, lease_expires_at FROM task_runs "
+                "SELECT attempt, status, lease_expires_at, target_filter FROM task_runs "
                 "WHERE task_id = ? AND fire_time = ? ORDER BY attempt DESC LIMIT 1",
                 (task_id, fire_time),
             ).fetchone()
@@ -80,6 +87,7 @@ def try_claim(task_id: str, fire_time: str, db_path: Path | None = None) -> Exec
                         TaskStatus.RUNNING.value,
                     ),
                 )
+                target_filter = _decode_target_filter(row[3])
                 attempt += 1
             else:
                 attempt = 1
@@ -88,7 +96,7 @@ def try_claim(task_id: str, fire_time: str, db_path: Path | None = None) -> Exec
             conn.execute(
                 "INSERT INTO task_runs "
                 "(task_id, fire_time, attempt, started_at, status, owner_token, "
-                "lease_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "lease_expires_at, target_filter) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     task_id,
                     fire_time,
@@ -97,9 +105,10 @@ def try_claim(task_id: str, fire_time: str, db_path: Path | None = None) -> Exec
                     TaskStatus.RUNNING.value,
                     owner_token,
                     lease_text,
+                    json.dumps(sorted(target_filter) if target_filter is not None else None),
                 ),
             )
-            return ExecutionClaim(task_id, fire_time, attempt, owner_token)
+            return ExecutionClaim(task_id, fire_time, attempt, owner_token, target_filter)
     except sqlite3.IntegrityError:
         return None
 
@@ -127,25 +136,54 @@ def renew_claim(claim: ExecutionClaim, db_path: Path | None = None) -> bool:
                 TaskStatus.RUNNING.value,
             ),
         )
-        renewed = cursor.rowcount == 1
-        return renewed
+        return cursor.rowcount == 1
+
+
+def _decode_target_filter(raw: str) -> frozenset[tuple[Provider, str]] | None:
+    """Read durable delivery scope; unknown or malformed scope never widens."""
+    try:
+        entries = json.loads(raw)
+        if entries is None:
+            return None
+        if not isinstance(entries, list):
+            raise ValueError("delivery scope must be a list")
+        targets: set[tuple[Provider, str]] = set()
+        for entry in entries:
+            if (
+                not isinstance(entry, list)
+                or len(entry) != 2
+                or not all(isinstance(value, str) for value in entry)
+            ):
+                raise ValueError("invalid delivery scope entry")
+            targets.add((Provider(entry[0]), entry[1]))
+        return frozenset(targets)
+    except (ValueError, TypeError):
+        logger.warning("Refusing recovery delivery with unreadable scope")
+        return frozenset()
 
 
 def get_expired_claims(
-    *, limit: int = _EXPIRED_CLAIM_SCAN_LIMIT, db_path: Path | None = None
+    *,
+    limit: int = _EXPIRED_CLAIM_SCAN_LIMIT,
+    db_path: Path | None = None,
+    eligible_task_ids: Collection[str] | None = None,
 ) -> list[ExpiredClaim]:
-    """Return the latest expired running attempts that are eligible for retry."""
+    """Return expired attempts, applying task eligibility before the scan limit."""
+    if eligible_task_ids is not None and not eligible_task_ids:
+        return []
+    task_ids_json = json.dumps(list(eligible_task_ids)) if eligible_task_ids is not None else None
     with database.connection(db_path) as conn:
         now_text = datetime.now(UTC).isoformat()
         rows = conn.execute(
             "SELECT task_id, fire_time FROM task_runs AS current "
             "WHERE current.status = ? AND current.lease_expires_at != '' "
             "AND current.lease_expires_at < ? "
+            "AND (? IS NULL OR current.task_id IN (SELECT value FROM json_each(?))) "
             "AND current.attempt = (SELECT MAX(latest.attempt) FROM task_runs AS latest "
             "WHERE latest.task_id = current.task_id "
             "AND latest.fire_time = current.fire_time) "
             "ORDER BY current.lease_expires_at LIMIT ?",
-            (TaskStatus.RUNNING.value, now_text, limit),
+            (TaskStatus.RUNNING.value, now_text, task_ids_json, task_ids_json, limit),
         ).fetchall()
         return [ExpiredClaim(task_id=str(row[0]), fire_time=str(row[1])) for row in rows]
 

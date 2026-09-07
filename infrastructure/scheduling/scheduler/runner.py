@@ -31,6 +31,7 @@ from infrastructure.scheduling.scheduler.storage import (
     get_expired_claims,
     get_task,
     list_tasks,
+    record_task_success,
     update_task,
 )
 from infrastructure.scheduling.scheduler.types import Provider, ScheduledTask, TaskStatus
@@ -134,10 +135,7 @@ def _scheduled_job(task_id: str, runners: SchedulerRunners) -> None:
     result = execute_task(task, fire_time, runners)
 
     if result:
-        task.last_run = datetime.now(UTC).isoformat()
-        if task.params.get("disable_after_success", "").strip().lower() == "true":
-            task.enabled = False
-        update_task(task)
+        record_task_success(task.id)
 
 
 def _recover_expired_tasks(
@@ -146,13 +144,16 @@ def _recover_expired_tasks(
     task_filter: TaskFilter | None = None,
 ) -> None:
     """Resubmit expired scheduled ticks through the normal fenced executor."""
-    for expired in get_expired_claims():
+    eligible_task_ids = _desired_task_ids(task_filter=task_filter)
+    for expired in get_expired_claims(eligible_task_ids=eligible_task_ids):
         task = get_task(expired.task_id)
         if task is None or not task.enabled:
             continue
         if task_filter is not None and not task_filter(task):
             continue
         result = execute_task(task, expired.fire_time, runners)
+        if result:
+            record_task_success(task.id)
         logger.info(
             "Recovered expired task %s fire_time=%s result=%s",
             expired.task_id,
