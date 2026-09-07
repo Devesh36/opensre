@@ -108,8 +108,9 @@ class TelegramPoller:
         response: httpx.Response,
     ) -> None:
         error_code = data.get("error_code")
-        description = str(
-            data.get("description") or response.text.strip() or f"HTTP {response.status_code}"
+        description = redact_token(
+            str(data.get("description") or response.text.strip() or f"HTTP {response.status_code}"),
+            self._token,
         )
         if error_code == _CONFLICT_ERROR_CODE:
             logger.debug(
