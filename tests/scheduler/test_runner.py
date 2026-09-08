@@ -10,9 +10,8 @@ from infrastructure.scheduling.scheduler.loop_constants import LOOP_PROMPT_PARAM
 from infrastructure.scheduling.scheduler.runner import (
     _compute_fire_time,
     _make_trigger,
-    _on_job_submitted,
-    _pending_fire_times,
     _register_jobs,
+    _scheduled_job,
     compute_next_run,
     refresh_background_scheduler,
     resync_scheduler_jobs,
@@ -81,20 +80,6 @@ class TestMakeTrigger:
         assert trigger is not None
 
 
-class TestOnJobSubmitted:
-    def test_stores_fire_time_from_scheduled_run_times(self) -> None:
-        from datetime import UTC, datetime
-        from types import SimpleNamespace
-
-        _pending_fire_times.clear()
-        event = SimpleNamespace(
-            job_id="task-1",
-            scheduled_run_times=[datetime(2026, 1, 15, 9, 0, tzinfo=UTC)],
-        )
-        _on_job_submitted(event)
-        assert _pending_fire_times["task-1"] == "2026-01-15T09:00Z"
-
-
 class TestComputeFireTime:
     def test_with_utc_datetime(self) -> None:
         from datetime import UTC, datetime
@@ -113,10 +98,35 @@ class TestComputeFireTime:
         # 14:30 IST = 09:00 UTC
         assert result == "2026-01-15T09:00Z"
 
-    def test_with_none_falls_back_to_utc_now(self) -> None:
-        result = _compute_fire_time(None)
-        assert result.endswith("Z")
-        assert "T" in result
+    def test_scheduled_job_uses_callback_fire_time(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from datetime import UTC, datetime
+
+        task = ScheduledTask(
+            id="task-1",
+            kind=TaskKind.MANUAL_LOOP,
+            cron="0 9 * * *",
+            provider=Provider.SLACK,
+        )
+        observed: list[str] = []
+        monkeypatch.setattr(
+            "infrastructure.scheduling.scheduler.runner.get_task",
+            lambda _task_id: task,
+        )
+        monkeypatch.setattr(
+            "infrastructure.scheduling.scheduler.runner.execute_task",
+            lambda _task, fire_time, _runners: observed.append(fire_time) or False,
+        )
+
+        _scheduled_job(
+            task.id,
+            real_runners(),
+            scheduled_run_time=datetime(2026, 1, 15, 9, 0, tzinfo=UTC),
+        )
+
+        assert observed == ["2026-01-15T09:00Z"]
 
 
 class TestComputeNextRun:
@@ -147,9 +157,6 @@ class TestRegisterJobs:
         class _FakeScheduler:
             def __init__(self) -> None:
                 self.job_ids: list[str] = []
-
-            def add_listener(self, *_args: object) -> None:
-                return None
 
             def add_job(self, *args: object, **kwargs: object) -> None:
                 _ = args
@@ -202,9 +209,6 @@ class TestRegisterJobs:
         class _FakeScheduler:
             def __init__(self) -> None:
                 self.jobs: dict[str, _FakeJob] = {"stale": _FakeJob("stale")}
-
-            def add_listener(self, *_args: object) -> None:
-                return None
 
             def add_job(self, *args: object, **kwargs: object) -> None:
                 _ = args
@@ -398,6 +402,9 @@ class TestStartSchedulerIdle:
         started: list[bool] = []
 
         class _FakeScheduler:
+            def __init__(self, **_kwargs: object) -> None:
+                pass
+
             def start(self) -> None:
                 started.append(True)  # no-op instead of blocking forever
 
