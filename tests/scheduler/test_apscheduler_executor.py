@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import threading
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+
+from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_MISSED, JobEvent
 
 from infrastructure.scheduling.scheduler.apscheduler_executor import (
     ScheduledThreadPoolExecutor,
@@ -12,39 +14,47 @@ from infrastructure.scheduling.scheduler.apscheduler_executor import (
 
 
 class _FakeScheduler:
+    def __init__(self) -> None:
+        self.event_codes: list[int] = []
+
     def _create_lock(self) -> threading.RLock:
         return threading.RLock()
 
-    def _dispatch_event(self, _event: object) -> None:
-        return None
+    def _dispatch_event(self, event: JobEvent) -> None:
+        self.event_codes.append(event.code)
 
 
-def test_worker_receives_exact_fire_time_without_submission_listener() -> None:
+def test_worker_receives_each_eligible_fire_time_without_submission_listener() -> None:
     started = threading.Event()
     release = threading.Event()
     observed: list[datetime] = []
-    scheduled_run_time = datetime(2026, 1, 15, 9, 0, tzinfo=UTC)
+    now = datetime.now(UTC)
+    run_times = [now - timedelta(minutes=5), now - timedelta(seconds=1), now]
 
     def callback(*, scheduled_run_time: datetime) -> None:
         observed.append(scheduled_run_time)
-        started.set()
-        assert release.wait(5)
+        if len(observed) == 1:
+            started.set()
+            assert release.wait(5)
 
+    scheduler = _FakeScheduler()
     job = SimpleNamespace(
         id="task-1",
         max_instances=1,
-        misfire_grace_time=None,
+        misfire_grace_time=60,
         func=callback,
         args=(),
         kwargs={},
         _jobstore_alias="default",
     )
     executor = ScheduledThreadPoolExecutor(max_workers=1)
-    executor.start(_FakeScheduler(), "default")
+    executor.start(scheduler, "default")
     try:
-        executor.submit_job(job, [scheduled_run_time])
+        executor.submit_job(job, run_times)
         assert started.wait(5)
-        assert observed == [scheduled_run_time]
     finally:
         release.set()
         executor.shutdown(wait=True)
+
+    assert observed == run_times[1:]
+    assert scheduler.event_codes == [EVENT_JOB_MISSED, EVENT_JOB_EXECUTED, EVENT_JOB_EXECUTED]
