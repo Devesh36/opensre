@@ -279,6 +279,7 @@ def test_skill_matches_take_priority_over_generic_docs_answer() -> None:
     assert '"pr", "checks", "<number>", "--watch"' in body
     assert "timeout=120" in body
     assert "Do not replace it with repeated non-watching checks" in body
+    assert "A watch timeout never permits step 8" in body
     assert "CI fixer owns failing-check" in body
     assert "log inspection, root-cause repair" in body
     assert '"run", "view", "<run-id>", "--log-failed"' not in body

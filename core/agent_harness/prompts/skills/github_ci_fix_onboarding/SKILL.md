@@ -275,6 +275,9 @@ identical pending observations can trip the action loop's stagnation guard and
 end the workflow early. Do not ask the user to continue or report an incomplete
 workflow as successful.
 
+If the 120-second watch times out, treat that result as non-terminal and start
+another blocking watch in this step. A watch timeout never permits step 8.
+
 If any required check fails:
 
 1. Rerun `fix_github_pr_ci` for the same PR. The CI fixer owns failing-check
