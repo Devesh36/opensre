@@ -128,6 +128,10 @@ class TestComputeFireTime:
 
         assert observed == ["2026-01-15T09:00Z"]
 
+    def test_scheduled_job_rejects_missing_fire_time(self) -> None:
+        with pytest.raises(RuntimeError, match="scheduled_run_time"):
+            _scheduled_job("task-1", real_runners())
+
 
 class TestComputeNextRun:
     def test_returns_next_utc_fire_time(self) -> None:
@@ -146,6 +150,79 @@ class TestComputeNextRun:
 
 
 class TestRegisterJobs:
+    def test_real_scheduler_registers_and_passes_fire_time(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from datetime import UTC, datetime, timedelta
+        from threading import Event
+
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from apscheduler.triggers.date import DateTrigger
+
+        from infrastructure.scheduling.scheduler.apscheduler_executor import (
+            ScheduledThreadPoolExecutor,
+        )
+
+        task = ScheduledTask(
+            id="real-scheduler-task",
+            kind=TaskKind.MANUAL_LOOP,
+            cron="* * * * *",
+            provider=Provider.TELEGRAM,
+        )
+        scheduled_run_time = datetime.now(UTC) + timedelta(seconds=2)
+        observed_fire_times: list[str] = []
+        execution_finished = Event()
+
+        def _make_date_trigger(_task: ScheduledTask) -> DateTrigger:
+            return DateTrigger(run_date=scheduled_run_time)
+
+        def _execute_task(
+            _task: ScheduledTask,
+            fire_time: str,
+            _runners: object,
+        ) -> bool:
+            observed_fire_times.append(fire_time)
+            execution_finished.set()
+            return False
+
+        monkeypatch.setattr(
+            "infrastructure.scheduling.scheduler.runner.list_tasks",
+            lambda: [task],
+        )
+        monkeypatch.setattr(
+            "infrastructure.scheduling.scheduler.runner.get_task",
+            lambda _task_id: task,
+        )
+        monkeypatch.setattr(
+            "infrastructure.scheduling.scheduler.runner._make_trigger",
+            _make_date_trigger,
+        )
+        monkeypatch.setattr(
+            "infrastructure.scheduling.scheduler.runner.update_task",
+            lambda _task: None,
+        )
+        monkeypatch.setattr(
+            "infrastructure.scheduling.scheduler.runner.execute_task",
+            _execute_task,
+        )
+
+        scheduler = BackgroundScheduler(
+            executors={"default": ScheduledThreadPoolExecutor(max_workers=1)}
+        )
+        started = False
+        try:
+            assert _register_jobs(scheduler, real_runners()) == 1
+            scheduler.start()
+            started = True
+            assert execution_finished.wait(10)
+        finally:
+            if started:
+                scheduler.shutdown(wait=True)
+
+        expected_fire_time = scheduled_run_time.strftime("%Y-%m-%dT%H:%MZ")
+        assert observed_fire_times == [expected_fire_time]
+
     def test_applies_task_filter(
         self,
         tmp_path,

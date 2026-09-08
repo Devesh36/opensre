@@ -90,9 +90,11 @@ def _scheduled_job(
     task_id: str,
     runners: SchedulerRunners,
     *,
-    scheduled_run_time: datetime,
+    scheduled_run_time: datetime | None = None,
 ) -> None:
     """Job callback invoked by APScheduler on each cron tick."""
+    if scheduled_run_time is None:
+        raise RuntimeError("scheduled_run_time must be supplied by the scheduler executor")
     fire_time = _compute_fire_time(scheduled_run_time)
 
     task = get_task(task_id)
