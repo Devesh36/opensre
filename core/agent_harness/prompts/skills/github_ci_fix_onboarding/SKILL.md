@@ -263,14 +263,17 @@ returns an error, remediate that specific prerequisite and retry the same call.
 
 ### 7. Verify GitHub checks
 
-After every push, keep this flow active and use `github_cli` only for read-only
-verification:
+After every push, keep this flow active and run one blocking, read-only check
+watch with the maximum supported timeout:
 
-`github_cli(args=["pr", "checks", "<number>"], repo="<owner>/<repo>")`
+`github_cli(args=["pr", "checks", "<number>", "--watch"],
+repo="<owner>/<repo>", timeout=120)`
 
-Repeat the check until every required job reaches a terminal state. Pending,
-queued, or in-progress checks must not end this flow; do not ask the user to
-continue and do not report an incomplete workflow as successful.
+The blocking watch owns pending, queued, and in-progress states until the checks
+reach a terminal state. Do not replace it with repeated non-watching checks:
+identical pending observations can trip the action loop's stagnation guard and
+end the workflow early. Do not ask the user to continue or report an incomplete
+workflow as successful.
 
 If any required check fails:
 

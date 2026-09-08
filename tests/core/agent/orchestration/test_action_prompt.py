@@ -276,7 +276,9 @@ def test_skill_matches_take_priority_over_generic_docs_answer() -> None:
     assert SKILLS_HEADER in prompt
     assert "github-ci-fix-onboarding" in prompt
     assert "Do not end the flow while required checks are pending or failing" in body
-    assert "Repeat the check until every required job reaches a terminal state" in body
+    assert '"pr", "checks", "<number>", "--watch"' in body
+    assert "timeout=120" in body
+    assert "Do not replace it with repeated non-watching checks" in body
     assert "CI fixer owns failing-check" in body
     assert "log inspection, root-cause repair" in body
     assert '"run", "view", "<run-id>", "--log-failed"' not in body
