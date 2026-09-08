@@ -29,13 +29,6 @@ metadata:
 
 Get the user from zero to a working local CI/CD loop with zero friction.
 Treat every missing prerequisite as a task the skill must fix.
-
-
-
-
-
-
-
 Continue until one real, same-repository pull request has completed an
 end-to-end CI fix cycle and its required checks are green.
 Do not end the flow while required checks are pending or failing, and do not
@@ -281,10 +274,10 @@ continue and do not report an incomplete workflow as successful.
 
 If any required check fails:
 
-1. Pull the failing job log with `github_cli`.
-2. Rerun `fix_github_pr_ci` for the same PR so it can fix the root cause and
-   push the repair.
-3. Return to this step and monitor the new checks to completion.
+1. Rerun `fix_github_pr_ci` for the same PR. The CI fixer owns failing-check
+   log inspection, root-cause repair, branch safety, and pushing the fix; do
+   not use `github_cli` for the blocked `run` command family.
+2. Return to this step and monitor the new checks to completion.
 
 Only proceed to step 8 when all required checks are green. A skipped check is
 acceptable only when the repository policy explicitly permits it, such as a
