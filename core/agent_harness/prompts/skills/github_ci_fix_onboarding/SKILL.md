@@ -29,8 +29,17 @@ metadata:
 
 Get the user from zero to a working local CI/CD loop with zero friction.
 Treat every missing prerequisite as a task the skill must fix.
+
+
+
+
+
+
+
 Continue until one real, same-repository pull request has completed an
 end-to-end CI fix cycle and its required checks are green.
+Do not end the flow while required checks are pending or failing, and do not
+hand monitoring back to the user.
 
 ## When to use
 
@@ -261,13 +270,25 @@ returns an error, remediate that specific prerequisite and retry the same call.
 
 ### 7. Verify GitHub checks
 
-After the push, use `github_cli` only for read-only verification:
+After every push, keep this flow active and use `github_cli` only for read-only
+verification:
 
 `github_cli(args=["pr", "checks", "<number>"], repo="<owner>/<repo>")`
 
-If checks are pending, say so and check again when the user asks to continue.
-If another check fails, rerun `fix_github_pr_ci` for the same PR. Never report
-success while required checks are pending, skipped unexpectedly, or failing.
+Repeat the check until every required job reaches a terminal state. Pending,
+queued, or in-progress checks must not end this flow; do not ask the user to
+continue and do not report an incomplete workflow as successful.
+
+If any required check fails:
+
+1. Pull the failing job log with `github_cli`.
+2. Rerun `fix_github_pr_ci` for the same PR so it can fix the root cause and
+   push the repair.
+3. Return to this step and monitor the new checks to completion.
+
+Only proceed to step 8 when all required checks are green. A skipped check is
+acceptable only when the repository policy explicitly permits it, such as a
+docs-only change; an unexpected skip is not success.
 
 ### 8. Report completion
 
