@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -18,12 +20,14 @@ from unittest.mock import patch
 import pytest
 
 import infrastructure.scheduling.scheduler.delivery_bundle as delivery_bundle
+import infrastructure.scheduling.scheduler.executor as scheduler_executor
+import infrastructure.scheduling.scheduler.storage.run_store as run_store
 from config.constants import OPENSRE_OPERATIONS_LOG_PATH_ENV
 from infrastructure.observability.operations_log import read_operations
 from infrastructure.scheduling.scheduler.executor import execute_task
 from infrastructure.scheduling.scheduler.local_delivery import get_loop_messages
 from infrastructure.scheduling.scheduler.loop_constants import LOOP_CHANNELS_PARAM
-from infrastructure.scheduling.scheduler.runner import _recover_expired_tasks
+from infrastructure.scheduling.scheduler.runner import _recover_runs
 from infrastructure.scheduling.scheduler.storage.run_store import get_runs
 from infrastructure.scheduling.scheduler.storage.task_store import add_task
 from infrastructure.scheduling.scheduler.types import (
@@ -36,6 +40,11 @@ from tests.scheduler._bundle import real_runners
 
 #: Generous enough to survive a loaded CI shard; a real hang still fails fast.
 _SYNC_TIMEOUT_SECONDS = 15.0
+#: Short enough that a missed renewal expires inside the test; long enough
+#: that the daemon thread can start under a loaded xdist shard (0.1s expired
+#: before the first renew on main CI).
+_TEST_CLAIM_LEASE_SECONDS = 2.0
+_AFTER_ORIGINAL_LEASE_SECONDS = 2.2
 
 _DELIVERY_PROVIDERS = (
     Provider.TELEGRAM,
@@ -71,6 +80,18 @@ class _CrashOnceAdapter:
             self.crashed = True
             raise KeyboardInterrupt
         return True, "", "recovered-message"
+
+
+class _SlowFailingAdapter:
+    """Outlive a short lease and expose retries attempted after ownership loss."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def deliver(self, _task: ScheduledTask, _message: str) -> tuple[bool, str, str]:
+        self.calls += 1
+        threading.Event().wait(0.25)
+        return False, "temporary delivery failure", ""
 
 
 def _install_fake_bundle() -> dict[Provider, _FakeAdapter]:
@@ -119,6 +140,144 @@ def _expire_claim(db_path: Path, task_id: str, fire_time: str) -> None:
 
 @pytest.mark.usefixtures("_tmp_stores")
 class TestExecutor:
+    def test_shared_lease_renewal_prevents_recovery_of_a_slow_execution(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from infrastructure.scheduling.scheduler.claim_lease import ClaimLeaseRenewer
+
+        # Long enough that a loaded CI runner cannot let the lease lapse before
+        # the renewer's first wake; the renewal interval stays far below it.
+        lease_seconds = 0.5
+        monkeypatch.setattr(run_store, "_CLAIM_LEASE_SECONDS", lease_seconds)
+        monkeypatch.setattr(run_store, "_CLAIM_LEASE_SECONDS", _TEST_CLAIM_LEASE_SECONDS)
+        renewed = threading.Event()
+        real_renew = run_store.renew_claims
+
+        def renew(claims: Any) -> Any:
+            result = real_renew(claims)
+            if result:
+                renewed.set()
+            return result
+
+        renewer = ClaimLeaseRenewer(renew=renew, renewal_interval_seconds=0.05)
+        monkeypatch.setattr(scheduler_executor, "default_claim_lease_renewer", renewer)
+        adapters = _install_fake_bundle()
+        task = ScheduledTask(
+            id="test_slow_execution_renewal",
+            kind=TaskKind.MANUAL_LOOP,
+            cron="0 9 * * *",
+            provider=Provider.SLACK,
+            chat_id="C123",
+        )
+        fire_time = "2026-01-01T09:00Z"
+        building = threading.Event()
+        release = threading.Event()
+        first_result: list[bool] = []
+        building_since: list[float] = []
+
+        def build_slowly(*_args: object) -> str:
+            # The claim is written before build_message runs, so the original
+            # lease expires no later than this timestamp plus the lease length.
+            building_since.append(time.monotonic())
+            building.set()
+            assert release.wait(_SYNC_TIMEOUT_SECONDS)
+            return "Scheduled report"
+
+        with patch(
+            "infrastructure.scheduling.scheduler.executor.build_message",
+            side_effect=build_slowly,
+        ):
+            worker = threading.Thread(
+                target=lambda: first_result.append(execute_task(task, fire_time, real_runners()))
+            )
+            worker.start()
+            assert building.wait(_SYNC_TIMEOUT_SECONDS)
+            assert renewed.wait(_SYNC_TIMEOUT_SECONDS)
+            threading.Event().wait(_AFTER_ORIGINAL_LEASE_SECONDS)
+            assert execute_task(task, fire_time, real_runners()) is False
+            release.set()
+            worker.join(_SYNC_TIMEOUT_SECONDS)
+
+        assert not worker.is_alive()
+        assert first_result == [True]
+        assert len(adapters[Provider.SLACK].calls) == 1
+
+    def test_persistent_renewal_errors_stop_delivery_at_the_confirmed_deadline(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from infrastructure.scheduling.scheduler.claim_lease import ClaimLeaseRenewer
+
+        monkeypatch.setattr(run_store, "_CLAIM_LEASE_SECONDS", 0.08)
+        attempted = threading.Event()
+
+        def unavailable(_claims: Any) -> Any:
+            attempted.set()
+            raise sqlite3.OperationalError("database unavailable")
+
+        renewer = ClaimLeaseRenewer(renew=unavailable, renewal_interval_seconds=0.01)
+        monkeypatch.setattr(scheduler_executor, "default_claim_lease_renewer", renewer)
+        adapters = _install_fake_bundle()
+        task = ScheduledTask(
+            id="test_persistent_renewal_failure",
+            kind=TaskKind.MANUAL_LOOP,
+            cron="0 9 * * *",
+            provider=Provider.SLACK,
+            chat_id="C123",
+        )
+
+        def build_past_expiry(*_args: object) -> str:
+            assert attempted.wait(_SYNC_TIMEOUT_SECONDS)
+            threading.Event().wait(0.12)
+            return "Scheduled report"
+
+        with patch(
+            "infrastructure.scheduling.scheduler.executor.build_message",
+            side_effect=build_past_expiry,
+        ):
+            assert execute_task(task, "2026-01-01T09:00Z", real_runners()) is False
+
+        assert adapters[Provider.SLACK].calls == []
+
+    def test_ownership_loss_stops_delivery_retries(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from infrastructure.scheduling.scheduler.claim_lease import ClaimLeaseRenewer
+
+        monkeypatch.setattr(run_store, "_CLAIM_LEASE_SECONDS", 0.2)
+
+        def unavailable(_claims: Any) -> Any:
+            raise sqlite3.OperationalError("database unavailable")
+
+        renewer = ClaimLeaseRenewer(renew=unavailable, renewal_interval_seconds=0.01)
+        monkeypatch.setattr(scheduler_executor, "default_claim_lease_renewer", renewer)
+        adapter = _SlowFailingAdapter()
+        _install_bundle({Provider.SLACK: adapter, Provider.TELEGRAM: adapter})
+        task = ScheduledTask(
+            id="test_lost_delivery_retry",
+            kind=TaskKind.MANUAL_LOOP,
+            cron="0 9 * * *",
+            provider=Provider.INTERACTIVE_SHELL,
+            params={
+                "delivery_targets": json.dumps(
+                    [
+                        {"provider": "slack", "chat_id": "C123"},
+                        {"provider": "telegram", "chat_id": "456"},
+                    ]
+                )
+            },
+        )
+
+        with patch(
+            "infrastructure.scheduling.scheduler.executor.build_message",
+            return_value="Scheduled report",
+        ):
+            assert execute_task(task, "2026-01-01T09:00Z", real_runners()) is False
+
+        assert adapter.calls == 2
+
     @pytest.mark.parametrize("delivery_succeeds", [True, False])
     def test_recovered_one_shot_finalizes_only_after_success(
         self, tmp_path: Path, delivery_succeeds: bool
@@ -142,7 +301,7 @@ class TestExecutor:
         with patch(
             "infrastructure.scheduling.scheduler.executor.build_message", return_value="report"
         ):
-            _recover_expired_tasks(real_runners())
+            _recover_runs(real_runners())
         stored = get_task(task.id)
         assert stored is not None
         assert stored.enabled is not delivery_succeeds
@@ -177,6 +336,7 @@ class TestExecutor:
         )
         for index in range(100):
             assert try_claim(blocked.id, f"old-{index}") is not None
+            _expire_claim(tmp_path / "scheduler.db", blocked.id, f"old-{index}")
         assert try_claim(task.id, "eligible-tick") is not None
         with sqlite3.connect(tmp_path / "scheduler.db") as conn:
             conn.execute(
@@ -195,7 +355,7 @@ class TestExecutor:
         with patch(
             "infrastructure.scheduling.scheduler.executor.build_message", return_value="report"
         ):
-            _recover_expired_tasks(
+            _recover_runs(
                 real_runners(), task_filter=accepts_task if ineligible == "filtered" else None
             )
         assert len(adapters[Provider.SLACK].calls) == 1
@@ -235,7 +395,12 @@ class TestExecutor:
             ),
             ThreadPoolExecutor(max_workers=1) as pool,
         ):
-            future = pool.submit(_scheduled_job, task.id, real_runners())
+            future = pool.submit(
+                _scheduled_job,
+                task.id,
+                real_runners(),
+                scheduled_run_time=datetime(2026, 1, 15, 9, 0, tzinfo=UTC),
+            )
             try:
                 assert started.wait(_SYNC_TIMEOUT_SECONDS)
                 if mutation == "delete":
@@ -303,7 +468,7 @@ class TestExecutor:
         with patch(
             "infrastructure.scheduling.scheduler.executor.build_message", return_value="report"
         ):
-            _recover_expired_tasks(real_runners())
+            _recover_runs(real_runners())
         assert len(adapters[Provider.SLACK].calls) == 1
         assert len(adapters[Provider.TELEGRAM].calls) == 1
         recovered = get_runs(task.id)[0]
@@ -397,7 +562,7 @@ class TestExecutor:
             "infrastructure.scheduling.scheduler.executor.build_message",
             return_value="Scheduled report",
         ):
-            _recover_expired_tasks(real_runners())
+            _recover_runs(real_runners())
 
         runs = get_runs(task.id)
         assert [run.status for run in runs] == [TaskStatus.SUCCESS, TaskStatus.ABANDONED]
@@ -765,7 +930,7 @@ class TestExecutor:
         ("skill_name", "skill_revision", "error_text"),
         [
             ("missing-skill-xyz", "abc123", "not installed"),
-            ("morning-report", "0" * 64, "changed since it was scheduled"),
+            ("delivering-morning-briefings", "0" * 64, "changed since it was scheduled"),
         ],
     )
     def test_invalid_recurring_skill_is_visible_in_run_history(

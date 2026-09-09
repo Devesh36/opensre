@@ -9,9 +9,20 @@ Layout (either form is supported):
   with an optional sibling ``<name>_report.md`` report template.
 - Flat: ``skills/<name>.md`` with optional ``skills/<name>_report.md``.
 
-Optional YAML frontmatter (``name``, ``description``, optional ``recurring``)
-feeds the compact index. Without frontmatter, the name is derived from the path
-and the description from the first ``WHEN TO USE`` / subtitle lines.
+Optional YAML frontmatter (``name``, ``description``, optional ``recurring``,
+optional ``getting_started`` + ``demo_order``, optional ``pre_execute``,
+optional ``references``) feeds the compact index. ``getting_started`` is the
+verbatim first-visit demo menu label this skill owns; ``demo_order`` is its
+1-based row (A=1). ``pre_execute`` lists static tool calls (``{tool, args}``)
+the host runs when the skill is entered, before any model step; the loader
+keeps them as data and the entry point decides which tools are allowed.
+``after_tool`` lists the same kind of call, run by the host after a named
+tool succeeds while the skill is active (so a mid-flow menu cannot be
+skipped). ``references`` lists sibling markdown files appended after the
+body (resolved from the skill folder, its parent package, or the skills
+tree; paths that leave the tree are ignored). Without frontmatter, the name
+is derived from the path and the description from the first ``WHEN TO USE``
+/ subtitle lines.
 
 The harness prompt carries only :func:`load_skills_index` (~hundreds of
 chars). Full bodies load through the ``skill_view`` tool via
@@ -21,20 +32,29 @@ chars). Full bodies load through the ``skill_view`` tool via
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 import yaml
 
+from core.agent_harness.prompts.skills.naming import normalize_skill_name
+
 __all__ = (
     "ActionSkill",
     "SKILLS_HEADER",
+    "SkillAfterToolHook",
+    "SkillToolCall",
+    "getting_started_skills",
     "list_action_skills",
     "load_skill_body",
+    "load_skill_reference",
     "load_skills_block",
     "load_skills_index",
+    "skill_reference_names",
     "skills_dir",
 )
 
@@ -42,10 +62,35 @@ SKILLS_HEADER = f"{'=' * 40} SKILLS INDEX {'=' * 40}"
 
 _PACKAGE_SKILL_FILENAME = "SKILL.md"
 _REPORT_TEMPLATE_SUFFIX = "_report.md"
+_REFERENCES_DIRNAME = "references"
 _REPO_SKILLS_PREFIX = "core/agent_harness/prompts/skills"
 _REPORT_TEMPLATE_HEADER = "REPORT TEMPLATE from `{repo_path}` (fill exactly; keep all headings):"
+_REFERENCE_HEADER = "SHARED RULES from `{repo_path}`:"
 _SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+_REFERENCE_NAME_RE = re.compile(r"^[a-z0-9]+(?:[-_][a-z0-9]+)*$")
 _BANNER_RE = re.compile(r"^[=\-─]{8,}\s*$")
+
+
+@dataclass(frozen=True)
+class SkillToolCall:
+    """One static tool call a skill declares in ``pre_execute`` or ``after_tool``."""
+
+    tool: str
+    args: Mapping[str, Any]
+    """Read-only tool input, shaped exactly like the tool's ``input_schema``."""
+
+
+@dataclass(frozen=True)
+class SkillAfterToolHook:
+    """Host-run tool call after a named tool succeeds inside this skill."""
+
+    after: str
+    call: SkillToolCall
+    options_from: str | None = None
+    """Named builder that fills ``ask_user_choice`` options from the trigger result."""
+
+    options_extra: tuple[str, ...] = ()
+    """Labels appended after any built options (for example a fallback repository)."""
 
 
 @dataclass(frozen=True)
@@ -56,6 +101,23 @@ class ActionSkill:
     description: str
     path: Path
     recurring: str | None = None
+    tools: tuple[str, ...] = ()
+    """Tool names the skill's flow uses; an answer turn inside the skill offers only these."""
+
+    getting_started: str | None = None
+    """Verbatim first-visit demo label this skill owns; ``None`` when it is not a demo row."""
+
+    demo_order: int | None = None
+    """1-based demo menu order when ``getting_started`` is set (A=1)."""
+
+    pre_execute: tuple[SkillToolCall, ...] = ()
+    """Static tool calls run on skill entry (boot, ``/demo``, ``skill_view``) before the model."""
+
+    references: tuple[str, ...] = ()
+    """Sibling markdown paths appended after the body; unresolved or out-of-tree entries are skipped."""
+
+    after_tool: tuple[SkillAfterToolHook, ...] = ()
+    """Host-run calls after a named tool succeeds; each hook fires once per skill activation."""
 
 
 def skills_dir() -> Path:
@@ -84,7 +146,12 @@ def _package_skill_path(package_dir: Path) -> Path | None:
 
 
 def _iter_skill_paths(directory: Path) -> list[Path]:
-    """Return skill recipe paths in stable order (packages then flat files)."""
+    """Return skill recipe paths in stable order (packages, nested packages, flat files).
+
+    A package directory may nest one level of child skill packages (e.g.
+    ``onboarding_cicd_fix/a_local_analysis/SKILL.md``); each child follows its
+    parent so related skills stay adjacent in the index.
+    """
     paths: list[Path] = []
     for child in sorted(directory.iterdir()):
         if not child.is_dir() or child.name.startswith("."):
@@ -92,8 +159,24 @@ def _iter_skill_paths(directory: Path) -> list[Path]:
         skill_file = _package_skill_path(child)
         if skill_file is not None:
             paths.append(skill_file)
+        for nested in sorted(child.iterdir()):
+            if not nested.is_dir() or nested.name.startswith("."):
+                continue
+            nested_file = _package_skill_path(nested)
+            if nested_file is not None:
+                paths.append(nested_file)
     paths.extend(sorted(directory.glob("*.md")))
     return paths
+
+
+def _skill_references(skill_path: Path) -> tuple[str, ...]:
+    """Return sorted stems of the skill's bundled ``references/*.md`` files."""
+    if skill_path.name != _PACKAGE_SKILL_FILENAME:
+        return ()
+    references_dir = skill_path.parent / _REFERENCES_DIRNAME
+    if not references_dir.is_dir():
+        return ()
+    return tuple(sorted(path.stem for path in references_dir.glob("*.md") if path.is_file()))
 
 
 def _report_template_path(skill_path: Path) -> Path:
@@ -134,6 +217,63 @@ def _string_field(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
+def _string_list_field(value: Any) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    return tuple(item.strip() for item in value if isinstance(item, str) and item.strip())
+
+
+def _optional_int_field(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
+
+
+def _skill_tool_call(item: Mapping[str, Any]) -> SkillToolCall | None:
+    tool = _string_field(item.get("tool"))
+    args = item.get("args")
+    if not tool or not isinstance(args, dict):
+        return None
+    return SkillToolCall(tool=tool, args=MappingProxyType(dict(args)))
+
+
+def _pre_execute_field(value: Any) -> tuple[SkillToolCall, ...]:
+    """Parse ``pre_execute`` entries; malformed items are dropped like other bad frontmatter."""
+    if not isinstance(value, list):
+        return ()
+    calls: list[SkillToolCall] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        call = _skill_tool_call(item)
+        if call is not None:
+            calls.append(call)
+    return tuple(calls)
+
+
+def _after_tool_field(value: Any) -> tuple[SkillAfterToolHook, ...]:
+    """Parse ``after_tool`` entries; malformed items are dropped like other bad frontmatter."""
+    if not isinstance(value, list):
+        return ()
+    hooks: list[SkillAfterToolHook] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        after = _string_field(item.get("after"))
+        call = _skill_tool_call(item)
+        if not after or call is None:
+            continue
+        hooks.append(
+            SkillAfterToolHook(
+                after=after,
+                call=call,
+                options_from=_string_field(item.get("options_from")) or None,
+                options_extra=_string_list_field(item.get("options_extra")),
+            )
+        )
+    return tuple(hooks)
+
+
 def _derive_description(body: str) -> str:
     """Best-effort one-liner when frontmatter has no description."""
     lines = [ln.strip() for ln in body.splitlines()]
@@ -169,6 +309,71 @@ def _derive_description(body: str) -> str:
     return "Action-agent skill"
 
 
+def _path_is_under(path: Path, root: Path) -> bool:
+    """Return True when ``path`` is ``root`` or a file inside it."""
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
+def _resolve_skill_reference(skill_path: Path, ref: str) -> Path | None:
+    """Resolve one ``references:`` entry to a markdown file under the skills tree."""
+    name = _string_field(ref)
+    if not name:
+        return None
+    relative = Path(name)
+    if relative.is_absolute():
+        return None
+    root = skills_dir().resolve()
+    seen: set[Path] = set()
+    for raw_candidate in (
+        skill_path.parent / relative,
+        skill_path.parent.parent / relative,
+        root / relative,
+    ):
+        try:
+            candidate = raw_candidate.resolve()
+        except OSError:
+            continue
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if not _path_is_under(candidate, root):
+            continue
+        if candidate == skill_path.resolve():
+            continue
+        if candidate.name == _PACKAGE_SKILL_FILENAME:
+            continue
+        if candidate.is_file() and candidate.suffix.lower() == ".md":
+            return candidate
+    return None
+
+
+def _skill_body_with_references(skill_path: Path, body: str, references: tuple[str, ...]) -> str:
+    if not body or not references:
+        return body
+    chunks: list[str] = []
+    appended: set[Path] = set()
+    for ref in references:
+        path = _resolve_skill_reference(skill_path, ref)
+        if path is None or path in appended:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if not text:
+            continue
+        appended.add(path)
+        header = _REFERENCE_HEADER.format(repo_path=_repo_relative_path(path))
+        chunks.append(f"{header}\n\n{text}")
+    if not chunks:
+        return body
+    return "".join((body, "\n\n", "\n\n".join(chunks)))
+
+
 def _skill_body_with_optional_template(skill_path: Path, body: str) -> str:
     if not body:
         return ""
@@ -195,11 +400,18 @@ def _load_action_skill(skill_path: Path) -> ActionSkill | None:
         name = _name_from_path(skill_path)
     description = _string_field(frontmatter.get("description")) or _derive_description(body)
     recurring = _string_field(frontmatter.get("recurring")) or None
+    getting_started = _string_field(frontmatter.get("getting_started")) or None
     return ActionSkill(
         name=name,
         description=description,
         path=skill_path,
         recurring=recurring,
+        tools=_string_list_field(frontmatter.get("tools")),
+        getting_started=getting_started,
+        demo_order=_optional_int_field(frontmatter.get("demo_order")),
+        pre_execute=_pre_execute_field(frontmatter.get("pre_execute")),
+        references=_string_list_field(frontmatter.get("references")),
+        after_tool=_after_tool_field(frontmatter.get("after_tool")),
     )
 
 
@@ -220,6 +432,18 @@ def list_action_skills() -> tuple[ActionSkill, ...]:
     return tuple(skills)
 
 
+def _demo_sort_key(skill: ActionSkill) -> tuple[int, str]:
+    order = skill.demo_order if skill.demo_order is not None else 10**9
+    return (order, skill.name)
+
+
+def getting_started_skills() -> tuple[ActionSkill, ...]:
+    """Skills that own a demo option, in menu order."""
+    owned = [skill for skill in list_action_skills() if skill.getting_started]
+    owned.sort(key=_demo_sort_key)
+    return tuple(owned)
+
+
 def _index_line(skill: ActionSkill) -> str:
     recurring = f" [recurring: {skill.recurring}]" if skill.recurring else ""
     return f"- {skill.name} — {skill.description}{recurring}"
@@ -238,8 +462,8 @@ def load_skills_index() -> str:
         "Skill matches outrank a generic docs/how-to answer.",
         "Before answering, check this catalog for an action-shaped match",
         '(including "set up", "install", "onboard me", "demo", "audit", or "fix").',
-        'Capability questions ("what can you do", "how can you help",',
-        '"what tools do you have") are NOT a skill_view match. Answer them directly.',
+        'For capability questions ("what can you do", "how can you help"),',
+        "follow the getting-started instruction to load the master skill.",
         "When the user request matches a skill below, call skill_view(name) in",
         "THIS turn BEFORE emitting that skill's tool sequence. Do not invent",
         "steps from the one-line description alone.",
@@ -259,15 +483,55 @@ def load_skills_block() -> str:
 
 
 def load_skill_body(name: str) -> str:
-    """Return one skill's full body (+ report template), or ``\"\"`` if unknown."""
-    needle = name.strip().lower().replace("_", "-")
+    """Return one skill's full body (+ references + report template), or ``\"\"`` if unknown."""
+    needle = normalize_skill_name(name)
     if not needle:
         return ""
     for skill in list_action_skills():
         if skill.name == needle:
             raw = skill.path.read_text(encoding="utf-8")
-            _frontmatter, body = _parse_frontmatter(raw)
+            frontmatter, body = _parse_frontmatter(raw)
+            refs = _string_list_field(frontmatter.get("references"))
+            body = _skill_body_with_references(skill.path, body, refs)
             return _skill_body_with_optional_template(skill.path, body)
+    return ""
+
+
+def skill_reference_names(name: str) -> tuple[str, ...]:
+    """Return the stems of a skill's on-demand ``references/*.md`` files.
+
+    Distinct from ``ActionSkill.references`` (frontmatter paths inlined into the
+    body): these files stay out of the body and load via :func:`load_skill_reference`.
+    """
+    needle = normalize_skill_name(name)
+    for skill in list_action_skills():
+        if skill.name == needle:
+            return _skill_references(skill.path)
+    return ()
+
+
+def load_skill_reference(name: str, reference: str) -> str:
+    """Return one on-demand ``references/<reference>.md`` file of a skill, or ``""`` if unknown.
+
+    ``reference`` must be a plain slug (no path separators), so a skill body can
+    link only files inside its own ``references/`` directory.
+    """
+    needle = normalize_skill_name(name)
+    slug = reference.strip().lower()
+    if not needle or not _REFERENCE_NAME_RE.match(slug):
+        return ""
+    for skill in list_action_skills():
+        if skill.name != needle:
+            continue
+        if skill.path.name != _PACKAGE_SKILL_FILENAME:
+            return ""
+        reference_path = skill.path.parent / _REFERENCES_DIRNAME / f"{slug}.md"
+        if not reference_path.is_file():
+            return ""
+        try:
+            return reference_path.read_text(encoding="utf-8").strip()
+        except OSError:
+            return ""
     return ""
 
 

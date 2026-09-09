@@ -33,6 +33,9 @@ if TYPE_CHECKING:
         OPENSRE_ACCOUNT_TOKEN_ENV as OPENSRE_ACCOUNT_TOKEN_ENV,
     )
     from config.constants.account import (
+        OPENSRE_ACCOUNT_USAGE_PATH as OPENSRE_ACCOUNT_USAGE_PATH,
+    )
+    from config.constants.account import (
         OPENSRE_APP_URL_DEFAULT as OPENSRE_APP_URL_DEFAULT,
     )
     from config.constants.account import (
@@ -52,6 +55,33 @@ if TYPE_CHECKING:
     )
     from config.constants.alertmanager import (
         ALERTMANAGER_USERNAME_ENV as ALERTMANAGER_USERNAME_ENV,
+    )
+    from config.constants.analytics import (
+        ANALYTICS_DISABLED_ENV as ANALYTICS_DISABLED_ENV,
+    )
+    from config.constants.analytics import (
+        ANALYTICS_EVENT_SCHEMA_VERSION as ANALYTICS_EVENT_SCHEMA_VERSION,
+    )
+    from config.constants.analytics import (
+        ANALYTICS_INGEST_PATH as ANALYTICS_INGEST_PATH,
+    )
+    from config.constants.analytics import (
+        ANALYTICS_LOG_EVENTS_ENV as ANALYTICS_LOG_EVENTS_ENV,
+    )
+    from config.constants.analytics import (
+        ANALYTICS_MAX_PAYLOAD_BYTES as ANALYTICS_MAX_PAYLOAD_BYTES,
+    )
+    from config.constants.analytics import (
+        ANALYTICS_SIGNATURE_HEADER as ANALYTICS_SIGNATURE_HEADER,
+    )
+    from config.constants.analytics import (
+        ANALYTICS_SIGNATURE_VERSION as ANALYTICS_SIGNATURE_VERSION,
+    )
+    from config.constants.analytics import (
+        ANALYTICS_SOURCE as ANALYTICS_SOURCE,
+    )
+    from config.constants.analytics import (
+        ANALYTICS_TIMESTAMP_HEADER as ANALYTICS_TIMESTAMP_HEADER,
     )
     from config.constants.aws import (
         AWS_ACCESS_KEY_ID_ENV as AWS_ACCESS_KEY_ID_ENV,
@@ -464,6 +494,9 @@ if TYPE_CHECKING:
     from config.constants.llm import (
         OPENSRE_LLM_NATIVE_STRUCTURED_OUTPUT_ENV as OPENSRE_LLM_NATIVE_STRUCTURED_OUTPUT_ENV,
     )
+    from config.constants.llm import (
+        OPENSRE_REACT_GOAL_LLM_REVIEW_ENV as OPENSRE_REACT_GOAL_LLM_REVIEW_ENV,
+    )
     from config.constants.mariadb import (
         MARIADB_DATABASE_ENV as MARIADB_DATABASE_ENV,
     )
@@ -481,6 +514,15 @@ if TYPE_CHECKING:
     )
     from config.constants.mariadb import (
         MARIADB_USERNAME_ENV as MARIADB_USERNAME_ENV,
+    )
+    from config.constants.mcp import (
+        MCP_NO_COLOR_ENV as MCP_NO_COLOR_ENV,
+    )
+    from config.constants.mcp import (
+        MCP_TERMINAL_DUMB_VALUE as MCP_TERMINAL_DUMB_VALUE,
+    )
+    from config.constants.mcp import (
+        MCP_TERMINAL_ENV as MCP_TERMINAL_ENV,
     )
     from config.constants.memory import (
         OPENSRE_MEMORY_AUTOEXTRACT_DISABLED_ENV as OPENSRE_MEMORY_AUTOEXTRACT_DISABLED_ENV,
@@ -669,9 +711,6 @@ if TYPE_CHECKING:
         POSTHOG_BASE_URL_ENV as POSTHOG_BASE_URL_ENV,
     )
     from config.constants.posthog import (
-        POSTHOG_CAPTURE_API_KEY as POSTHOG_CAPTURE_API_KEY,
-    )
-    from config.constants.posthog import (
         POSTHOG_HOST as POSTHOG_HOST,
     )
     from config.constants.posthog import (
@@ -809,6 +848,12 @@ if TYPE_CHECKING:
     from config.constants.repl_theme import (
         Theme as Theme,
     )
+    from config.constants.runbooks import (
+        RUNBOOK_CONTENT_MAX_CHARS as RUNBOOK_CONTENT_MAX_CHARS,
+    )
+    from config.constants.runbooks import (
+        RUNBOOK_MANIFEST_MAX_CHARS as RUNBOOK_MANIFEST_MAX_CHARS,
+    )
     from config.constants.runtime_metadata import (
         GITHUB_REPO_ENV as GITHUB_REPO_ENV,
     )
@@ -893,6 +938,7 @@ if TYPE_CHECKING:
     from config.constants.signoz import (
         SIGNOZ_URL_ENV as SIGNOZ_URL_ENV,
     )
+    from config.constants.skills import ONBOARDING_SKILL_NAME as ONBOARDING_SKILL_NAME
     from config.constants.slack import (
         SLACK_ACCESS_TOKEN_ENV as SLACK_ACCESS_TOKEN_ENV,
     )
@@ -986,6 +1032,12 @@ if TYPE_CHECKING:
     from config.constants.tenancy import (
         INTEGRATIONS_STORE_PATH_ENV as INTEGRATIONS_STORE_PATH_ENV,
     )
+    from config.constants.terminal_host import (
+        APPLE_TERMINAL_PROGRAM as APPLE_TERMINAL_PROGRAM,
+    )
+    from config.constants.terminal_host import (
+        TERM_PROGRAM_ENV as TERM_PROGRAM_ENV,
+    )
     from config.constants.tooling import (
         DEFAULT_APPROVAL_EXPIRY_SECONDS as DEFAULT_APPROVAL_EXPIRY_SECONDS,
     )
@@ -1002,7 +1054,13 @@ if TYPE_CHECKING:
         TRACER_JWT_TOKEN_ENV as TRACER_JWT_TOKEN_ENV,
     )
     from config.constants.turn_concurrency import (
+        DEFAULT_SCHEDULED_RUN_CONCURRENCY as DEFAULT_SCHEDULED_RUN_CONCURRENCY,
+    )
+    from config.constants.turn_concurrency import (
         OPENSRE_MAX_CONCURRENT_TURNS_ENV as OPENSRE_MAX_CONCURRENT_TURNS_ENV,
+    )
+    from config.constants.turn_concurrency import (
+        OPENSRE_SCHEDULER_MAX_CONCURRENT_RUNS_ENV as OPENSRE_SCHEDULER_MAX_CONCURRENT_RUNS_ENV,
     )
     from config.constants.turn_concurrency import (
         OPENSRE_SIZE_PROFILE_ENV as OPENSRE_SIZE_PROFILE_ENV,

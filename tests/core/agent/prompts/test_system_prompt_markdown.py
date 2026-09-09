@@ -16,6 +16,14 @@ def test_system_prompt_base_comes_from_markdown_file() -> None:
     assert path.read_text(encoding="utf-8") == _SYSTEM_PROMPT_BASE
 
 
+def test_system_prompt_completion_is_the_user_request_not_a_tool_call() -> None:
+    collapsed = " ".join(_SYSTEM_PROMPT_BASE.split())
+    assert "The user's request is the finish line, not that a tool ran" in collapsed
+    assert "Listing tools, schemas, or a drafted query is not completion" in collapsed
+    assert "Propose done with the evidence" in collapsed
+    assert "If you cannot complete the request, say what blocked you and stop" in collapsed
+
+
 def test_system_prompt_runs_explicit_commands_without_repository_probe() -> None:
     assert "execute it directly with the matching tool" in _SYSTEM_PROMPT_BASE
     assert "call `cli_exec` with the leading `opensre` prefix removed" in _SYSTEM_PROMPT_BASE
@@ -36,15 +44,12 @@ def test_finite_material_ambiguity_requires_selectable_clarification() -> None:
     assert "TURN INTERACTION reports the menu is unavailable" in collapsed
 
 
-def test_demo_requests_require_selection_before_skill_resolution() -> None:
+def test_demo_requests_load_the_master_before_asking_for_a_child() -> None:
     collapsed = " ".join(_SYSTEM_PROMPT_BASE.split())
     assert "For a demo or getting-started request" in collapsed
-    assert "assembled getting-started prompts as selectable options" in collapsed
-    assert "takes precedence over any assembled getting-started instruction" in collapsed
-    assert "that block supplies the menu options only" in collapsed
-    assert "selection arrives verbatim as the next message" in collapsed
-    assert "then resolve the selected skill or goal" in collapsed
-    assert "Do not choose a goal or resolve a skill before the selection arrives" in collapsed
+    assert "load the master onboarding skill" in collapsed
+    assert "chooses the child skill after the answer" in collapsed
+    assert "Do not ask a separate onboarding question before loading it" in collapsed
 
 
 def test_finite_clarifications_are_batched_without_over_questioning() -> None:

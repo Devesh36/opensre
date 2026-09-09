@@ -40,6 +40,7 @@ from config.constants.account import (
     OPENSRE_ACCOUNT_LOGIN_SUCCESS_PATH,
     OPENSRE_ACCOUNT_SESSION_PATH,
     OPENSRE_ACCOUNT_TOKEN_ENV,
+    OPENSRE_ACCOUNT_USAGE_PATH,
 )
 
 
@@ -77,6 +78,7 @@ class AccountLoginResult:
 
     record: AccountRecord
     warning: str = ""
+    effective_token_matches_login: bool = True
 
 
 @dataclass(frozen=True)
@@ -281,6 +283,33 @@ def _cleanup_failed_login(
         _restore_previous_account(previous_record, previous_token)
 
 
+def usage_page_url(app_url: str | None = None) -> str:
+    """The credits, usage and top-up page of the deployment the account signed in to.
+
+    An explicit ``app_url`` wins; otherwise the URL saved with the login, so a
+    custom deployment's account is not sent to the production site.
+    """
+    if not app_url:
+        record = load_account_record()
+        app_url = record.app_url if record is not None else None
+    return _app_endpoint(normalize_app_url(app_url), OPENSRE_ACCOUNT_USAGE_PATH)
+
+
+def open_usage_page(
+    *,
+    app_url: str | None = None,
+    browser_open: Callable[[str], bool] | None = None,
+) -> tuple[str, bool]:
+    """Open the usage page in the browser; return ``(url, opened)``."""
+    url = usage_page_url(app_url)
+    opener = browser_open if browser_open is not None else webbrowser.open
+    try:
+        opened = bool(opener(url))
+    except Exception:
+        opened = False
+    return url, opened
+
+
 def login_account(
     *,
     app_url: str | None = None,
@@ -357,12 +386,20 @@ def login_account(
         _revoke_remote(previous_app_url, previous_token)
     env_token = os.getenv(OPENSRE_ACCOUNT_TOKEN_ENV, "").strip()
     warning = ""
-    if env_token and env_token != exchange.access_token:
+    effective_token_matches_login = not env_token or secrets.compare_digest(
+        env_token,
+        exchange.access_token,
+    )
+    if not effective_token_matches_login:
         warning = (
             f"{OPENSRE_ACCOUNT_TOKEN_ENV} is set in your environment and will keep "
             "overriding the token just saved. Unset it so this login is used."
         )
-    return AccountLoginResult(record=record, warning=warning)
+    return AccountLoginResult(
+        record=record,
+        warning=warning,
+        effective_token_matches_login=effective_token_matches_login,
+    )
 
 
 def logout_account() -> AccountLogoutResult:

@@ -23,6 +23,7 @@ from core.agent.run_io import AgentRunInput, AgentRunResult
 from core.context_budget import (
     context_budget_ceiling_for_model,
     enforce_context_budget,
+    estimate_message_tokens,
     system_and_tools_overhead,
 )
 from core.events import (
@@ -38,6 +39,7 @@ from core.events import (
     TurnEndEvent,
     TurnStartEvent,
 )
+from core.llm.failure_classification import is_context_length_overflow
 from core.llm.types import ToolCall
 from core.messages import AssistantRuntimeMessage, MessageMapper, UserRuntimeMessage
 from core.provider import ProviderRequest
@@ -59,6 +61,12 @@ from infrastructure.observability.trace.spans import (
 )
 
 logger = logging.getLogger(__name__)
+
+# After a provider rejects a request as too large, the run's budget drops to
+# this share of the rejected request's estimate, keeping at least this many
+# message tokens above the fixed system-and-tools overhead.
+_OVERFLOW_RETRY_BUDGET_FACTOR = 0.6
+_OVERFLOW_RETRY_MIN_MESSAGE_TOKENS = 4_000
 
 _SAFETY_HANDOFF_PROMPT = """\
 The tool loop has stopped for safety ({reason}). Tools are disabled for this response.
@@ -169,6 +177,9 @@ class ReactLoop[RuntimeToolT: RuntimeTool]:
         self._terminated_by_tool = False
         self._cancelled = False
         self._iterations_used = 0
+        # Provider-reported usage summed over every model call of this run.
+        self._input_tokens = 0
+        self._output_tokens = 0
         self._stop_reason = "iteration_cap"
         self._seen_observations: set[bytes] = set()
         self._stagnant_iterations = 0
@@ -370,14 +381,15 @@ class ReactLoop[RuntimeToolT: RuntimeTool]:
                 "tool_schema_count": len(provider_request.tools or []),
             },
         ) as span_attrs:
-            response = self._llm.invoke(
-                provider_request.messages,
-                system=provider_request.system,
-                tools=provider_request.tools,
-            )
+            response = self._invoke_within_budget(provider_request)
             span_attrs["has_tool_calls"] = response.has_tool_calls
             span_attrs["tool_call_count"] = len(response.tool_calls)
             span_attrs["content_chars"] = len(response.content or "")
+        input_tokens = int(getattr(response, "input_tokens", 0) or 0)
+        output_tokens = int(getattr(response, "output_tokens", 0) or 0)
+        cache_read_tokens = int(getattr(response, "cache_read_tokens", 0) or 0)
+        self._input_tokens += input_tokens
+        self._output_tokens += output_tokens
         response = self._host._after_response(provider_request, response)
         self._host._emit_runtime(
             ProviderRequestEndEvent(
@@ -386,10 +398,55 @@ class ReactLoop[RuntimeToolT: RuntimeTool]:
                 data={
                     "tool_call_count": len(response.tool_calls),
                     "content_chars": len(response.content or ""),
+                    # Per call, so a run that raises later still reported this spend.
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    # Part of input_tokens served from the provider's prompt cache.
+                    "cache_read_tokens": cache_read_tokens,
                 },
             )
         )
         return response
+
+    def _invoke_within_budget(self, provider_request: ProviderRequest) -> Any:
+        """Call the model; on a size rejection, shrink the budget and retry once.
+
+        A provider or proxy may reject a request the static budget allowed.
+        The ceiling drops below the rejected request's estimate for the rest
+        of the run, low-value tool exchanges are trimmed in place, and the
+        same request is sent again. A second rejection propagates.
+        """
+        try:
+            return self._llm.invoke(
+                provider_request.messages,
+                system=provider_request.system,
+                tools=provider_request.tools,
+            )
+        except Exception as exc:
+            if not is_context_length_overflow(str(exc)):
+                raise
+            estimated = (
+                estimate_message_tokens(provider_request.messages) + self._fixed_overhead_tokens
+            )
+            self._ceiling = max(
+                int(estimated * _OVERFLOW_RETRY_BUDGET_FACTOR),
+                self._fixed_overhead_tokens + _OVERFLOW_RETRY_MIN_MESSAGE_TOKENS,
+            )
+            logger.warning(
+                "[agent] provider rejected the request as too large; retrying once "
+                "under ceiling=%d",
+                self._ceiling,
+            )
+            enforce_context_budget(
+                provider_request.messages,
+                fixed_overhead_tokens=self._fixed_overhead_tokens,
+                ceiling=self._ceiling,
+            )
+            return self._llm.invoke(
+                provider_request.messages,
+                system=provider_request.system,
+                tools=provider_request.tools,
+            )
 
     def _handle_conclusion(
         self, response: Any, assistant_message: Any, iteration: int
@@ -658,6 +715,8 @@ class ReactLoop[RuntimeToolT: RuntimeTool]:
             hit_iteration_cap=self._hit_cap,
             llm_iterations_used=self._iterations_used,
             final_system_prompt=self._final_system_prompt,
+            input_tokens=self._input_tokens,
+            output_tokens=self._output_tokens,
         )
         self._host._emit_runtime(
             AgentEndEvent(

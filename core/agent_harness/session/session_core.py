@@ -157,6 +157,15 @@ class SessionCore:
     """Ask-User clarification rounds asked this workload; caps repeated batches.
     Reset on a genuine user turn."""
 
+    active_skill: str | None = None
+    """Skill loaded by ``skill_view`` in the current flow; cleared on a genuine user turn."""
+
+    active_skill_tools: tuple[str, ...] = ()
+    """The active skill's declared tools; an answer turn inside the flow offers only these."""
+
+    skill_hooks_fired: set[str] = field(default_factory=set)
+    """``after_tool`` hook keys already queued for this skill activation."""
+
     task_plan: TaskPlan | None = None
     """Live execution checklist for the current workload, rendered above the
     prompt and persisted so it survives transcript compaction."""

@@ -7,6 +7,7 @@ from config.package_exports import bind_package_exports
 # Re-exported name -> leaf module. Importing this package must not load
 # those modules; ``__getattr__`` loads one leaf the first time a name is used.
 EXPORTS: dict[str, str] = {
+    "ONBOARDING_SKILL_NAME": "skills",
     # account
     "OPENSRE_ACCOUNT_FILENAME": "account",
     "OPENSRE_ACCOUNT_HTTP_TIMEOUT_SECONDS": "account",
@@ -14,9 +15,20 @@ EXPORTS: dict[str, str] = {
     "OPENSRE_ACCOUNT_METADATA_PATH_ENV": "account",
     "OPENSRE_ACCOUNT_SESSION_PATH": "account",
     "OPENSRE_ACCOUNT_TOKEN_ENV": "account",
+    "OPENSRE_ACCOUNT_USAGE_PATH": "account",
     "OPENSRE_APP_URL_DEFAULT": "account",
     "OPENSRE_APP_URL_DEV": "account",
     "OPENSRE_APP_URL_ENV": "account",
+    # analytics
+    "ANALYTICS_DISABLED_ENV": "analytics",
+    "ANALYTICS_EVENT_SCHEMA_VERSION": "analytics",
+    "ANALYTICS_INGEST_PATH": "analytics",
+    "ANALYTICS_LOG_EVENTS_ENV": "analytics",
+    "ANALYTICS_MAX_PAYLOAD_BYTES": "analytics",
+    "ANALYTICS_SIGNATURE_HEADER": "analytics",
+    "ANALYTICS_SIGNATURE_VERSION": "analytics",
+    "ANALYTICS_SOURCE": "analytics",
+    "ANALYTICS_TIMESTAMP_HEADER": "analytics",
     # alertmanager
     "ALERTMANAGER_BEARER_TOKEN_ENV": "alertmanager",
     "ALERTMANAGER_PASSWORD_ENV": "alertmanager",
@@ -186,6 +198,7 @@ EXPORTS: dict[str, str] = {
     "LLM_AUTH_METHOD_ENV": "llm",
     "LLM_PROVIDER_ENV": "llm",
     "OPENSRE_LLM_NATIVE_STRUCTURED_OUTPUT_ENV": "llm",
+    "OPENSRE_REACT_GOAL_LLM_REVIEW_ENV": "llm",
     # mariadb
     "MARIADB_DATABASE_ENV": "mariadb",
     "MARIADB_HOST_ENV": "mariadb",
@@ -193,6 +206,10 @@ EXPORTS: dict[str, str] = {
     "MARIADB_PORT_ENV": "mariadb",
     "MARIADB_SSL_ENV": "mariadb",
     "MARIADB_USERNAME_ENV": "mariadb",
+    # mcp
+    "MCP_NO_COLOR_ENV": "mcp",
+    "MCP_TERMINAL_ENV": "mcp",
+    "MCP_TERMINAL_DUMB_VALUE": "mcp",
     # memory
     "OPENSRE_MEMORY_AUTOEXTRACT_DISABLED_ENV": "memory",
     "OPENSRE_MEMORY_DIR_ENV": "memory",
@@ -267,7 +284,6 @@ EXPORTS: dict[str, str] = {
     "DEFAULT_POSTHOG_TIMEOUT_SECONDS": "posthog",
     "DEFAULT_POSTHOG_URL": "posthog",
     "POSTHOG_BASE_URL_ENV": "posthog",
-    "POSTHOG_CAPTURE_API_KEY": "posthog",
     "POSTHOG_HOST": "posthog",
     "POSTHOG_PERSONAL_API_KEY_ENV": "posthog",
     "POSTHOG_PROJECT_ID_ENV": "posthog",
@@ -328,6 +344,9 @@ EXPORTS: dict[str, str] = {
     "OPENSRE_ALLOW_NETWORK_ENV": "runtime_metadata",
     "OPENSRE_WORKSPACE_REPO_ENV": "runtime_metadata",
     "WORKSPACE_REPO_ENV_KEYS": "runtime_metadata",
+    # runbooks
+    "RUNBOOK_CONTENT_MAX_CHARS": "runbooks",
+    "RUNBOOK_MANIFEST_MAX_CHARS": "runbooks",
     # scheduler
     "OPENSRE_GATEWAY_HOST_SCHEDULER_ENV": "scheduler",
     # secrets
@@ -404,10 +423,14 @@ EXPORTS: dict[str, str] = {
     "TRACER_BASE_URL_PROD": "tracer",
     "TRACER_JWT_TOKEN_ENV": "tracer",
     # turn_concurrency
+    "DEFAULT_SCHEDULED_RUN_CONCURRENCY": "turn_concurrency",
     "OPENSRE_MAX_CONCURRENT_TURNS_ENV": "turn_concurrency",
+    "OPENSRE_SCHEDULER_MAX_CONCURRENT_RUNS_ENV": "turn_concurrency",
     "OPENSRE_SIZE_PROFILE_ENV": "turn_concurrency",
     # twilio
     "TWILIO_ACCOUNT_SID_ENV": "twilio",
+    "TERM_PROGRAM_ENV": "terminal_host",
+    "APPLE_TERMINAL_PROGRAM": "terminal_host",
     "TWILIO_AUTH_TOKEN_ENV": "twilio",
     "TWILIO_SMS_DEFAULT_TO_ENV": "twilio",
     "TWILIO_SMS_FROM_ENV": "twilio",

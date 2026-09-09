@@ -158,6 +158,34 @@ def test_skill_view_renders_activation_event() -> None:
     assert buffer.getvalue() == "\nSkill install-code-review\n  ↳ Skill activated\n"
 
 
+def test_two_skills_in_one_batch_name_the_skill_on_each_activation_line() -> None:
+    """Headers print first, results after; the first skill's line must say which skill."""
+    observer, buffer = _skill_observer()
+    for call_id, name in (
+        ("t1", "reporting-github-ci-failures"),
+        ("t2", "github-ci-fix-onboarding"),
+    ):
+        observer("tool_start", {"id": call_id, "name": "skill_view", "input": {"name": name}})
+    for call_id, name in (
+        ("t1", "reporting-github-ci-failures"),
+        ("t2", "github-ci-fix-onboarding"),
+    ):
+        observer(
+            "tool_end",
+            {
+                "id": call_id,
+                "name": "skill_view",
+                "input": {"name": name},
+                "output": {"ok": True, "name": name, "content": "<body>"},
+            },
+        )
+
+    assert buffer.getvalue() == (
+        "\nSkill reporting-github-ci-failures\n\nSkill github-ci-fix-onboarding\n"
+        "  ↳ reporting-github-ci-failures activated\n  ↳ Skill activated\n"
+    )
+
+
 def test_skill_view_renders_bold_green_skill_label() -> None:
     console = Mock(spec=Console)
     observer = ActionRenderObserver(session=Session(), console=console, message="run code review")
@@ -364,7 +392,7 @@ def test_skill_view_tool_end_without_start_prints_nothing() -> None:
         {
             "id": "t9",
             "name": "skill_view",
-            "input": {"name": "morning-report"},
+            "input": {"name": "delivering-morning-briefings"},
             "output": {"ok": True},
         },
     )
