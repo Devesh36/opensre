@@ -19,7 +19,7 @@ jobs:
       github.event.pull_request.user.type != 'Bot' &&
       github.event.pull_request.user.login != 'dependabot[bot]'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Build celebration comment
         id: celebrate
