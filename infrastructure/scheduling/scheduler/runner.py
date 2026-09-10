@@ -496,7 +496,10 @@ def run_task_now(task_id: str, runners: SchedulerRunners, *, only_failed: bool =
             return False
 
     fire_time = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    return execute_task(task, fire_time, runners, target_filter=target_filter)
+    result = execute_task(task, fire_time, runners, target_filter=target_filter)
+    if result:
+        record_task_success(task.id)
+    return result
 
 
 def failed_retry_scope(task_id: str) -> frozenset[tuple[Provider, str]] | None:

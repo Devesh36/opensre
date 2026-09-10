@@ -526,12 +526,18 @@ class TestRunTaskNow:
             "infrastructure.scheduling.scheduler.runner.get_task", lambda _task_id: task
         )
 
-        with patch("infrastructure.scheduling.scheduler.runner.execute_task") as mock_exec:
+        with (
+            patch("infrastructure.scheduling.scheduler.runner.execute_task") as mock_exec,
+            patch(
+                "infrastructure.scheduling.scheduler.runner.record_task_success"
+            ) as record_success,
+        ):
             mock_exec.return_value = True
             result = run_task_now("run_now_test", real_runners())
 
         assert result is True
         mock_exec.assert_called_once()
+        record_success.assert_called_once_with(task.id)
         # Verify fire_time has seconds (ad-hoc format) and ends with Z
         call_args = mock_exec.call_args
         fire_time = call_args[0][1]
