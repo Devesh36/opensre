@@ -27,6 +27,7 @@ def test_scheduled_buzz_delivery_resolves_credentials_and_returns_event_id(
         return {
             "private_key": "secret-key",
             "relay_url": "https://buzz.example.test",
+            "default_channel": "configured-channel",
             "auth_tag": "attestation",
             "buzz_path": "/usr/local/bin/buzz",
         }
@@ -55,10 +56,14 @@ def test_scheduled_buzz_delivery_resolves_credentials_and_returns_event_id(
     )
     monkeypatch.setattr("integrations.buzz.scheduled_delivery.post_buzz_message", _post_message)
 
-    assert BuzzScheduledDelivery().deliver(_task(), "Daily report") == (True, "", "event-456")
+    assert BuzzScheduledDelivery().deliver(_task(chat_id=""), "Daily report") == (
+        True,
+        "",
+        "event-456",
+    )
     assert captured == {
         "relay_url": "https://buzz.example.test",
-        "channel": "channel-123",
+        "channel": "configured-channel",
         "message": "Daily report",
         "private_key": "secret-key",
         "auth_tag": "attestation",

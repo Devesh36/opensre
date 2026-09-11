@@ -8,17 +8,18 @@ from integrations.buzz.delivery import post_buzz_message
 
 
 class BuzzScheduledDelivery:
-    """Deliver a scheduled task's message to its explicit Buzz channel."""
+    """Deliver a scheduled task's message to its channel or configured default."""
 
     def deliver(self, task: ScheduledTask, message: str) -> tuple[bool, str, str]:
         creds = resolve_buzz_credentials(task.params)
         private_key = creds.get("private_key", "")
-        if not private_key or not task.chat_id:
+        channel = task.chat_id or creds.get("default_channel", "")
+        if not private_key or not channel:
             return False, "Missing private_key or chat_id for Buzz", ""
 
         ok, error, message_id = post_buzz_message(
             creds.get("relay_url", ""),
-            task.chat_id,
+            channel,
             message,
             private_key,
             auth_tag=creds.get("auth_tag", ""),
