@@ -12,6 +12,7 @@ from core.domain.work_items import (
     WorkItemChannelTarget,
     WorkItemPriority,
     make_work_item,
+    resolve_work_item_datetime,
 )
 from infrastructure.scheduling.scheduler.storage import list_tasks
 from infrastructure.scheduling.scheduler.types import Provider
@@ -195,6 +196,11 @@ def test_reminder_scheduling_resolves_naive_datetime_in_requested_timezone(
     task = list_tasks()[0]
     assert task.timezone == "Asia/Kolkata"
     assert task.params["run_at"] == "2027-09-12T09:00:00+05:30"
+
+
+def test_reminder_scheduling_rejects_dst_gap() -> None:
+    with pytest.raises(ValueError, match="invalid local time"):
+        resolve_work_item_datetime("2027-03-14T02:30", "America/New_York")
 
 
 def test_work_task_add_rejects_invalid_timezone_before_persistence(

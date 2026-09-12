@@ -32,7 +32,12 @@ def resolve_work_item_datetime(value: str, timezone: str) -> datetime | None:
         raise ValueError(f"invalid IANA timezone: {timezone!r}") from exc
     if parsed.tzinfo is not None:
         return parsed.astimezone(UTC)
-    return parsed.replace(tzinfo=zone)
+    for fold in (0, 1):
+        candidate = parsed.replace(tzinfo=zone, fold=fold)
+        round_trip = candidate.astimezone(UTC).astimezone(zone)
+        if round_trip.replace(tzinfo=None) == parsed:
+            return candidate
+    raise ValueError(f"invalid local time {value!r} in timezone {timezone!r}")
 
 
 def cron_from_datetime(value: datetime) -> str:
