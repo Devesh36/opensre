@@ -4,11 +4,7 @@ from __future__ import annotations
 
 from core.domain.work_items import WorkItem, WorkItemChannelTarget, dedupe_channel_targets
 from core.tool import AgentToolContext
-from infrastructure.scheduling.scheduler.credentials import (
-    resolve_slack_credentials,
-    resolve_slack_default_chat_id,
-)
-from infrastructure.scheduling.scheduler.types import Provider
+from tools.system.work_items.slack_delivery import slack_target_error, validate_slack_target
 from tools.system.work_items.validation import validate_provider
 
 
@@ -52,17 +48,7 @@ def delivery_targets(
             targets.append(item.channel)
     if not targets and default_provider:
         targets.append(WorkItemChannelTarget(provider=default_provider, chat_id=default_chat_id))
-    return dedupe_targets([_resolve_target(target) for target in targets])
-
-
-def _resolve_target(target: WorkItemChannelTarget) -> WorkItemChannelTarget:
-    """Resolve an implicit Slack target to its configured default channel."""
-    if validate_provider(target.provider) is not Provider.SLACK or target.chat_id:
-        return target
-    return WorkItemChannelTarget(
-        provider=target.provider,
-        chat_id=resolve_slack_default_chat_id(),
-    )
+    return dedupe_targets(targets)
 
 
 def dedupe_targets(targets: list[WorkItemChannelTarget]) -> list[WorkItemChannelTarget]:
@@ -78,11 +64,10 @@ def invalid_delivery_targets(targets: list[WorkItemChannelTarget]) -> list[str]:
         if parsed_provider is None:
             invalid.append(f"{target.provider}: unsupported provider")
             continue
-        if parsed_provider is Provider.SLACK:
-            if not target.chat_id and not resolve_slack_credentials({}).get("webhook_url"):
-                invalid.append(
-                    "slack: missing chat_id; configure a Slack webhook or default channel"
-                )
+        slack_valid = validate_slack_target(target)
+        if slack_valid is not None:
+            if not slack_valid:
+                invalid.append(slack_target_error(target))
             continue
         if not target.chat_id:
             invalid.append(f"{target.provider}: missing chat_id")

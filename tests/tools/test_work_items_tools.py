@@ -117,29 +117,30 @@ def test_delivery_targets_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
     assert explicit[0].provider == "slack"
 
 
-def test_slack_empty_target_requires_a_webhook_or_resolves_a_default(
+def test_slack_empty_target_requires_a_webhook_or_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "tools.system.work_items.delivery.resolve_slack_default_chat_id",
-        lambda: "C-default",
+        "tools.system.work_items.slack_delivery.resolve_slack_default_chat_id",
+        lambda _params: "C-default",
     )
     default_target = delivery_targets(provider="slack", chat_id="")
-    assert default_target == [WorkItemChannelTarget(provider="slack", chat_id="C-default")]
+    assert default_target == [WorkItemChannelTarget(provider="slack", chat_id="")]
+    assert invalid_delivery_targets(default_target) == []
 
     monkeypatch.setattr(
-        "tools.system.work_items.delivery.resolve_slack_default_chat_id",
-        lambda: "",
+        "tools.system.work_items.slack_delivery.resolve_slack_default_chat_id",
+        lambda _params: "",
     )
     monkeypatch.setattr(
-        "tools.system.work_items.delivery.resolve_slack_credentials",
+        "tools.system.work_items.slack_delivery.resolve_slack_credentials",
         lambda _params: {"webhook_url": "https://hooks.slack.com/services/test"},
     )
     webhook_only = delivery_targets(provider="slack", chat_id="")
     assert invalid_delivery_targets(webhook_only) == []
 
     monkeypatch.setattr(
-        "tools.system.work_items.delivery.resolve_slack_credentials",
+        "tools.system.work_items.slack_delivery.resolve_slack_credentials",
         lambda _params: {},
     )
     assert invalid_delivery_targets(delivery_targets(provider="slack", chat_id="")) == [
@@ -151,11 +152,11 @@ def test_work_task_add_rejects_an_unconfigured_empty_slack_target(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "tools.system.work_items.delivery.resolve_slack_default_chat_id",
-        lambda: "",
+        "tools.system.work_items.slack_delivery.resolve_slack_default_chat_id",
+        lambda _params: "",
     )
     monkeypatch.setattr(
-        "tools.system.work_items.delivery.resolve_slack_credentials",
+        "tools.system.work_items.slack_delivery.resolve_slack_credentials",
         lambda _params: {},
     )
 
