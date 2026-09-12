@@ -12,7 +12,6 @@ from rich.table import Table
 from config.constants.work_items import WORK_ITEM_REMINDER_RUN_AT_PARAM
 from core.domain.work_items import (
     WORK_ITEM_PRIORITIES,
-    InvalidWorkItemLocalTime,
     WorkItemChannelTarget,
     add_work_item,
     complete_work_items,
@@ -112,12 +111,11 @@ def work_add(
     reminder_timezone = timezone.strip() or "UTC"
     if remind_at:
         try:
-            resolve_work_item_datetime(remind_at, reminder_timezone)
-        except InvalidWorkItemLocalTime:
-            raise click.BadParameter(
-                "remind-at does not exist in the selected timezone",
-                param_hint="--remind-at",
-            ) from None
+            if resolve_work_item_datetime(remind_at, reminder_timezone) is None:
+                raise click.BadParameter(
+                    "remind-at does not exist in the selected timezone",
+                    param_hint="--remind-at",
+                )
         except ValueError:
             raise click.BadParameter(
                 "timezone must be a valid IANA timezone", param_hint="--tz"

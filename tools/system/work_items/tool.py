@@ -9,7 +9,6 @@ from core.domain.types.tools import ToolSurface
 from core.domain.work_items import (
     WORK_ITEM_PRIORITIES,
     WORK_ITEM_STATUSES,
-    InvalidWorkItemLocalTime,
     WorkItemChannelTarget,
     WorkItemPriority,
     WorkItemUpdates,
@@ -173,12 +172,11 @@ def work_task_add(
         }
     if remind_at:
         try:
-            resolve_work_item_datetime(remind_at, timezone.strip() or "UTC")
-        except InvalidWorkItemLocalTime:
-            return {
-                "error": "invalid_remind_at",
-                "detail": "remind_at does not exist in the specified timezone",
-            }
+            if resolve_work_item_datetime(remind_at, timezone.strip() or "UTC") is None:
+                return {
+                    "error": "invalid_remind_at",
+                    "detail": "remind_at does not exist in the specified timezone",
+                }
         except ValueError:
             return {
                 "error": "invalid_timezone",
@@ -378,12 +376,11 @@ def work_task_update(
             return error
     if remind_at:
         try:
-            resolve_work_item_datetime(remind_at, timezone.strip() or "UTC")
-        except InvalidWorkItemLocalTime:
-            return {
-                "error": "invalid_remind_at",
-                "detail": "remind_at does not exist in the specified timezone",
-            }
+            if resolve_work_item_datetime(remind_at, timezone.strip() or "UTC") is None:
+                return {
+                    "error": "invalid_remind_at",
+                    "detail": "remind_at does not exist in the specified timezone",
+                }
         except ValueError:
             return {
                 "error": "invalid_timezone",
