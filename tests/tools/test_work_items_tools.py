@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from core.domain.work_items import (
+    InvalidWorkItemLocalTime,
     WorkItemChannelTarget,
     WorkItemPriority,
     make_work_item,
@@ -199,12 +200,37 @@ def test_reminder_scheduling_resolves_naive_datetime_in_requested_timezone(
 
 
 def test_reminder_scheduling_rejects_dst_gap() -> None:
-    with pytest.raises(ValueError, match="invalid local time"):
+    with pytest.raises(InvalidWorkItemLocalTime, match="invalid local time"):
         resolve_work_item_datetime("2027-03-14T02:30", "America/New_York")
 
 
-def test_work_task_add_rejects_invalid_timezone_before_persistence(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("remind_at", "timezone", "expected"),
+    [
+        (
+            "2027-09-12T09:00",
+            "Invalid/Timezone",
+            {
+                "error": "invalid_timezone",
+                "detail": "timezone must be a valid IANA timezone",
+            },
+        ),
+        (
+            "2027-03-14T02:30",
+            "America/New_York",
+            {
+                "error": "invalid_remind_at",
+                "detail": "remind_at does not exist in the specified timezone",
+            },
+        ),
+    ],
+)
+def test_work_task_add_rejects_invalid_reminder_before_persistence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    remind_at: str,
+    timezone: str,
+    expected: dict[str, str],
 ) -> None:
     work_items_file = tmp_path / "work_items.json"
     scheduler_file = tmp_path / "scheduler_tasks.json"
@@ -220,15 +246,12 @@ def test_work_task_add_rejects_invalid_timezone_before_persistence(
 
     response = work_task_add(
         title="Check clusters",
-        remind_at="2027-09-12T09:00",
+        remind_at=remind_at,
         channel_provider="slack",
-        timezone="Invalid/Timezone",
+        timezone=timezone,
     )
 
-    assert response == {
-        "error": "invalid_timezone",
-        "detail": "timezone must be a valid IANA timezone",
-    }
+    assert response == expected
     assert not work_items_file.exists()
     assert list_tasks(scheduler_file) == []
 

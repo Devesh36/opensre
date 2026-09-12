@@ -6,6 +6,10 @@ from datetime import UTC, datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
+class InvalidWorkItemLocalTime(ValueError):
+    """Raised when a reminder names a nonexistent local wall time."""
+
+
 def parse_work_item_datetime(value: str) -> datetime | None:
     text = value.strip()
     if not text:
@@ -37,7 +41,7 @@ def resolve_work_item_datetime(value: str, timezone: str) -> datetime | None:
         round_trip = candidate.astimezone(UTC).astimezone(zone)
         if round_trip.replace(tzinfo=None) == parsed:
             return candidate
-    raise ValueError(f"invalid local time {value!r} in timezone {timezone!r}")
+    raise InvalidWorkItemLocalTime(f"invalid local time {value!r} in timezone {timezone!r}")
 
 
 def cron_from_datetime(value: datetime) -> str:
@@ -45,6 +49,7 @@ def cron_from_datetime(value: datetime) -> str:
 
 
 __all__ = [
+    "InvalidWorkItemLocalTime",
     "cron_from_datetime",
     "parse_work_item_datetime",
     "resolve_work_item_datetime",

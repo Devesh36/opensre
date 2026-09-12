@@ -29,6 +29,7 @@ from core.domain.work_items.reminders import (
     build_work_item_reminder_message,
 )
 from core.domain.work_items.schedule import (
+    InvalidWorkItemLocalTime,
     cron_from_datetime,
     parse_work_item_datetime,
     resolve_work_item_datetime,
@@ -70,6 +71,7 @@ __all__ = [
     "WorkItemStatus",
     "WorkItemStoreError",
     "WorkItemUpdates",
+    "InvalidWorkItemLocalTime",
     "add_work_item",
     "build_work_item_checkin_message",
     "build_work_item_reminder_message",
