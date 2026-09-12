@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 
+from filelock import Timeout
+
 from config.constants.work_items import WORK_ITEM_REMINDER_RUN_AT_PARAM
 from infrastructure.scheduling.scheduler.loop_constants import (
     LOOP_LEGACY_TASK_KIND_PARAM,
@@ -79,14 +81,18 @@ def _migrate_legacy_work_item_reminder(entry: dict[str, object]) -> bool:
     if not isinstance(timezone, str) or not timezone.strip():
         return False
 
-    from core.domain.work_items import get_work_item, resolve_work_item_datetime
+    from core.domain.work_items import (
+        WorkItemStoreError,
+        get_work_item,
+        resolve_work_item_datetime,
+    )
 
-    item = get_work_item(item_id, store_path=Path(store_path).expanduser())
-    if item is None:
-        return False
     try:
+        item = get_work_item(item_id, store_path=Path(store_path).expanduser())
+        if item is None:
+            return False
         resolved = resolve_work_item_datetime(item.remind_at, timezone)
-    except ValueError:
+    except (OSError, Timeout, ValueError, WorkItemStoreError):
         return False
     if resolved is None:
         return False

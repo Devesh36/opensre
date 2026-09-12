@@ -474,6 +474,28 @@ class TestStoreSurvivesTornWrites:
 
 
 class TestLegacyTaskMigration:
+    def test_unreadable_work_item_store_does_not_abort_task_loading(
+        self, store_path: Path, tmp_path: Path
+    ) -> None:
+        work_items_store = tmp_path / "work_items.json"
+        work_items_store.write_text("{not-json", encoding="utf-8")
+        legacy_task = ScheduledTask(
+            kind=TaskKind.WORK_ITEM_REMINDER,
+            cron="0 9 12 9 *",
+            timezone="UTC",
+            provider=Provider.SLACK,
+            params={
+                "work_item_id": "item-1",
+                "store_path": str(work_items_store),
+            },
+        )
+        add_task(legacy_task, store_path)
+
+        loaded = get_task(legacy_task.id, store_path)
+
+        assert loaded is not None
+        assert WORK_ITEM_REMINDER_RUN_AT_PARAM not in loaded.params
+
     def test_legacy_work_item_reminder_is_migrated_to_an_absolute_run_at(
         self, store_path: Path, tmp_path: Path
     ) -> None:
