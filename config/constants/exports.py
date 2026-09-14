@@ -7,10 +7,21 @@ from config.package_exports import bind_package_exports
 # Re-exported name -> leaf module. Importing this package must not load
 # those modules; ``__getattr__`` loads one leaf the first time a name is used.
 EXPORTS: dict[str, str] = {
+    "GITHUB_CI_DEMO_REPOSITORY": "github",
+    "CI_REPAIR_WORKER_COMMAND": "ci_repair",
+    "CI_REPAIR_SECONDS": "ci_repair",
+    "CI_REPAIR_FINISH_RESERVE_SECONDS": "ci_repair",
+    "CI_REPAIR_POLL_SECONDS": "ci_repair",
+    "CI_REPAIR_DIRECTORY": "ci_repair",
+    "CI_REPAIR_REPORT_BUILDER": "ci_repair",
+    "CI_REPAIR_CRON": "ci_repair",
     "ONBOARDING_SKILL_NAME": "skills",
+    "SKILL_FILENAME": "skills",
+    "SKILL_REPORT_SUFFIX": "skills",
+    "SKILLS_HEADER": "skills",
     "ANALYZING_GITHUB_CI_PERFORMANCE_SKILL_NAME": "skills",
-    "SCHEDULING_GITHUB_CI_FIXES_SKILL_NAME": "skills",
-    "DELEGATING_GITHUB_CI_FIXES_SKILL_NAME": "skills",
+    "SCHEDULING_GITHUB_CI_REPAIRS_SKILL_NAME": "skills",
+    "DELEGATING_GITHUB_CI_REPAIRS_SKILL_NAME": "skills",
     "CONNECTING_SLACK_SKILL_NAME": "skills",
     # account
     "OPENSRE_ACCOUNT_FILENAME": "account",
@@ -23,6 +34,7 @@ EXPORTS: dict[str, str] = {
     "OPENSRE_APP_URL_DEFAULT": "account",
     "OPENSRE_APP_URL_DEV": "account",
     "OPENSRE_APP_URL_ENV": "account",
+    "OPENSRE_STAFF_EMAIL_DOMAIN": "account",
     # analytics
     "ANALYTICS_DISABLED_ENV": "analytics",
     "ANALYTICS_EVENT_SCHEMA_VERSION": "analytics",
@@ -195,6 +207,13 @@ EXPORTS: dict[str, str] = {
     "KAFKA_SASL_PASSWORD_ENV": "kafka",
     "KAFKA_SASL_USERNAME_ENV": "kafka",
     "KAFKA_SECURITY_PROTOCOL_ENV": "kafka",
+    # langfuse
+    "LANGFUSE_BASE_URL_ENV": "langfuse",
+    "LANGFUSE_DEFAULT_BASE_URL": "langfuse",
+    "LANGFUSE_HOST_ENV": "langfuse",
+    "LANGFUSE_PUBLIC_KEY_ENV": "langfuse",
+    "LANGFUSE_SECRET_KEY_ENV": "langfuse",
+    "OPENSRE_LANGFUSE_DISABLED_ENV": "langfuse",
     # kubernetes
     "KUBECONFIG_CONTENT_ENV": "kubernetes",
     "KUBECONFIG_CONTEXT_ENV": "kubernetes",

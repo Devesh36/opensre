@@ -277,7 +277,7 @@ def _result(report: CiAnalyticsReport, owner: str, repo: str, window: int) -> di
     ],
     anti_examples=[
         "Fixing a failing check (use fix_github_pr_ci)",
-        "Listing currently failing checks on open PRs (use the CI health report)",
+        "Listing currently failing checks on open PRs or branches (use scan_github_ci_health)",
         "Reading one workflow run's logs (use the GitHub Actions log tools)",
     ],
     requires=[],
@@ -301,7 +301,6 @@ def _result(report: CiAnalyticsReport, owner: str, repo: str, window: int) -> di
     },
     surfaces=(ToolSurface.CHAT, ToolSurface.ACTION),
     side_effect_level=SideEffectLevel.READ_ONLY,
-    parallel_safe=False,
     accepts_runtime_context=True,
     input_schema={
         "type": "object",

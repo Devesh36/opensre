@@ -2,7 +2,7 @@
 
 Loads all enabled tasks from the store, creates APScheduler jobs, and
 blocks until SIGINT/SIGTERM. Fire times for dedup are passed directly from the
-APScheduler executor to each callback (UTC, minute precision), not recovered
+APScheduler executor to each callback (UTC, second precision), not recovered
 from listener timing or wall-clock time inside the callback.
 """
 
@@ -21,6 +21,7 @@ from config.constants.turn_concurrency import (
     OPENSRE_SCHEDULER_MAX_CONCURRENT_RUNS_ENV,
 )
 from config.constants.work_items import WORK_ITEM_REMINDER_RUN_AT_PARAM
+from infrastructure.scheduling.scheduler.cron_expression import build_cron_trigger
 from infrastructure.scheduling.scheduler.executor import execute_task
 from infrastructure.scheduling.scheduler.operation_log import (
     record_scheduler_execution_operation,
@@ -44,7 +45,14 @@ from infrastructure.scheduling.scheduler.storage import (
     try_queue_run,
     update_task,
 )
-from infrastructure.scheduling.scheduler.types import Provider, ScheduledTask, TaskKind, TaskStatus
+from infrastructure.scheduling.scheduler.types import (
+    Provider,
+    ScheduledTask,
+    TaskKind,
+    TaskReport,
+    TaskRun,
+    TaskStatus,
+)
 
 logger = logging.getLogger(__name__)
 TaskFilter = Callable[[ScheduledTask], bool]
@@ -75,17 +83,10 @@ def _make_trigger(task: ScheduledTask) -> Any:
                 )
             return DateTrigger(run_date=run_date)
 
-    from apscheduler.triggers.cron import CronTrigger
-
-    parts = task.cron.split()
-    if len(parts) != 5:
-        raise ValueError(f"Invalid cron expression (need 5 fields): {task.cron!r}")
-
     try:
-        trigger = CronTrigger.from_crontab(task.cron, timezone=task.timezone)
-    except (ValueError, TypeError, KeyError) as exc:
+        return build_cron_trigger(task.cron, task.timezone)
+    except ValueError as exc:
         raise ValueError(f"Invalid cron/timezone for task {task.id}: {exc}") from exc
-    return trigger
 
 
 def _next_run_from_trigger(trigger: Any, now: datetime | None = None) -> str | None:
@@ -108,9 +109,11 @@ def _compute_fire_time(scheduled_run_time: datetime) -> str:
     """Compute a stable, UTC-normalized fire_time string.
 
     Always converts to UTC so DST transitions don't produce ambiguous keys.
+    Seconds are kept so a six-field cron firing several times a minute gets one
+    claim key per tick instead of deduplicating its later ticks away.
     """
     utc_time: datetime = scheduled_run_time.astimezone(UTC)
-    return utc_time.strftime("%Y-%m-%dT%H:%MZ")
+    return utc_time.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _queue_scheduled_run(job_id: str, scheduled_run_time: datetime) -> None:
@@ -482,11 +485,17 @@ def start_scheduler(runners: SchedulerRunners, *, idle_when_empty: bool = False)
         record_scheduler_service_operation("scheduler_stopped", task_count=enabled_count)
 
 
-def run_task_now(task_id: str, runners: SchedulerRunners, *, only_failed: bool = False) -> bool:
+def run_task_now(
+    task_id: str,
+    runners: SchedulerRunners,
+    *,
+    only_failed: bool = False,
+    on_result: Callable[[TaskRun], None] | None = None,
+) -> bool:
     """Execute a task immediately (ad-hoc one-shot for debugging).
 
-    Uses the current time with seconds precision as fire_time so it does
-    not conflict with scheduled runs (which use minute precision).
+    Uses the current time with microsecond precision as fire_time so it does
+    not conflict with scheduled runs (which use second precision).
 
     ``only_failed=True`` retries only the destinations the most recently
     completed run failed at, instead of delivering to every configured
@@ -504,6 +513,7 @@ def run_task_now(task_id: str, runners: SchedulerRunners, *, only_failed: bool =
         return False
 
     target_filter: frozenset[tuple[Provider, str]] | None = None
+    replay_report: TaskReport | None = None
     if only_failed:
         target_filter = failed_retry_scope(task_id)
         if target_filter is None:
@@ -514,8 +524,28 @@ def run_task_now(task_id: str, runners: SchedulerRunners, *, only_failed: bool =
             )
             return False
 
-    fire_time = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    result = execute_task(task, fire_time, runners, target_filter=target_filter)
+        if not target_filter:
+            return True
+
+        from infrastructure.scheduling.scheduler.storage import get_latest_targeted_run
+
+        previous = get_latest_targeted_run(task_id)
+        replay_report = previous.retained_report() if previous is not None else None
+        if replay_report is None:
+            logger.warning(
+                "Task %s has no retained report; refusing to repeat work for delivery.", task_id
+            )
+            return False
+
+    fire_time = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    result = execute_task(
+        task,
+        fire_time,
+        runners,
+        target_filter=target_filter,
+        replay_report=replay_report,
+        on_result=on_result,
+    )
     if result:
         _record_task_success_after_full_delivery(task.id, fire_time)
     return result
@@ -527,6 +557,7 @@ def _record_task_success_after_full_delivery(task_id: str, fire_time: str) -> No
     if (
         run is not None
         and run.status is TaskStatus.SUCCESS
+        and run.work_outcome.completed
         and all(outcome.ok for outcome in run.targets)
     ):
         record_task_success(task_id)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.agent_harness.prompts.skills.loader import (
+from core.agent_harness.prompts.skills import (
     load_skill_reference,
     skill_reference_names,
 )
@@ -29,4 +29,4 @@ def test_load_skill_reference_rejects_path_traversal() -> None:
 
 
 def test_skill_without_reference_directory_has_none() -> None:
-    assert skill_reference_names("fixing-github-ci") == ()
+    assert skill_reference_names("reporting-github-ci-failures") == ()

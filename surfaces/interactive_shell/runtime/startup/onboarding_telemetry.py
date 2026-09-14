@@ -8,9 +8,9 @@ from types import MappingProxyType
 from config.constants.skills import (
     ANALYZING_GITHUB_CI_PERFORMANCE_SKILL_NAME,
     CONNECTING_SLACK_SKILL_NAME,
-    DELEGATING_GITHUB_CI_FIXES_SKILL_NAME,
+    DELEGATING_GITHUB_CI_REPAIRS_SKILL_NAME,
     ONBOARDING_SKILL_NAME,
-    SCHEDULING_GITHUB_CI_FIXES_SKILL_NAME,
+    SCHEDULING_GITHUB_CI_REPAIRS_SKILL_NAME,
 )
 from core.agent_harness.spi.grounding import getting_started_skills
 from infrastructure.analytics.capture import (
@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 _OPTION_BY_SKILL = MappingProxyType(
     {
         ANALYZING_GITHUB_CI_PERFORMANCE_SKILL_NAME: "ci_analytics",
-        SCHEDULING_GITHUB_CI_FIXES_SKILL_NAME: "ci_agent",
-        DELEGATING_GITHUB_CI_FIXES_SKILL_NAME: "remote_managed_service",
+        SCHEDULING_GITHUB_CI_REPAIRS_SKILL_NAME: "ci_agent",
+        DELEGATING_GITHUB_CI_REPAIRS_SKILL_NAME: "remote_managed_service",
         CONNECTING_SLACK_SKILL_NAME: "slack",
     }
 )
