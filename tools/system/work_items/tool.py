@@ -9,6 +9,7 @@ from core.domain.types.tools import ToolSurface
 from core.domain.work_items import (
     WORK_ITEM_PRIORITIES,
     WORK_ITEM_STATUSES,
+    AmbiguousWorkItemDatetimeError,
     WorkItemChannelTarget,
     WorkItemPriority,
     WorkItemUpdates,
@@ -176,6 +177,11 @@ def work_task_add(
                     "error": "invalid_remind_at",
                     "detail": "remind_at does not exist in the specified timezone",
                 }
+        except AmbiguousWorkItemDatetimeError:
+            return {
+                "error": "invalid_remind_at",
+                "detail": "remind_at is ambiguous in the specified timezone; include an explicit UTC offset",
+            }
         except ValueError:
             return {
                 "error": "invalid_timezone",
@@ -378,6 +384,11 @@ def work_task_update(
                     "error": "invalid_remind_at",
                     "detail": "remind_at does not exist in the specified timezone",
                 }
+        except AmbiguousWorkItemDatetimeError:
+            return {
+                "error": "invalid_remind_at",
+                "detail": "remind_at is ambiguous in the specified timezone; include an explicit UTC offset",
+            }
         except ValueError:
             return {
                 "error": "invalid_timezone",

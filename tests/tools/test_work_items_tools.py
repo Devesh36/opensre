@@ -216,6 +216,14 @@ def test_reminder_scheduling_resolves_naive_datetime_in_requested_timezone(
                 "detail": "remind_at does not exist in the specified timezone",
             },
         ),
+        (
+            "2027-11-07T01:30",
+            "America/New_York",
+            {
+                "error": "invalid_remind_at",
+                "detail": "remind_at is ambiguous in the specified timezone; include an explicit UTC offset",
+            },
+        ),
     ],
 )
 def test_work_task_add_rejects_invalid_reminder_before_persistence(

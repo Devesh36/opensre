@@ -12,6 +12,7 @@ from rich.table import Table
 from config.constants.work_items import WORK_ITEM_REMINDER_RUN_AT_PARAM
 from core.domain.work_items import (
     WORK_ITEM_PRIORITIES,
+    AmbiguousWorkItemDatetimeError,
     WorkItemChannelTarget,
     add_work_item,
     complete_work_items,
@@ -116,6 +117,11 @@ def work_add(
                     "remind-at does not exist in the selected timezone",
                     param_hint="--remind-at",
                 )
+        except AmbiguousWorkItemDatetimeError:
+            raise click.BadParameter(
+                "remind-at is ambiguous in the selected timezone; include an explicit UTC offset",
+                param_hint="--remind-at",
+            ) from None
         except ValueError:
             raise click.BadParameter(
                 "timezone must be a valid IANA timezone", param_hint="--tz"

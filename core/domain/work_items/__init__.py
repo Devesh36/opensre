@@ -29,6 +29,7 @@ from core.domain.work_items.reminders import (
     build_work_item_reminder_message,
 )
 from core.domain.work_items.schedule import (
+    AmbiguousWorkItemDatetimeError,
     cron_from_datetime,
     parse_work_item_datetime,
     resolve_work_item_datetime,
@@ -56,6 +57,7 @@ from core.domain.work_items.store import (
 )
 
 __all__ = [
+    "AmbiguousWorkItemDatetimeError",
     "CompleteWorkItemsResult",
     "DEFAULT_PRIORITY_LIMIT",
     "PRIORITY_WEIGHTS",

@@ -6,6 +6,10 @@ from datetime import UTC, datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
+class AmbiguousWorkItemDatetimeError(ValueError):
+    """A local reminder time identifies two distinct instants."""
+
+
 def parse_work_item_datetime(value: str) -> datetime | None:
     text = value.strip()
     if not text:
@@ -22,7 +26,7 @@ def parse_work_item_datetime(value: str) -> datetime | None:
 
 
 def resolve_work_item_datetime(value: str, timezone: str) -> datetime | None:
-    """Resolve a work-item datetime to an aware instant using its IANA timezone."""
+    """Resolve an aware instant; reject ambiguous local times and return None for DST gaps."""
     parsed = parse_work_item_datetime(value)
     if parsed is None:
         return None
@@ -32,12 +36,17 @@ def resolve_work_item_datetime(value: str, timezone: str) -> datetime | None:
         raise ValueError(f"invalid IANA timezone: {timezone!r}") from exc
     if parsed.tzinfo is not None:
         return parsed.astimezone(UTC)
+    resolved: datetime | None = None
     for fold in (0, 1):
         candidate = parsed.replace(tzinfo=zone, fold=fold)
         round_trip = candidate.astimezone(UTC).astimezone(zone)
         if round_trip.replace(tzinfo=None) == parsed:
-            return candidate
-    return None
+            if resolved is not None and resolved.astimezone(UTC) != candidate.astimezone(UTC):
+                raise AmbiguousWorkItemDatetimeError(
+                    "reminder time requires an explicit UTC offset"
+                )
+            resolved = candidate
+    return resolved
 
 
 def cron_from_datetime(value: datetime) -> str:
@@ -45,6 +54,7 @@ def cron_from_datetime(value: datetime) -> str:
 
 
 __all__ = [
+    "AmbiguousWorkItemDatetimeError",
     "cron_from_datetime",
     "parse_work_item_datetime",
     "resolve_work_item_datetime",
