@@ -83,6 +83,8 @@ def install_background_service(
     service the OS is not running.
     """
     name = system or platform.system()
+    if name not in ("Darwin", "Linux"):
+        return _unsupported(name)
     argv = list(command or scheduler_command())
     log_path = _log_path()
     log_path.parent.mkdir(parents=True, exist_ok=True)

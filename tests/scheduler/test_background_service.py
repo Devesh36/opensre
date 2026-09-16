@@ -170,7 +170,10 @@ def test_linux_install_writes_a_systemd_user_unit(
     assert runner.commands[-1][:4] == ["systemctl", "--user", "enable", "--now"]
 
 
-def test_other_platforms_are_reported_unsupported_without_touching_the_os(tmp_path: Path) -> None:
+def test_other_platforms_are_reported_unsupported_without_touching_the_os(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(svc, "OPENSRE_HOME_DIR", tmp_path / ".opensre")
     runner = _Runner()
 
     state = svc.install_background_service(
@@ -180,6 +183,7 @@ def test_other_platforms_are_reported_unsupported_without_touching_the_os(tmp_pa
     assert state.supported is False
     assert state.installed is False
     assert runner.commands == []
+    assert not (tmp_path / ".opensre").exists()
     assert "not supported on Windows" in state.summary
 
 
