@@ -242,7 +242,8 @@ def _register_jobs(
     *,
     task_filter: TaskFilter | None = None,
 ) -> int:
-    """Register all enabled tasks on *scheduler*; invalid tasks are logged and skipped."""
+    """Register enabled tasks, preserving fire times when their schedules are unchanged."""
+    existing_jobs = {job.id: job for job in scheduler.get_jobs()}
     enabled_count = 0
     for task in list_tasks():
         if not task.enabled:
@@ -259,16 +260,30 @@ def _register_jobs(
             task.next_run = next_run
             update_task(task)
 
-        scheduler.add_job(
-            _scheduled_job,
-            trigger=trigger,
-            args=[task.id, runners],
-            id=task.id,
-            name=f"{task.kind.value}:{task.id}",
-            replace_existing=True,
-            misfire_grace_time=None,
-            max_instances=1,
-        )
+        existing_job = existing_jobs.get(task.id)
+        if (
+            existing_job is not None
+            and str(existing_job.trigger) == str(trigger)
+            and getattr(existing_job.trigger, "timezone", None)
+            == getattr(trigger, "timezone", None)
+        ):
+            # Updating callback metadata leaves APScheduler's pending tick intact.
+            scheduler.modify_job(
+                task.id,
+                args=[task.id, runners],
+                name=f"{task.kind.value}:{task.id}",
+            )
+        else:
+            scheduler.add_job(
+                _scheduled_job,
+                trigger=trigger,
+                args=[task.id, runners],
+                id=task.id,
+                name=f"{task.kind.value}:{task.id}",
+                replace_existing=True,
+                misfire_grace_time=None,
+                max_instances=1,
+            )
         enabled_count += 1
         record_scheduler_task_operation(
             "scheduler_job_registered",
@@ -303,7 +318,7 @@ def resync_scheduler_jobs(
     *,
     task_filter: TaskFilter | None = None,
 ) -> int:
-    """Replace registered jobs on a live scheduler with the current task store."""
+    """Reconcile jobs with the task store, preserving unchanged schedules' fire times."""
     existing_ids = {job.id for job in scheduler.get_jobs()}
     enabled_count = _register_jobs(
         scheduler,

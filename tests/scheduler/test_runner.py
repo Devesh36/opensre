@@ -407,6 +407,116 @@ class TestComputeNextRun:
 
 
 class TestRegisterJobs:
+    @pytest.mark.parametrize("change", ["none", "add", "edit_other", "edit_task"])
+    def test_resync_preserves_overdue_tick(
+        self, change: str, tmp_path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from datetime import UTC, datetime, timedelta
+        from threading import Event
+
+        from apscheduler.schedulers.background import BackgroundScheduler
+
+        from infrastructure.scheduling.scheduler import runner
+        from infrastructure.scheduling.scheduler.storage import (
+            complete_run,
+            database,
+            get_runs,
+            try_claim,
+        )
+
+        task = ScheduledTask(
+            id="overdue",
+            kind=TaskKind.MANUAL_LOOP,
+            cron="0 * * * *",
+            provider=Provider.INTERACTIVE_SHELL,
+        )
+        other = task.model_copy(update={"id": "other", "cron": "30 * * * *"})
+        tasks = {task.id: task}
+        if change == "edit_other":
+            tasks[other.id] = other
+        monkeypatch.setattr(runner, "list_tasks", lambda: list(tasks.values()))
+        monkeypatch.setattr(runner, "get_task", tasks.get)
+        monkeypatch.setattr(runner, "update_task", lambda _task: None)
+        monkeypatch.setattr(database, "default_run_database_path", lambda: tmp_path / "runs.db")
+        executed = Event()
+        observed: list[str] = []
+
+        def execute(task: ScheduledTask, fire_time: str, _runners: object) -> bool:
+            claim = try_claim(task.id, fire_time)
+            if claim is None:
+                return False
+            complete_run(claim, status=TaskStatus.SUCCESS)
+            if task.id == "overdue":
+                observed.append(fire_time)
+                executed.set()
+            return False
+
+        monkeypatch.setattr(runner, "execute_task", execute)
+        scheduler = _build_scheduler(BackgroundScheduler)
+        scheduler.start(paused=True)
+        try:
+            _register_jobs(scheduler, real_runners())
+            overdue = datetime.now(UTC) - timedelta(seconds=5)
+            scheduler.modify_job(task.id, next_run_time=overdue)
+            if change == "add":
+                tasks[other.id] = other
+            elif change == "edit_other":
+                other.cron = "45 * * * *"
+            elif change == "edit_task":
+                task.name = "Renamed task"
+                task.params = {LOOP_PROMPT_PARAM: "Updated prompt"}
+            refreshed_runners = real_runners()
+            assert resync_scheduler_jobs(scheduler, refreshed_runners) == len(tasks)
+            job = scheduler.get_job(task.id)
+            assert job.next_run_time == overdue
+            assert job.args[1] is refreshed_runners
+            scheduler.resume()
+            assert executed.wait(timeout=10)
+        finally:
+            scheduler.shutdown(wait=True)
+        fire_time = _compute_fire_time(overdue)
+        assert observed == [fire_time]
+        runs = get_runs(task.id)
+        assert len(runs) == 1
+        assert runs[0].fire_time == fire_time
+        assert runs[0].status is TaskStatus.SUCCESS
+
+    @pytest.mark.parametrize(
+        ("field", "value"), [("cron", "30 * * * *"), ("timezone", "Asia/Kolkata")]
+    )
+    def test_resync_applies_schedule_changes(
+        self, field: str, value: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from datetime import UTC, datetime, timedelta
+
+        from apscheduler.schedulers.background import BackgroundScheduler
+
+        from infrastructure.scheduling.scheduler import runner
+
+        task = ScheduledTask(
+            id="edited",
+            kind=TaskKind.MANUAL_LOOP,
+            cron="0 * * * *",
+            provider=Provider.INTERACTIVE_SHELL,
+        )
+        monkeypatch.setattr(runner, "list_tasks", lambda: [task])
+        monkeypatch.setattr(runner, "update_task", lambda _task: None)
+        scheduler = _build_scheduler(BackgroundScheduler)
+        scheduler.start(paused=True)
+        try:
+            _register_jobs(scheduler, real_runners())
+            overdue = datetime.now(UTC) - timedelta(seconds=5)
+            scheduler.modify_job(task.id, next_run_time=overdue)
+            setattr(task, field, value)
+            assert resync_scheduler_jobs(scheduler, real_runners()) == 1
+            job = scheduler.get_job(task.id)
+            expected_trigger = _make_trigger(task)
+            assert str(job.trigger) == str(expected_trigger)
+            assert job.trigger.timezone == expected_trigger.timezone
+            assert job.next_run_time > overdue
+        finally:
+            scheduler.shutdown(wait=True)
+
     def test_real_scheduler_registers_and_passes_fire_time(
         self,
         monkeypatch: pytest.MonkeyPatch,
@@ -496,6 +606,9 @@ class TestRegisterJobs:
         class _FakeScheduler:
             def __init__(self) -> None:
                 self.job_ids: list[str] = []
+
+            def get_jobs(self) -> list[object]:
+                return []
 
             def add_job(self, *args: object, **kwargs: object) -> None:
                 _ = args
