@@ -419,10 +419,10 @@ tokens, `password`/`token` fields) are masked before a span leaves the process.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `OPENSRE_HOME` | `~/.opensre` | Root directory for local OpenSRE state |
+| `OPENSRE_HOME` | `~/.opensre` | Host root for scheduler files, gateway state, local configuration, and sessions when no organization context root is set |
 | `OPENSRE_PROJECT_ENV_PATH` | `PROJECT_ROOT/.env` | Path to project-level `.env` file |
 | `OPENSRE_WIZARD_STORE_PATH` | `~/.opensre/opensre.json` | Path to the local wizard/provider selection store |
-| `OPENSRE_CONTEXT_ROOT` |  | Override OpenSRE home/context root |
+| `OPENSRE_CONTEXT_ROOT` |  | Mounted organization-scoped root for context and sessions; requires `ORGANIZATION_ID` |
 | `OPENSRE_INTEGRATIONS_STORE_PATH` |  | Override integrations store path |
 
 
@@ -477,7 +477,7 @@ Mirror conversation history and memory to a user-owned object store. Details: [R
 | --- | --- | --- |
 | `MODE` | `web` | Container entrypoint: `web`, `gateway`, or `scheduler` |
 | `PORT` | `8000` | HTTP port for the web surface |
-| `OPENSRE_HOME` | `~/.opensre` | Root for sessions, scheduler files, gateway state, and local configuration |
+| `OPENSRE_HOME` | `~/.opensre` | Host root for scheduler files, gateway state, local configuration, and sessions when `OPENSRE_CONTEXT_ROOT` is unset |
 | `DATABASE_URL` |  | Postgres connection for gateway records shared across replicas; required for Slack Events API unless the single-replica local-dedup escape hatch is enabled |
 | `OPENSRE_SIZE_PROFILE` | `SMALL` | Deployment size profile; default turn caps are `SMALL=1`, `MEDIUM=2`, `LARGE=4` |
 | `OPENSRE_MAX_CONCURRENT_TURNS` | size-profile limit | Override the process-wide concurrent-turn cap with a positive integer |

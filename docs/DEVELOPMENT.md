@@ -77,7 +77,8 @@ Quick reference:
    (required for Slack Events API unless the single-replica local-dedup escape
    hatch is enabled).
 4. Use a shared `OPENSRE_HOME` mount when multiple processes need the same
-   sessions or scheduler tasks.
+   scheduler tasks. If `OPENSRE_CONTEXT_ROOT` is set, make that root durable and
+   shared for organization-bound sessions too.
 5. Add integration and storage env vars your deployment needs.
 
 Minimal LLM env:

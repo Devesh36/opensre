@@ -98,7 +98,8 @@ ECS, Vercel, or another ASGI-capable host.
    is required for Slack Events API unless you deliberately use the
    single-replica local-dedup escape hatch.
 4. Put `OPENSRE_HOME` on a shared mount before running multiple processes that
-   need the same sessions or scheduler tasks.
+   need the same scheduler tasks. If `OPENSRE_CONTEXT_ROOT` is set, make that
+   root durable and shared for organization-bound sessions too.
 5. Add any additional environment variables required by your integrations.
 
 Minimum environment:
@@ -115,8 +116,10 @@ The full set of supported provider keys and optional model overrides is document
 
 Add Railway Postgres and set `DATABASE_URL` when you use Slack Events API or
 another layout that needs gateway records shared between replicas. Redis is
-not part of the gateway persistence path. Session and scheduler files still
-need a shared `OPENSRE_HOME` mount for multi-process deployments.
+not part of the gateway persistence path. Scheduler files still need a shared
+`OPENSRE_HOME` mount. Organization-bound sessions use `OPENSRE_CONTEXT_ROOT`
+when set and otherwise fall back to `OPENSRE_HOME`; make both durable when they
+differ.
 
 For telemetry labeling, set `OPENSRE_DEPLOYMENT_METHOD=railway` on the Railway service.
 

@@ -75,10 +75,10 @@ Provider keys and optional model overrides are listed in `.env.example` and
 
 Set `DATABASE_URL` when gateway records must be shared through Postgres. Slack
 Events API requires it unless you explicitly enable the single-replica local
-deduplication escape hatch. Conversation sessions and scheduler state remain
-file-backed under `OPENSRE_HOME`; use a shared mount before running multiple
-processes that need the same files. See [HTTP API](/api) for the route
-reference.
+deduplication escape hatch. Scheduler state remains file-backed under
+`OPENSRE_HOME`. Organization-bound sessions use `OPENSRE_CONTEXT_ROOT` when it
+is set and otherwise fall back to `OPENSRE_HOME`; make both roots durable when
+they differ. See [HTTP API](/api) for the route reference.
 
 ## Local gateway
 
@@ -129,7 +129,8 @@ Complete route reference: [HTTP API](/api).
 1. Add Railway Postgres and set `DATABASE_URL` when you use Slack Events API or
    another layout that needs gateway records shared between replicas.
 2. Add a shared `OPENSRE_HOME` volume when more than one process needs the same
-   sessions or scheduler tasks.
+   scheduler tasks. If `OPENSRE_CONTEXT_ROOT` is set, make that root durable and
+   shared for organization-bound sessions too.
 3. Optionally set `OPENSRE_DEPLOYMENT_METHOD=railway` for telemetry labeling.
 4. Deploy the service through your Railway project. Redis is not used for
    gateway persistence.
@@ -137,9 +138,9 @@ Complete route reference: [HTTP API](/api).
 ## Horizontal scale-out
 
 Run **one** gateway task and leave `OPENSRE_SESSION_FILE_LOCK` off. More than
-one gateway task sharing `OPENSRE_HOME` is not supported yet. Follow
-[#5474](https://github.com/Tracer-Cloud/opensre/issues/5474) and add a second
-task only after that lands.
+one gateway task sharing a file-backed session store is not supported yet.
+Follow [#5474](https://github.com/Tracer-Cloud/opensre/issues/5474) and add a
+second task only after that lands.
 
 To serve more concurrent conversations today, raise concurrency on that single
 task (next section). After #5474, put every task on the same session store — a
