@@ -71,10 +71,14 @@ Quick reference:
 
 ### Hosted runtime (Railway / ECS / Vercel)
 
-1. Deploy this repository as a standard Python/FastAPI app using the repo `Dockerfile` or your host's native Python workflow.
+1. Deploy the repository `Dockerfile` and select the runtime with `MODE` (`web`, `gateway`, or `scheduler`).
 2. Set `LLM_PROVIDER` and the matching API key (for example `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` — see [`.env.example`](https://github.com/Tracer-Cloud/opensre/blob/main/.env.example)).
-3. Add `DATABASE_URI` and `REDIS_URI` for hosted layouts that need persistence.
-4. Add integration and storage env vars your deployment needs.
+3. Set `DATABASE_URL` when gateway records must be shared through Postgres
+   (required for Slack Events API unless the single-replica local-dedup escape
+   hatch is enabled).
+4. Use a shared `OPENSRE_HOME` mount when multiple processes need the same
+   sessions or scheduler tasks.
+5. Add integration and storage env vars your deployment needs.
 
 Minimal LLM env:
 
@@ -83,8 +87,8 @@ export LLM_PROVIDER=anthropic
 export ANTHROPIC_API_KEY=...
 ```
 
-For Railway: ensure the project has Postgres and Redis services and that the OpenSRE
-service has `DATABASE_URI` and `REDIS_URI` set before deploying. Set
+For Railway: add Postgres and set `DATABASE_URL` only when the gateway needs
+shared records; Redis is not part of the gateway persistence path. Set
 `OPENSRE_DEPLOYMENT_METHOD=railway` for telemetry labeling.
 
 ## Telemetry and privacy
