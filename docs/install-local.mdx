@@ -24,11 +24,17 @@ opensre
 
 ![OpenSRE CLI welcome screen with the sign-in prompt](/images/opensre-welcome.png)
 
-Use a macOS or Linux terminal. On Windows, use [WSL](/environments/windows-local).
+On Windows, open PowerShell and run:
+
+```powershell
+irm https://install.opensre.com/install.ps1 | iex
+```
+
+See [Windows](/environments/windows-local).
 
 You usually don't need `sudo`. The installer uses a writable directory on your PATH when it can. Otherwise, it uses `~/.local/bin` and prints how to add that to PATH.
 
-For platform requirements, see [macOS](/environments/macos), [Linux](/environments/linux-local), or [Windows with WSL](/environments/windows-local). For a container, see [Docker](/environments/docker).
+For platform requirements, see [macOS](/environments/macos), [Linux](/environments/linux-local), or [Windows](/environments/windows-local). For a container, see [Docker](/environments/docker).
 
 ## Step 2: Sign in
 

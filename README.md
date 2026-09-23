@@ -53,8 +53,16 @@ Make sure you have:
 
 ## Step 1: Install and start opensre
 
+macOS or Linux:
+
 ```bash
 curl -fsSL https://install.opensre.com | bash
+```
+
+Windows (PowerShell):
+
+```powershell
+irm https://install.opensre.com/install.ps1 | iex
 ```
 
 Then start OpenSRE:
@@ -65,7 +73,7 @@ opensre
 
 ![OpenSRE CLI welcome screen with the sign-in prompt](docs/images/opensre-welcome.png)
 
-Use a macOS or Linux terminal. On Windows, use [WSL](docs/environments/windows-local.mdx).
+Windows details: [Windows](docs/environments/windows-local.mdx).
 
 The installer fetches the latest build from `main` without requiring sudo. If `opensre` is not found, follow the PATH instructions printed by the installer or open a new terminal.
 

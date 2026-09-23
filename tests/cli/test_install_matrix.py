@@ -310,7 +310,7 @@ def test_install_docs_list_every_process(path: Path, needles: tuple[str, ...]) -
     for retired_instruction in (
         "brew ",
         "homebrew",
-        "irm https://install.opensre.com",
+        "irm https://install.opensre.com | iex",
         "pipx install opensre",
         "opensre_auto_launch",
         "opensre_skip_gh_install",
@@ -318,6 +318,17 @@ def test_install_docs_list_every_process(path: Path, needles: tuple[str, ...]) -
         assert retired_instruction not in text.lower(), (
             f"{path.name} advertises retired install guidance {retired_instruction!r}"
         )
+
+
+def test_windows_install_docs_use_powershell_installer() -> None:
+    command = "irm https://install.opensre.com/install.ps1 | iex"
+    windows = (REPO_ROOT / "docs" / "environments" / "windows-local.mdx").read_text(
+        encoding="utf-8"
+    )
+    readme = README.read_text(encoding="utf-8")
+    assert command in windows
+    assert command in readme
+    assert "WSL" not in windows
 
 
 def test_install_sh_help_lists_all_channels() -> None:
