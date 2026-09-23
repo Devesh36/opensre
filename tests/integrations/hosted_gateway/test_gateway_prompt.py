@@ -269,7 +269,10 @@ def test_reading_an_earlier_prompt_sends_nothing_new(monkeypatch: pytest.MonkeyP
 
     # Assert
     assert app.sent == [] and app.polled == [_ID]
-    assert out["state"] == "failed" and "(turn_failed)" in out["response_text"]
+    assert out["state"] == "failed"
+    assert out["response_text"].startswith(
+        "The hosted gateway hit an error while running the prompt"
+    )
 
 
 def test_the_wait_budget_hands_back_the_prompt_id(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -473,3 +476,93 @@ def test_a_record_carries_its_progress_lines() -> None:
 
     # Assert: well-formed lines are kept in order, malformed ones dropped
     assert record.progress == (PromptProgress(3, "Reading runs…"),)
+
+
+def test_a_busy_gateway_is_explained_in_plain_words(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Arrange
+    app = _App([PromptRecord(_ID, "failed", error="not_admitted")])
+    _signed_in_with(monkeypatch, app)
+
+    # Act
+    out = ask_hosted_gateway(prompt="which tasks run?")
+
+    # Assert
+    assert out["response_text"].startswith("The hosted gateway was busy with another conversation")
+    assert "not_admitted" not in out["response_text"]
+
+
+def test_a_rejected_answer_reopens_the_original_question_in_the_shell(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange: the parent asks; the user's pick fits no option; the gateway reopens the parent
+    question = PromptQuestion("Which branch?", ("main", "release"))
+    asked = PromptRecord(
+        _ID,
+        "needs_input",
+        question="Which branch?",
+        choice=PromptChoice("Which branch?", (question,)),
+    )
+    rejected = PromptRecord("p_" + "d" * 32, "failed", error="invalid_answer")
+    app = _App([asked, rejected, asked])
+    _signed_in_with(monkeypatch, app)
+    turn = format_ask_user_answers(
+        (AskUserQuestion(label="", title="Which branch?", options=("main", "release")),),
+        ("develop",),
+    )
+    session = SessionCore()
+
+    # Act
+    out = ask_hosted_gateway(prompt_id=_ID, context=_tool_context(session, turn))
+
+    # Assert: the menu is parked again on the original prompt, with a one-line reason first
+    assert app.answered == [(_ID, "develop")] and app.polled == [_ID, _ID]
+    assert out["state"] == "needs_input" and out["prompt_id"] == _ID
+    assert out["response_text"].startswith("That answer did not match the question's options")
+    parked = session.pending_user_choice
+    assert parked is not None and parked.options == ("main", "release")
+
+
+def test_a_rejected_follow_up_read_by_its_own_id_still_reopens_the_parent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange: the caller polls the follow-up's id later; the record names its parent
+    follow_up_id = "p_" + "e" * 32
+    question = PromptQuestion("Which branch?", ("main", "release"))
+    parent = PromptRecord(
+        _ID,
+        "needs_input",
+        question="Which branch?",
+        choice=PromptChoice("Which branch?", (question,)),
+    )
+    rejected = PromptRecord(follow_up_id, "failed", error="invalid_answer", parent_prompt_id=_ID)
+    app = _App([rejected, parent])
+    _signed_in_with(monkeypatch, app)
+    session = SessionCore()
+
+    # Act
+    out = ask_hosted_gateway(prompt_id=follow_up_id, context=_tool_context(session, ""))
+
+    # Assert: the parent, not the follow-up, is re-read and its menu parked again
+    assert app.polled == [follow_up_id, _ID] and app.answered == []
+    assert out["state"] == "needs_input" and out["prompt_id"] == _ID
+    assert session.pending_user_choice is not None
+    assert session.pending_user_choice.options == ("main", "release")
+
+
+def test_the_client_reads_the_parent_prompt_id_of_a_follow_up() -> None:
+    # Arrange
+    def answer(_request: httpx.Request) -> httpx.Response:
+        body = {
+            "prompt_id": "p_" + "e" * 32,
+            "state": "failed",
+            "error": "invalid_answer",
+            "parent_prompt_id": _ID,
+        }
+        return httpx.Response(200, json=body)
+
+    # Act
+    with _client(httpx.MockTransport(answer)) as client:
+        record = client.prompt_result("p_" + "e" * 32)
+
+    # Assert
+    assert record.parent_prompt_id == _ID and record.error == "invalid_answer"
