@@ -12,6 +12,7 @@ from core.agent_harness.session import InMemorySessionStore
 from core.agent_harness.session.pending_choice import PendingUserChoice
 from gateway.core.prompt_intake import (
     ERROR_CREDITS_DENIED,
+    ERROR_INVALID_ANSWER,
     ERROR_NOT_ADMITTED,
     ERROR_TURN_FAILED,
     PromptQueue,
@@ -32,6 +33,7 @@ class _Handler:
         self.seen_text = ""
         self.seen_capabilities: dict[str, tuple[str, ...]] = {}
         self.result: Any = object()
+        self.dropped: list[str] = []
 
     def run(self, text: str, session: SessionCore, output: Any, _logger: Any) -> Any:
         self.seen_text = text
@@ -43,6 +45,9 @@ class _Handler:
         else:
             output.finalize(self.answer)
         return self.result
+
+    def drop_session(self, session_id: str) -> None:
+        self.dropped.append(session_id)
 
 
 def _worker(handler: _Handler) -> tuple[PromptWorker, PromptQueue]:
@@ -94,6 +99,14 @@ def test_a_question_ends_the_turn_as_needs_input_with_the_question_as_text() -> 
     # Assert
     assert job.state is PromptState.NEEDS_INPUT
     assert job.question == "Which branch?\nOptions: main, release"
+    assert job.view()["choice"] == {
+        "title": "Which branch?",
+        "note": "",
+        "questions": [
+            {"title": "Which branch?", "options": ["main", "release"], "multi_select": False}
+        ],
+        "custom_answer": True,
+    }
 
 
 def test_a_rejected_admission_and_a_failed_turn_become_stable_codes() -> None:
@@ -174,3 +187,127 @@ def test_a_failing_integration_tool_is_named_on_the_settled_job() -> None:
     assert job.state is PromptState.DONE
     assert job.failed_integrations == ("github",)
     assert job.view()["failed_integrations"] == ["github"]
+
+
+def _approval_request(pr_number: int = 7) -> Any:
+    from core.llm.types import ToolCall
+    from core.tool import ToolExecutionRequest
+    from tools.registry import clear_tool_registry_cache, get_registered_tool_map
+
+    clear_tool_registry_cache()
+    tool = get_registered_tool_map()["schedule_ci_repair_loop"]
+    assert tool.requires_approval
+    return ToolExecutionRequest(
+        tool_call=ToolCall(id="c", name="schedule_ci_repair_loop", input={}),
+        tool=tool,
+        arguments={"owner": "o", "repo": "r", "pr_number": pr_number},
+        source="test",
+        resolved_integrations={},
+    )
+
+
+class _ApprovalHandler(_Handler):
+    """A turn that tries approval-required calls and records the hook's verdicts."""
+
+    def __init__(self, pr_numbers: list[int]) -> None:
+        super().__init__(answer="scheduled")
+        self.pr_numbers = pr_numbers
+        self.verdicts: list[Any] = []
+
+    def run(self, text: str, _session: SessionCore, output: Any, _logger: Any) -> Any:
+        self.seen_text = text
+        for pr_number in self.pr_numbers:
+            verdict = output.tool_hooks.before_tool_call(_approval_request(pr_number))
+            self.verdicts.append(verdict)
+        output.finalize(self.answer)
+        return self.result
+
+
+def test_an_approval_covers_exactly_the_previewed_call_once() -> None:
+    # Arrange: the first turn asks for PR 7; the resumed turn tries PR 7 twice, then PR 8
+    handler = _ApprovalHandler([7])
+    worker, queue = _worker(handler)
+    asked = queue.submit("schedule the repair loop for o/r#7", context={}, actor="u")
+    assert asked is not None
+
+    # Act
+    worker.run_one(asked)
+    handler.pr_numbers = [7, 7, 8]
+    follow_up = queue.answer(asked, "Approve")
+    assert follow_up is not None
+    worker.run_one(follow_up)
+
+    # Assert: the ask ends the turn; only the approved call runs, once; the rest ask again
+    first, same, again, other = handler.verdicts
+    assert first.blocked is True and first.terminate is True
+    assert asked.state is PromptState.NEEDS_INPUT
+    assert asked.view()["choice"]["questions"][0]["options"] == ["Approve", "Deny"]
+    assert asked.question.startswith("Approve schedule_ci_repair_loop?")
+    assert "pr_number" in asked.question
+    assert same is None
+    assert again.blocked is True and other.blocked is True and other.terminate is True
+    assert follow_up.state is PromptState.NEEDS_INPUT
+    assert follow_up.session_id == asked.session_id
+    assert "Approve" in handler.seen_text and "schedule_ci_repair_loop" in handler.seen_text
+
+
+def test_a_session_is_retired_only_when_the_queue_holds_none_of_its_prompts() -> None:
+    # Arrange: a parent that asked, then a follow-up that asks again on the same session
+    class _Clock:
+        now = 1_000.0
+
+        def __call__(self) -> float:
+            return self.now
+
+    clock = _Clock()
+    branch = PendingUserChoice(title="Which branch?", options=("main", "release"))
+    handler = _Handler(asks=branch)
+    queue = PromptQueue(retention_seconds=60.0, clock=clock)
+    sessions = UnattendedSessions(SessionManager(store=InMemorySessionStore()))
+    worker = PromptWorker(queue, handler, logger=_LOGGER, sessions=sessions)
+    parent = queue.submit("fix ci", context={}, actor="u")
+    assert parent is not None
+    worker.run_one(parent)
+    clock.now += 30.0
+    follow_up = queue.answer(parent, "main")
+    assert follow_up is not None
+    handler.asks = PendingUserChoice(title="Force push?", options=("yes", "no"))
+    worker.run_one(follow_up)
+
+    # Act: the parent expires first, the follow-up 30 seconds later
+    clock.now += 31.0
+    worker.retire_forgotten()
+    dropped_after_parent = list(handler.dropped)
+    clock.now += 30.0
+    worker.retire_forgotten()
+
+    # Assert: the follow-up's question survives its parent; the session goes when both are gone
+    assert follow_up.state is PromptState.NEEDS_INPUT
+    assert dropped_after_parent == [] and queue.get(parent.id) is None
+    assert handler.dropped == [parent.session_id]
+
+
+def test_an_answer_that_fits_no_option_fails_the_follow_up_and_reopens_the_question() -> None:
+    # Arrange
+    pending = PendingUserChoice(
+        title="Which branch?", options=("main", "release"), custom_answer=False
+    )
+    handler = _Handler(asks=pending)
+    worker, queue = _worker(handler)
+    asked = queue.submit("fix ci", context={}, actor="u")
+    assert asked is not None
+    worker.run_one(asked)
+
+    # Act
+    wrong = queue.answer(asked, "develop")
+    assert wrong is not None
+    worker.run_one(wrong)
+    handler.asks = None
+    right = queue.answer(asked, "2")
+    assert right is not None
+    worker.run_one(right)
+
+    # Assert: the bad answer settles as a code; the question could be answered again
+    assert wrong.view()["error"] == ERROR_INVALID_ANSWER
+    assert right.state is PromptState.DONE
+    assert handler.seen_text.startswith("1. Which branch?") and '"release"' in handler.seen_text
