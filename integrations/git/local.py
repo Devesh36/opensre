@@ -66,6 +66,31 @@ def _opensre_author_env(env: Mapping[str, str] | None = None) -> dict[str, str]:
     return {**(env if env is not None else os.environ), **identity}
 
 
+def _content_commit_env(workspace: str) -> dict[str, str] | None:
+    """The environment for a content commit: the OpenSRE Agent identity where git has none.
+
+    A person's checkout keeps that person as author, with the co-author trailer,
+    whether git knows them from its config or from ``GIT_AUTHOR_*`` and
+    ``GIT_COMMITTER_*``. A hosted container has neither, and the commit would fail.
+    """
+    configured = {
+        field: _configured_git_value(workspace, f"user.{field}") for field in ("name", "email")
+    }
+    for role in ("AUTHOR", "COMMITTER"):
+        for field in ("name", "email"):
+            given = os.environ.get(f"GIT_{role}_{field.upper()}", "").strip()
+            if not given and not configured[field]:
+                return _opensre_author_env()
+    return None
+
+
+def _configured_git_value(workspace: str, key: str) -> str:
+    result = _run_git(workspace, "config", "--get", key)
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip()
+
+
 def _run_git(
     workspace: str,
     *args: str,
@@ -402,6 +427,7 @@ def commit_paths(
         _with_opensre_coauthor(message),
         "--",
         *paths,
+        env=_content_commit_env(workspace),
     )
     if commit.returncode != 0:
         raise GitCommandError(COMMIT_FAILED, f"git commit failed: {commit.stderr.strip()}")
