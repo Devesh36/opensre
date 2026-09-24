@@ -159,6 +159,8 @@ EXPORTS: dict[str, str] = {
     "PROMPT_PROGRESS_LINE_MAX_CHARS": "gateway",
     "PROMPT_PROGRESS_MAX_LINES": "gateway",
     "PROMPT_RESULT_RETENTION_SECONDS": "gateway",
+    "SCHEDULER_HOST_CAPABILITY": "capabilities",
+    "SCHEDULER_HOST_IN_PROCESS": "capabilities",
     "PROMPT_ROUTE_PATH": "gateway",
     "PROMPT_SLOT_WAIT_SECONDS": "gateway",
     "PROMPT_WORKER_STOP_TIMEOUT_SECONDS": "gateway",
@@ -256,6 +258,8 @@ EXPORTS: dict[str, str] = {
     "KUBECONFIG_PATH_ENV": "kubernetes",
     # llm
     "AZURE_OPENAI_API_KEY_ENV": "llm",
+    "OPENAI_API_KEY_ENV": "llm",
+    "OPENAI_BASE_URL_ENV": "llm",
     "AZURE_OPENAI_API_VERSION_ENV": "llm",
     "AZURE_OPENAI_BASE_URL_ENV": "llm",
     "LLM_AUTH_METHOD_ENV": "llm",

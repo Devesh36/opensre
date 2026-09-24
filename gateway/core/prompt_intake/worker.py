@@ -27,6 +27,7 @@ from gateway.core.billing.turn_metering import bound_turn_metering
 from gateway.core.middleware.approvals import arguments_preview
 from gateway.core.prompt_intake.jobs import PromptJob, PromptQueue
 from gateway.core.prompt_intake.output import CollectingTurnOutput
+from gateway.core.session.thread_history import seed_session_history
 from infrastructure.analytics.usage_context import UsageSurface, bound_usage_context
 from infrastructure.turn_host.unattended_session import (
     AnswerRejected,
@@ -145,6 +146,7 @@ class PromptWorker:
             if text is None:
                 self._sessions.close(session)
                 return
+            self._seed_exchange(job, session)
         else:
             session = self._sessions.open()
             job.session_id = session.session_id
@@ -213,6 +215,45 @@ class PromptWorker:
         # The answered question must not come back from the store during the turn.
         self._sessions.flush(session)
         return text
+
+    def _seed_exchange(self, job: PromptJob, session: SessionCore) -> None:
+        """Give a resumed turn the whole exchange it continues when the session holds none.
+
+        The on-disk store restores the transcript on resume, so this only fills
+        in when a store kept none: then the answer would arrive alone and the
+        agent would not know what it asked about. Walks the chain of follow-ups
+        back to the original request, so a second or third question still sees
+        the request and every earlier answer. Never overwrites a transcript that
+        is already there.
+        """
+        chain = self._chain(job)
+        if len(chain) < 2:
+            return
+        exchange: list[tuple[str, str]] = []
+        if not chain[0].parent_id:
+            # The original request is still known; an older follow-up starts at its question.
+            exchange.append(("user", _render_prompt(chain[0])))
+        for asked, answered in zip(chain, chain[1:], strict=False):
+            exchange.append(("assistant", asked.question))
+            if answered is not job:
+                exchange.append(("user", answered.prompt))
+        seed_session_history(session, exchange)
+
+    def _chain(self, job: PromptJob) -> list[PromptJob]:
+        """The prompts the queue still holds from the oldest known one down to ``job``.
+
+        A forgotten ancestor ends the walk; what is still known is seeded.
+        """
+        chain: list[PromptJob] = [job]
+        current = job
+        while current.parent_id:
+            parent = self._queue.get(current.parent_id)
+            if parent is None:
+                break
+            chain.append(parent)
+            current = parent
+        chain.reverse()
+        return chain
 
     def _forget(self, session_id: str) -> None:
         """The session is done with: release the pooled agent, the question and the grants."""

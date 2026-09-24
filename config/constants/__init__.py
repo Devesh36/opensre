@@ -230,6 +230,12 @@ if TYPE_CHECKING:
     from config.constants.buzz import (
         BUZZ_RELAY_URL_ENV as BUZZ_RELAY_URL_ENV,
     )
+    from config.constants.capabilities import (
+        SCHEDULER_HOST_CAPABILITY as SCHEDULER_HOST_CAPABILITY,
+    )
+    from config.constants.capabilities import (
+        SCHEDULER_HOST_IN_PROCESS as SCHEDULER_HOST_IN_PROCESS,
+    )
     from config.constants.ci_fixes import (
         CI_FIX_COUNT_LABEL as CI_FIX_COUNT_LABEL,
     )
@@ -635,6 +641,12 @@ if TYPE_CHECKING:
     )
     from config.constants.llm import (
         LLM_PROVIDER_ENV as LLM_PROVIDER_ENV,
+    )
+    from config.constants.llm import (
+        OPENAI_API_KEY_ENV as OPENAI_API_KEY_ENV,
+    )
+    from config.constants.llm import (
+        OPENAI_BASE_URL_ENV as OPENAI_BASE_URL_ENV,
     )
     from config.constants.llm import (
         OPENSRE_LLM_NATIVE_STRUCTURED_OUTPUT_ENV as OPENSRE_LLM_NATIVE_STRUCTURED_OUTPUT_ENV,

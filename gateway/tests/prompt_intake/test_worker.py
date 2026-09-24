@@ -259,6 +259,43 @@ def test_an_approval_covers_exactly_the_previewed_call_once() -> None:
     assert "Approve" in handler.seen_text and "schedule_ci_repair_loop" in handler.seen_text
 
 
+class _HistoryHandler(_Handler):
+    """A turn that records the transcript the worker seeded before it ran."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.seen_history: list[tuple[str, str]] = []
+
+    def run(self, text: str, session: SessionCore, output: Any, logger: Any, **kwargs: Any) -> Any:
+        self.seen_history = list(session.cli_agent_messages or [])
+        return super().run(text, session, output, logger, **kwargs)
+
+
+def test_a_resumed_turn_is_seeded_with_the_request_and_the_question() -> None:
+    # Arrange: a parent that asked; the unattended session keeps no transcript
+    asks = PendingUserChoice(title="Which PR?", options=("7", "8"))
+    handler = _HistoryHandler(answer="done", asks=asks)
+    worker, queue = _worker(handler)
+    parent = queue.submit("schedule the repair loop", context={"repo": "o/r"}, actor="u")
+    assert parent is not None
+    worker.run_one(parent)
+    assert parent.state is PromptState.NEEDS_INPUT
+
+    # Act: the answer resumes the session
+    handler.asks = None
+    follow_up = queue.answer(parent, "7")
+    assert follow_up is not None
+    worker.run_one(follow_up)
+
+    # Assert: the agent sees the request (with its facts), the question, then the answer
+    assert follow_up.state is PromptState.DONE
+    assert handler.seen_history[0][0] == "user"
+    assert "schedule the repair loop" in handler.seen_history[0][1]
+    assert "repo: o/r" in handler.seen_history[0][1]
+    assert handler.seen_history[1] == ("assistant", parent.question)
+    assert "7" in handler.seen_text
+
+
 def test_a_session_is_retired_only_when_the_queue_holds_none_of_its_prompts() -> None:
     # Arrange: a parent that asked, then a follow-up that asks again on the same session
     class _Clock:
@@ -394,3 +431,61 @@ def test_tool_progress_reaches_the_job_while_it_runs() -> None:
         "Checking out the branch…",
     ]
     assert job.state is PromptState.DONE
+
+
+def test_a_second_question_is_seeded_with_the_request_and_the_first_answer() -> None:
+    # Arrange: the store keeps no transcript; the agent asks twice before it finishes
+    first = PendingUserChoice(title="Which PR?", options=("7", "8"))
+    second = PendingUserChoice(title="Force push?", options=("yes", "no"))
+    handler = _HistoryHandler(answer="done", asks=first)
+    worker, queue = _worker(handler)
+    root = queue.submit("schedule the repair loop", context={"repo": "o/r"}, actor="u")
+    assert root is not None
+    worker.run_one(root)
+    handler.asks = second
+    answered_once = queue.answer(root, "7")
+    assert answered_once is not None
+    worker.run_one(answered_once)
+    assert answered_once.state is PromptState.NEEDS_INPUT
+
+    # Act: the second answer resumes the session
+    handler.asks = None
+    answered_twice = queue.answer(answered_once, "no")
+    assert answered_twice is not None
+    worker.run_one(answered_twice)
+
+    # Assert: request, first question, first answer, second question; the new answer is the turn
+    assert answered_twice.state is PromptState.DONE
+    history = list(handler.seen_history)
+    assert history[0][0] == "user" and "schedule the repair loop" in history[0][1]
+    assert history[1] == ("assistant", root.question)
+    assert history[2] == ("user", "7")
+    assert history[3] == ("assistant", answered_once.question)
+    assert len(history) == 4
+    assert "no" in handler.seen_text
+
+
+def test_a_forgotten_original_request_still_leaves_the_parents_question_seeded() -> None:
+    # Arrange: two questions; the original request has expired from the queue
+    handler = _HistoryHandler(
+        answer="done", asks=PendingUserChoice(title="Which PR?", options=("7",))
+    )
+    worker, queue = _worker(handler)
+    root = queue.submit("schedule the repair loop", context={}, actor="u")
+    assert root is not None
+    worker.run_one(root)
+    handler.asks = PendingUserChoice(title="Force push?", options=("yes", "no"))
+    once = queue.answer(root, "7")
+    assert once is not None
+    worker.run_one(once)
+    del queue._jobs[root.id]  # the retention window dropped the original request
+
+    # Act
+    handler.asks = None
+    twice = queue.answer(once, "no")
+    assert twice is not None
+    worker.run_one(twice)
+
+    # Assert: the known part is seeded, starting at the parent's own question
+    assert twice.state is PromptState.DONE
+    assert handler.seen_history == [("assistant", once.question)]

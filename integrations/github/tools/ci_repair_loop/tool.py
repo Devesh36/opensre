@@ -5,6 +5,8 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from config.constants.capabilities import SCHEDULER_HOST_CAPABILITY, SCHEDULER_HOST_IN_PROCESS
+from core.agent_harness.tools import action_context_from_agent_context, capability_values
 from core.domain.types.tools import ToolSurface
 from core.tool import SideEffectLevel, report_run_error
 from core.tool_framework import tool
@@ -24,6 +26,18 @@ from integrations.github.tools.ci_repair_loop.storage import RepairStore
 
 def _credentials(sources: dict[str, dict]) -> dict[str, Any]:
     return github_creds(sources.get("github", {}))
+
+
+def _scheduler_in_process(context: Any) -> bool:
+    """Whether the host's own scheduler picks tasks up from the store (the hosted gateway)."""
+    if context is None:
+        return False
+    try:
+        scope = action_context_from_agent_context(context)
+    except RuntimeError:
+        return False
+    hosts = capability_values(scope.session, SCHEDULER_HOST_CAPABILITY)
+    return SCHEDULER_HOST_IN_PROCESS in hosts
 
 
 def _result(run: RepairRun, store: RepairStore) -> dict[str, Any]:
@@ -58,6 +72,7 @@ def _result(run: RepairRun, store: RepairStore) -> dict[str, Any]:
     side_effect_level=SideEffectLevel.MUTATING,
     requires_approval=True,
     approval_reason="Starts a background service and authorizes a bounded worker to create demo resources or edit and push the selected PR.",
+    accepts_runtime_context=True,
     is_available=github_source_available,
     extract_params=_credentials,
     injected_params=GITHUB_INJECTED_PARAMS,
@@ -91,6 +106,7 @@ def schedule_ci_repair_loop(
     repo: str = "",
     pr_number: int = 0,
     github_token: str | None = None,
+    context: Any = None,
     **_kwargs: Any,
 ) -> dict[str, Any]:
     """Authorize exactly one bounded repair scope and return its durable identity."""
@@ -103,6 +119,7 @@ def schedule_ci_repair_loop(
             pr_number=pr_number,
             github_token=github_token,
             store=store,
+            scheduler_in_process=_scheduler_in_process(context),
         )
     except (ValueError, RuntimeError, OSError, GitHubApiError) as exc:
         report_run_error(

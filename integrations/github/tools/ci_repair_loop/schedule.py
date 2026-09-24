@@ -48,8 +48,13 @@ def schedule_repair(
     pr_number: int = 0,
     github_token: str | None = None,
     store: RepairStore | None = None,
+    scheduler_in_process: bool = False,
 ) -> tuple[RepairRun, bool, str | None]:
-    """Schedule once per active target; repeated requests retain the original deadline."""
+    """Schedule once per active target; repeated requests retain the original deadline.
+
+    ``scheduler_in_process`` says the host's own scheduler picks the task up from the
+    store (the hosted gateway); otherwise the OS-level background service is ensured.
+    """
     started = time.time()
     token = configured_token(github_token)
     user = object_response(GitHubRestClient(token).request("GET", "user"))
@@ -99,7 +104,8 @@ def schedule_repair(
                 run = store.get(run.id)
             return run, True, None
         try:
-            ensure_background_service(deadline=run.deadline)
+            if not scheduler_in_process:
+                ensure_background_service(deadline=run.deadline)
             if time.time() >= run.deadline:
                 run.status, run.reason = (
                     RepairStatus.TIMED_OUT,

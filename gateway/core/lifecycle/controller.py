@@ -119,7 +119,7 @@ class GatewayController:
         handler = TurnRunner(
             console=console,
             slash_ports_factory=self._slash_ports_factory,
-            agent_build=chat_agent_build_config(),
+            agent_build=chat_agent_build_config(hosts_scheduler=_gateway_hosts_scheduler()),
             gate=self.turn_gate,
             admission_check=admit_metered_turn,
         )
