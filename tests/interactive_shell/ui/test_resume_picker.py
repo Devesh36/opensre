@@ -42,9 +42,9 @@ def test_picker_recalculates_viewport_after_terminal_resize(monkeypatch: Any) ->
     visible_rows: list[int] = []
 
     monkeypatch.setattr(
-        resume_picker.shutil,
-        "get_terminal_size",
-        lambda **_kwargs: next(sizes),
+        resume_picker,
+        "shutil",
+        SimpleNamespace(get_terminal_size=lambda **_kwargs: next(sizes)),
     )
     monkeypatch.setattr(resume_picker, "enter_inline_menu", lambda: None)
     monkeypatch.setattr(resume_picker, "leave_inline_menu", lambda: None)
