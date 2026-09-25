@@ -52,7 +52,7 @@ def _interactive_resume_menu(session: Session, console: Console) -> bool:
     repo = default_session_repo()
     items: list[ResumeMenuItem] = []
     for entry in repo.load_recent(
-        _RECENT_CONVERSATION_LIMIT,
+        _RECENT_CONVERSATION_LIMIT + 1,
         require_conversation=True,
     ):
         sid = entry["session_id"]
@@ -68,6 +68,8 @@ def _interactive_resume_menu(session: Session, console: Console) -> bool:
                 activity_at=entry.get("activity_at") or entry.get("started_at"),
             )
         )
+        if len(items) >= _RECENT_CONVERSATION_LIMIT:
+            break
     if not items:
         console.print(f"[{DIM}]No previous conversations to resume.[/]")
         return True
