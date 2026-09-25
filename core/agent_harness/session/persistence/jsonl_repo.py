@@ -107,10 +107,28 @@ class JsonlSessionRepo:
     ) -> dict[str, Any]:
         leaf = next((rec for rec in reversed(entries) if rec.get("type") == "leaf"), None)
         total_turns = _count_turns(entries)
+        leaf_id = _resolve_entry_id(entries, None)
+        branch = _branch_to(entries, leaf_id)
+        conversation_title = next(
+            (
+                title
+                for rec in branch
+                if rec.get("type") == "message" and rec.get("role") == "user"
+                if (title := " ".join(str(rec.get("content") or "").split()))
+                and not title.startswith("/")
+            ),
+            "",
+        )
+        activity_at = next(
+            (rec.get("timestamp") for rec in reversed(branch) if rec.get("timestamp")),
+            header.get("created_at"),
+        )
         return {
             "session_id": str(header.get("id") or path.stem),
             "name": storage_paths.derive_name(_records_to_lines([header, *entries])),
             "started_at": header.get("created_at"),
+            "conversation_title": conversation_title,
+            "activity_at": activity_at,
             "opensre_version": header.get("opensre_version"),
             "duration_secs": leaf.get("duration_secs") if leaf else None,
             "total_turns": leaf.get("total_turns") if leaf else total_turns,
@@ -124,7 +142,7 @@ class JsonlSessionRepo:
                 )
                 for rec in entries
             ),
-            "leaf_id": _resolve_entry_id(entries, None),
+            "leaf_id": leaf_id,
         }
 
 

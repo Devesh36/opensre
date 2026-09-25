@@ -69,7 +69,7 @@ def _time_ago(value: str | datetime | int | float | None, now: datetime) -> str:
 
 def _row(item: ResumeMenuItem, *, selected: bool, index: int, width: int, now: datetime) -> str:
     age = clip_prompt_text(_time_ago(item.activity_at, now), _AGE_WIDTH)
-    prefix = f"  {'›' if selected else ' '} {age:<{_AGE_WIDTH}}  "
+    prefix = clip_prompt_text(f"  {'›' if selected else ' '} {age:<{_AGE_WIDTH}}  ", width)
     title_width = max(0, width - prompt_text_width(prefix))
     title = clip_prompt_text(item.title, title_width)
     padding = " " * max(0, width - prompt_text_width(prefix + title))

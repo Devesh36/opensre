@@ -44,17 +44,6 @@ def _record_resume_slash(
     session.record("slash", text, ok=ok)
 
 
-def _conversation_title(messages: list[tuple[str, str]]) -> str:
-    """Find the first substantive user prompt for a stable session title."""
-    for role, content in messages:
-        if role != "user":
-            continue
-        title = " ".join(content.split())
-        if title and not title.startswith("/"):
-            return title
-    return ""
-
-
 def _interactive_resume_menu(session: Session, console: Console) -> bool:
     """Show recent conversations and resume the selected one."""
     repo = default_session_repo()
@@ -63,20 +52,14 @@ def _interactive_resume_menu(session: Session, console: Console) -> bool:
         sid = entry["session_id"]
         if sid == session.session_id:
             continue
-        saved = repo.load_session(sid)
-        title = _conversation_title(saved.get("cli_agent_messages") or []) if saved else ""
+        title = entry.get("conversation_title") or ""
         if not title:
             continue
-        history = saved.get("history") or []
-        activity_at = next(
-            (turn.get("timestamp") for turn in reversed(history) if turn.get("timestamp")),
-            entry.get("started_at"),
-        )
         items.append(
             ResumeMenuItem(
                 session_id=sid,
                 title=title,
-                activity_at=activity_at,
+                activity_at=entry.get("activity_at") or entry.get("started_at"),
             )
         )
     if not items:
