@@ -50,6 +50,7 @@ def test_picker_recalculates_viewport_after_terminal_resize(monkeypatch: Any) ->
     monkeypatch.setattr(resume_picker, "leave_inline_menu", lambda: None)
     monkeypatch.setattr(resume_picker, "erase_menu_lines", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(resume_picker, "read_menu_action", lambda: next(actions))
+    monkeypatch.setattr(resume_picker, "repl_tty_interactive", lambda: True)
 
     def _draw(*_args: Any, **kwargs: Any) -> int:
         visible_rows.append(kwargs["visible_rows"])
@@ -69,6 +70,29 @@ def test_picker_recalculates_viewport_after_terminal_resize(monkeypatch: Any) ->
 
     assert picked is None
     assert visible_rows == [17, 3]
+
+
+def test_picker_does_not_enter_raw_mode_without_tty(monkeypatch: Any) -> None:
+    entered_raw_mode: list[bool] = []
+    monkeypatch.setattr(resume_picker, "repl_tty_interactive", lambda: False)
+    monkeypatch.setattr(
+        resume_picker,
+        "enter_inline_menu",
+        lambda: entered_raw_mode.append(True),
+    )
+
+    picked = resume_picker.choose_resume_session(
+        [
+            resume_picker.ResumeMenuItem(
+                session_id="session-a",
+                title="Investigate latency",
+                activity_at=datetime.now(UTC),
+            )
+        ]
+    )
+
+    assert picked is None
+    assert entered_raw_mode == []
 
 
 def test_interactive_resume_separates_picker_from_result(monkeypatch: Any) -> None:

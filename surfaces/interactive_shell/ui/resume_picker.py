@@ -15,6 +15,7 @@ from surfaces.shared.terminal.components.choice_menu import (
     leave_inline_menu,
     menu_columns,
     read_menu_action,
+    repl_tty_interactive,
     write_menu_line,
 )
 from surfaces.shared.terminal.prompt_layout import clip_prompt_text, prompt_text_width
@@ -145,7 +146,7 @@ def _draw(
 
 def choose_resume_session(items: Sequence[ResumeMenuItem]) -> str | None:
     """Select a conversation by scrolling a bounded terminal viewport."""
-    if not items:
+    if not items or not repl_tty_interactive():
         return None
     oldest = datetime.min.replace(tzinfo=UTC)
     ordered = sorted(items, key=lambda item: _as_datetime(item.activity_at) or oldest, reverse=True)
