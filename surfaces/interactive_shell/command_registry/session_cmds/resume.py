@@ -27,7 +27,7 @@ from surfaces.shared.terminal.components.choice_menu import (
     repl_tty_interactive,
 )
 
-_RECENT_SESSION_SCAN_LIMIT = 200
+_RECENT_CONVERSATION_LIMIT = 200
 
 
 def _record_resume_slash(
@@ -51,7 +51,10 @@ def _interactive_resume_menu(session: Session, console: Console) -> bool:
     """Show recent conversations and resume the selected one."""
     repo = default_session_repo()
     items: list[ResumeMenuItem] = []
-    for entry in repo.load_recent(_RECENT_SESSION_SCAN_LIMIT):
+    for entry in repo.load_recent(
+        _RECENT_CONVERSATION_LIMIT,
+        require_conversation=True,
+    ):
         sid = entry["session_id"]
         if sid == session.session_id:
             continue

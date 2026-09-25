@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 from datetime import UTC, datetime
 from io import StringIO
+from os import terminal_size
 from types import SimpleNamespace
 from typing import Any
 
@@ -35,6 +36,41 @@ def test_draw_starts_with_blank_line_and_counts_it(monkeypatch: Any, capsys: Any
     assert height == 7
 
 
+def test_picker_recalculates_viewport_after_terminal_resize(monkeypatch: Any) -> None:
+    sizes = iter((terminal_size((80, 24)), terminal_size((80, 10))))
+    actions = iter(("ignore", "cancel"))
+    visible_rows: list[int] = []
+
+    monkeypatch.setattr(
+        resume_picker.shutil,
+        "get_terminal_size",
+        lambda **_kwargs: next(sizes),
+    )
+    monkeypatch.setattr(resume_picker, "enter_inline_menu", lambda: None)
+    monkeypatch.setattr(resume_picker, "leave_inline_menu", lambda: None)
+    monkeypatch.setattr(resume_picker, "erase_menu_lines", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(resume_picker, "read_menu_action", lambda: next(actions))
+
+    def _draw(*_args: Any, **kwargs: Any) -> int:
+        visible_rows.append(kwargs["visible_rows"])
+        return kwargs["visible_rows"] + resume_picker._CHROME_ROWS
+
+    monkeypatch.setattr(resume_picker, "_draw", _draw)
+
+    picked = resume_picker.choose_resume_session(
+        [
+            resume_picker.ResumeMenuItem(
+                session_id="session-a",
+                title="Investigate latency",
+                activity_at=datetime.now(UTC),
+            )
+        ]
+    )
+
+    assert picked is None
+    assert visible_rows == [17, 3]
+
+
 def test_interactive_resume_separates_picker_from_result(monkeypatch: Any) -> None:
     resume_command = importlib.import_module(
         "surfaces.interactive_shell.command_registry.session_cmds.resume"
@@ -42,13 +78,17 @@ def test_interactive_resume_separates_picker_from_result(monkeypatch: Any) -> No
     events: list[str] = []
     resumed: dict[str, Any] = {}
     repo = SimpleNamespace(
-        load_recent=lambda _limit: [
-            {
-                "session_id": "target-session",
-                "conversation_title": "Investigate latency",
-                "activity_at": "2026-09-25T12:00:00+00:00",
-            }
-        ]
+        load_recent=lambda _limit, *, require_conversation: (
+            [
+                {
+                    "session_id": "target-session",
+                    "conversation_title": "Investigate latency",
+                    "activity_at": "2026-09-25T12:00:00+00:00",
+                }
+            ]
+            if require_conversation
+            else []
+        )
     )
 
     def _prepare_output() -> None:

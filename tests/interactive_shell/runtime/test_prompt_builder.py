@@ -35,6 +35,25 @@ def _terminal_output() -> Vt100_Output:
     )
 
 
+def test_resize_after_resume_preserves_rendered_transcript(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = Session()
+    session.history = [{"type": "slash", "text": "/resume target", "ok": True}]
+    builder = PromptBuilder(session, ReplState(), SpinnerState())
+    builder.pt_app = object()  # type: ignore[assignment]
+    clear_calls: list[bool] = []
+    monkeypatch.setattr(
+        "surfaces.interactive_shell.runtime.core.prompt_builder.repl_clear_screen",
+        lambda: clear_calls.append(True),
+    )
+
+    rerendered = builder._rerender_banner_if_idle()
+
+    assert rerendered is False
+    assert clear_calls == []
+
+
 @pytest.mark.asyncio
 async def test_enter_submits_without_restarting_the_prompt_application(
     monkeypatch: pytest.MonkeyPatch,

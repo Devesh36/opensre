@@ -127,7 +127,13 @@ class PromptBuilder:
 
         No startup spin here — SIGWINCH must stay instant.
         """
-        if self.session.terminal.submitted_turn_count > 0 or self.pt_app is None:
+        # /resume resets the local prompt counter while restoring persisted
+        # history, so history is also evidence that scrollback must survive.
+        if (
+            self.session.terminal.submitted_turn_count > 0
+            or self.session.history
+            or self.pt_app is None
+        ):
             return False
         repl_clear_screen()
         drain_stale_cpr_bytes()

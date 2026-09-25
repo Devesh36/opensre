@@ -16,7 +16,12 @@ from core.state.transcript_window import SESSION_SUMMARY_PREFIX
 class JsonlSessionRepo:
     """Read-only queries over v2 session files."""
 
-    def load_recent(self, n: int = 20) -> list[dict[str, Any]]:
+    def load_recent(
+        self,
+        n: int = 20,
+        *,
+        require_conversation: bool = False,
+    ) -> list[dict[str, Any]]:
         root = storage_paths.sessions_dir()
         if not root.exists():
             return []
@@ -28,7 +33,10 @@ class JsonlSessionRepo:
                 if loaded is None:
                     continue
                 header, entries = loaded
-                results.append(self._summary(path, header, entries))
+                summary = self._summary(path, header, entries)
+                if require_conversation and not summary.get("conversation_title"):
+                    continue
+                results.append(summary)
             if len(results) >= n:
                 break
         results.sort(key=lambda x: x.get("started_at") or "", reverse=True)
