@@ -18,11 +18,13 @@ from surfaces.interactive_shell.command_registry.session_cmds.resume_rendering i
 )
 from surfaces.interactive_shell.runtime import Session
 from surfaces.interactive_shell.ui import DIM, ERROR, HIGHLIGHT, WARNING
-from surfaces.shared.terminal.components.choice_menu import (
-    repl_choose_one,
-    repl_tty_interactive,
+from surfaces.interactive_shell.ui.resume_picker import (
+    ResumeMenuItem,
+    choose_resume_session,
 )
-from surfaces.shared.terminal.components.time_format import format_repl_timestamp
+from surfaces.shared.terminal.components.choice_menu import repl_tty_interactive
+
+_RECENT_SESSION_SCAN_LIMIT = 200
 
 
 def _record_resume_slash(
@@ -42,29 +44,47 @@ def _record_resume_slash(
     session.record("slash", text, ok=ok)
 
 
-def _interactive_resume_menu(session: Session, console: Console) -> bool:
-    """Show a numbered list of recent sessions and resume the selected one."""
-    from core.agent_harness.spi.defaults import default_session_repo
+def _conversation_title(messages: list[tuple[str, str]]) -> str:
+    """Find the first substantive user prompt for a stable session title."""
+    for role, content in messages:
+        if role != "user":
+            continue
+        title = " ".join(content.split())
+        if title and not title.startswith("/"):
+            return title
+    return ""
 
-    entries = [
-        e for e in default_session_repo().load_recent(10) if e["session_id"] != session.session_id
-    ]
-    if not entries:
-        console.print(f"[{DIM}]No previous sessions to resume.[/]")
+
+def _interactive_resume_menu(session: Session, console: Console) -> bool:
+    """Show recent conversations and resume the selected one."""
+    repo = default_session_repo()
+    items: list[ResumeMenuItem] = []
+    for entry in repo.load_recent(_RECENT_SESSION_SCAN_LIMIT):
+        sid = entry["session_id"]
+        if sid == session.session_id:
+            continue
+        saved = repo.load_session(sid)
+        title = _conversation_title(saved.get("cli_agent_messages") or []) if saved else ""
+        if not title:
+            continue
+        history = saved.get("history") or []
+        activity_at = next(
+            (turn.get("timestamp") for turn in reversed(history) if turn.get("timestamp")),
+            entry.get("started_at"),
+        )
+        items.append(
+            ResumeMenuItem(
+                session_id=sid,
+                title=title,
+                activity_at=activity_at,
+            )
+        )
+    if not items:
+        console.print(f"[{DIM}]No previous conversations to resume.[/]")
         return True
 
-    choices: list[tuple[str, str]] = []
-    for entry in entries:
-        sid = entry["session_id"]
-        short_id = sid[:8]
-        name = entry.get("name") or f"[{short_id}]"
-        started_str = format_repl_timestamp(entry.get("started_at"), style="compact")
-        label = f"{name[:40]:<40}  {short_id}  {started_str}"
-        choices.append((sid, label))
-    choices.append(("done", "done"))
-
-    picked = repl_choose_one(title="resume session", breadcrumb="/resume", choices=choices)
-    if picked is None or picked == "done":
+    picked = choose_resume_session(items)
+    if picked is None:
         return True
 
     slash_command = f"/resume {picked[:8]}"
