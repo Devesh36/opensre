@@ -77,22 +77,32 @@ def test_interactive_resume_separates_picker_from_result(monkeypatch: Any) -> No
     )
     events: list[str] = []
     resumed: dict[str, Any] = {}
-    repo = SimpleNamespace(
-        load_recent=lambda _limit, *, require_conversation: (
-            [
-                {
-                    "session_id": "target-session",
-                    "conversation_title": "Investigate latency",
-                    "activity_at": "2026-09-25T12:00:00+00:00",
-                }
-            ]
-            if require_conversation
-            else []
-        )
-    )
+    loads: list[tuple[int, bool]] = []
+    offered_sessions: list[str] = []
+
+    def _load_recent(limit: int, *, require_conversation: bool) -> list[dict[str, str]]:
+        loads.append((limit, require_conversation))
+        return [
+            {
+                "session_id": "current-session",
+                "conversation_title": "Current work",
+                "activity_at": "2026-09-25T12:01:00+00:00",
+            },
+            {
+                "session_id": "target-session",
+                "conversation_title": "Investigate latency",
+                "activity_at": "2026-09-25T12:00:00+00:00",
+            },
+        ]
+
+    repo = SimpleNamespace(load_recent=_load_recent)
 
     def _prepare_output() -> None:
         events.append("gap")
+
+    def _choose(items: list[resume_picker.ResumeMenuItem]) -> str:
+        offered_sessions.extend(item.session_id for item in items)
+        return "target-session"
 
     def _do_resume(
         prefix: str,
@@ -109,7 +119,7 @@ def test_interactive_resume_separates_picker_from_result(monkeypatch: Any) -> No
     monkeypatch.setattr(
         resume_command,
         "choose_resume_session",
-        lambda _items: "target-session",
+        _choose,
     )
     monkeypatch.setattr(resume_command, "prepare_repl_output_line", _prepare_output)
     monkeypatch.setattr(resume_command, "_do_resume", _do_resume)
@@ -120,6 +130,8 @@ def test_interactive_resume_separates_picker_from_result(monkeypatch: Any) -> No
     )
 
     assert handled is True
+    assert loads == [(resume_command._RECENT_CONVERSATION_LIMIT + 1, True)]
+    assert offered_sessions == ["target-session"]
     assert events == ["gap", "resume"]
     assert resumed == {
         "prefix": "target-session",
