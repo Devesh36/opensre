@@ -21,6 +21,7 @@ from surfaces.shared.terminal.prompt_layout import clip_prompt_text, prompt_text
 
 _MAX_VISIBLE_ROWS = 18
 _AGE_WIDTH = 8
+_CHROME_ROWS = 6
 _FOOTER = "  Enter resume   ↑↓/j/k move   Esc exit"
 
 
@@ -103,6 +104,7 @@ def _draw(
     width = menu_columns()
     if erase_lines:
         erase_menu_lines(erase_lines)
+    write_menu_line()
     write_menu_line(
         f"{ui_theme.PROMPT_ACCENT_ANSI}"
         f"{clip_prompt_text('  Resume session', width)}{ui_theme.ANSI_RESET}"
@@ -130,7 +132,7 @@ def _draw(
         f"{ui_theme.DIM_COUNTER_ANSI}{clip_prompt_text(_FOOTER, width)}{ui_theme.ANSI_RESET}"
     )
     sys.stdout.flush()
-    return visible_rows + 5
+    return visible_rows + _CHROME_ROWS
 
 
 def choose_resume_session(items: Sequence[ResumeMenuItem]) -> str | None:

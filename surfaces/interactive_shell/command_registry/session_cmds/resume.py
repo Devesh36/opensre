@@ -22,7 +22,10 @@ from surfaces.interactive_shell.ui.resume_picker import (
     ResumeMenuItem,
     choose_resume_session,
 )
-from surfaces.shared.terminal.components.choice_menu import repl_tty_interactive
+from surfaces.shared.terminal.components.choice_menu import (
+    prepare_repl_output_line,
+    repl_tty_interactive,
+)
 
 _RECENT_SESSION_SCAN_LIMIT = 200
 
@@ -70,6 +73,7 @@ def _interactive_resume_menu(session: Session, console: Console) -> bool:
     if picked is None:
         return True
 
+    prepare_repl_output_line()
     slash_command = f"/resume {picked[:8]}"
     if not _do_resume(picked, session, console, slash_command=slash_command):
         _record_resume_slash(session, [], picked_id=picked, ok=False)
