@@ -67,6 +67,9 @@ def admit_hosted_credits() -> None:
     upgrade_url = read.usage_url or usage_page_url()
     raise OpenSRECreditsExhaustedError(
         f"OpenSRE {CREDIT_EXHAUSTED_MARKER}. Your hosted credits are exhausted. "
+        "The OpenSRE-hosted model runs on hosted credits. On the Usage page, "
+        "choose Top-up credits to add credits now; plans include a monthly "
+        "hosted-credit allowance, which you can change with Upgrade your plan. "
         f"Upgrade or top up at {upgrade_url}.",
         upgrade_url=upgrade_url,
     )

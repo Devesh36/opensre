@@ -19,7 +19,12 @@ def reraise_cli_runtime_error(exc: BaseException) -> NoReturn:
         destination = exc.upgrade_url or "the OpenSRE Usage page"
         raise OpenSREError(
             str(exc),
-            suggestion=f"Upgrade your plan or buy a credit top-up at {destination}.",
+            suggestion=(
+                "Open Usage and choose “Top-up credits” to add hosted credits now. "
+                "Plans include a monthly hosted-credit allowance; choose “Upgrade "
+                "your plan” to change it. "
+                f"{destination}"
+            ),
         ) from exc
 
     if isinstance(exc, LLMCreditExhaustedError):

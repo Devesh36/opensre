@@ -82,17 +82,18 @@ _UPGRADE_SENTENCE_LEAD = " Upgrade or top up at"
 
 
 def _render_credits_exhausted(console: StreamingConsole, exc: Exception) -> None:
-    """One error line, then the way out: a clickable top-up link or ``/model``."""
+    """Explain how to add hosted credits, then show the Usage link and alternatives."""
     message = str(exc).split(_UPGRADE_SENTENCE_LEAD, 1)[0].strip()
     console.print(f"[{ERROR}]turn error:[/] {escape(message)}")
-    hint = Text("Top up or upgrade: ", style=str(DIM))
+    hint = Text("Usage → Top-up credits: ", style=str(DIM))
     url = getattr(exc, "upgrade_url", None)
     if isinstance(url, str) and url:
         hint.append_text(hyperlink(url, style=f"underline {HIGHLIGHT}"))
     else:
         hint.append("the OpenSRE usage page", style=str(DIM))
     hint.append(
-        " · /credits shows the balance · /account usage opens it · /model switches provider",
+        " · Upgrade your plan for a different monthly allowance · /credits shows balance"
+        " · /account usage opens Usage · /model switches provider",
         style=str(DIM),
     )
     console.print(hint)

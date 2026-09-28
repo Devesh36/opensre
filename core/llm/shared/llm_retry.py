@@ -159,7 +159,10 @@ def maybe_raise_credit_exhausted(provider_name: str, err: BaseException) -> None
         )
         destination = f" Upgrade or top up at {upgrade_url}." if upgrade_url else ""
         raise OpenSRECreditsExhaustedError(
-            f"OpenSRE {CREDIT_EXHAUSTED_MARKER}. Your hosted credits are exhausted.{destination}",
+            f"OpenSRE {CREDIT_EXHAUSTED_MARKER}. Your hosted credits are exhausted. "
+            "The OpenSRE-hosted model runs on hosted credits. On the Usage page, "
+            "choose Top-up credits to add credits now; plans include a monthly "
+            f"hosted-credit allowance, which you can change with Upgrade your plan.{destination}",
             upgrade_url=upgrade_url,
         ) from err
 
