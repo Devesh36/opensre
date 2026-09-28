@@ -58,7 +58,7 @@ def _interactive_resume_menu(session: Session, console: Console) -> bool:
         sid = entry["session_id"]
         if sid == session.session_id:
             continue
-        title = entry.get("conversation_title") or ""
+        title = entry.get("name") or entry.get("conversation_title") or ""
         if not title:
             continue
         items.append(

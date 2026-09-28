@@ -7,6 +7,8 @@ from surfaces.interactive_shell.command_registry.session_cmds.lifecycle import (
     _cmd_clear,
     _cmd_compact,
     _cmd_new,
+    _cmd_rename,
+    _validate_rename_args,
 )
 from surfaces.interactive_shell.command_registry.session_cmds.list import _cmd_sessions
 from surfaces.interactive_shell.command_registry.session_cmds.resume import (
@@ -34,6 +36,14 @@ COMMANDS: list[SlashCommand] = [
             "Accepts a session ID prefix, entry ref, or name substring (e.g. /resume redis).",
             "Replaces the current session's LLM conversation context; warns if messages exist.",
         ),
+    ),
+    SlashCommand(
+        "/rename",
+        "Rename the current session.",
+        _cmd_rename,
+        usage=("/rename <name>", "/rename --reset"),
+        validate_args=_validate_rename_args,
+        first_arg_completions=(("--reset", "restore the automatically generated title"),),
     ),
     SlashCommand(
         "/new",
