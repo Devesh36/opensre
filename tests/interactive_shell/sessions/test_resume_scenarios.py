@@ -197,7 +197,7 @@ class TestResumeScenarioMatrix:
         context = dict(session.accumulated_context)
         before = path.read_bytes()
         history_size = len(session.history)
-        name = "[b]weekly review[/b]"
+        name = "[b]weekly  review[/b]"
 
         dispatch_slash(f"/rename '{name}'", session, console)
 

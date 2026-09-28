@@ -230,11 +230,12 @@ def _lookup_resume_session_data(
 
     repo = default_session_repo()
     data = repo.load_session(prefix)
-    if data is None and len(prefix) >= 3:
+    name_query = " ".join(prefix.lower().split())
+    if data is None and len(name_query) >= 3:
         candidates = [
             e
             for e in repo.load_recent(20)
-            if prefix.lower() in (e.get("name") or "").lower()
+            if name_query in " ".join((e.get("name") or "").lower().split())
             and e["session_id"] != session.session_id
         ]
         if len(candidates) == 1:
