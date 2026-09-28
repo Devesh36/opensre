@@ -76,14 +76,9 @@ def _reduce_agent_presentation(
     raise ValueError(f"Unknown agent event type: {event.type!r}")
 
 
-# The exception text carries the destination for surfaces that print plain
-# text; the shell shows it once, as a link, on its own line.
-_UPGRADE_SENTENCE_LEAD = " Upgrade or top up at"
-
-
 def _render_credits_exhausted(console: StreamingConsole, exc: Exception) -> None:
     """Explain how to add hosted credits, then show the Usage link and alternatives."""
-    message = str(exc).split(_UPGRADE_SENTENCE_LEAD, 1)[0].strip()
+    message = str(exc).split(".", 1)[0].strip()
     console.print(f"[{ERROR}]turn error:[/] {escape(message)}")
     hint = Text("Usage → Top-up credits: ", style=str(DIM))
     url = getattr(exc, "upgrade_url", None)

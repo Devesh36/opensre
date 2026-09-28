@@ -1,4 +1,4 @@
-"""The turn-error render adds ``/model`` and ``/auth login`` recovery hints on a credit-exhausted error."""
+"""Render provider and hosted-credit recovery guidance for turn errors."""
 
 from __future__ import annotations
 
@@ -80,6 +80,8 @@ def test_opensre_credit_exhaustion_shows_checkout_instead_of_provider_hints() ->
     )
     # Arrange/Act above. Assert: the URL appears once, as the way out; no provider hints.
     assert output.count(upgrade_url) == 1
+    assert output.count("Top-up credits") == 1
+    assert "monthly hosted-credit allowance" not in output
     assert "/auth login" not in output
     assert "Usage → Top-up credits: " in output
     assert "/account usage" in output

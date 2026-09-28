@@ -22,8 +22,7 @@ def reraise_cli_runtime_error(exc: BaseException) -> NoReturn:
             suggestion=(
                 "Open Usage and choose “Top-up credits” to add hosted credits now. "
                 "Plans include a monthly hosted-credit allowance; choose “Upgrade "
-                "your plan” to change it. "
-                f"{destination}"
+                f"your plan” to change it. Open {destination}."
             ),
         ) from exc
 

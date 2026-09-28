@@ -25,7 +25,7 @@ def test_credit_exhausted_error_maps_to_opensre_error_with_auth_hint() -> None:
     assert "opensre auth login" in err.suggestion
 
 
-def test_opensre_credit_exhaustion_maps_to_stripe_upgrade_hint() -> None:
+def test_opensre_credit_exhaustion_maps_to_hosted_credit_guidance() -> None:
     upgrade_url = "https://app.opensre.dev/usage"
     exc = OpenSRECreditsExhaustedError(
         "OpenSRE credits exhausted",
@@ -37,7 +37,18 @@ def test_opensre_credit_exhaustion_maps_to_stripe_upgrade_hint() -> None:
 
     assert exc_info.value.suggestion is not None
     assert upgrade_url in exc_info.value.suggestion
-    assert "credit top-up" in exc_info.value.suggestion
+    assert "Top-up credits" in exc_info.value.suggestion
+    assert f"Open {upgrade_url}." in exc_info.value.suggestion
+
+
+def test_opensre_credit_exhaustion_without_url_names_usage_destination() -> None:
+    exc = OpenSRECreditsExhaustedError("OpenSRE credits exhausted")
+
+    with pytest.raises(OpenSREError) as exc_info:
+        reraise_cli_runtime_error(exc)
+
+    assert exc_info.value.suggestion is not None
+    assert "Open the OpenSRE Usage page." in exc_info.value.suggestion
 
 
 def test_anthropic_model_not_found_raises_opensre_error() -> None:
