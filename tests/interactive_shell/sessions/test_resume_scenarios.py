@@ -186,6 +186,9 @@ class TestResumeScenarioMatrix:
     ) -> None:
         target_id = "aaaa1111-2222-3333-4444-555566667777"
         path = _write_finalized_session(isolated_sessions, target_id)
+        other_id = "bbbb2222-3333-4444-5555-666677778888"
+        _write_finalized_session(isolated_sessions, other_id)
+        SessionState.append_session_name(other_id, "weekly planning")
         session = Session()
         _open_current(session)
         console, _ = _capture()
@@ -194,7 +197,7 @@ class TestResumeScenarioMatrix:
         context = dict(session.accumulated_context)
         before = path.read_bytes()
         history_size = len(session.history)
-        name = "[bold]checkout[/bold]"
+        name = "[b]weekly review[/b]"
 
         dispatch_slash(f"/rename '{name}'", session, console)
 
@@ -227,7 +230,7 @@ class TestResumeScenarioMatrix:
         ):
             dispatch_slash("/resume", resumed, console)
         assert picker.call_args.args[0][0].title == name
-        dispatch_slash("/resume checkout", resumed, console)
+        dispatch_slash("/resume weekly review", resumed, console)
         assert resumed.session_id == target_id
         assert resumed.agent.messages == messages
         dispatch_slash("/rename --reset", resumed, console)

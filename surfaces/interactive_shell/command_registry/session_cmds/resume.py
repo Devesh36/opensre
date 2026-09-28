@@ -301,7 +301,7 @@ def _cmd_resume(session: Session, console: Console, args: list[str]) -> bool:
         _record_resume_slash(session, args)
         return True
 
-    prefix = args[0].strip()
+    prefix = " ".join(args).strip()
     session_prefix = prefix.split(":", 1)[0]
 
     if session.session_id.startswith(session_prefix) and ":" not in prefix:
