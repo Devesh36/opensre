@@ -181,6 +181,30 @@ def _require_live_llm_for_repl_planner() -> None:
 class TestResumeScenarioMatrix:
     """Scenario coverage for /resume session adoption and JSONL persistence."""
 
+    @pytest.mark.parametrize("already_current", [False, True])
+    def test_resume_distinguishes_names_with_different_spacing(
+        self, isolated_sessions: Path, already_current: bool
+    ) -> None:
+        target_id = "aaaa1111-2222-3333-4444-555566667777"
+        other_id = "bbbb2222-3333-4444-5555-666677778888"
+        for session_id, name in ((target_id, "weekly review"), (other_id, "weekly  review")):
+            _write_finalized_session(isolated_sessions, session_id, chat_text=name)
+            SessionState.append_session_name(session_id, name)
+        session = Session()
+        _open_current(session)
+        console, _ = _capture()
+        if already_current:
+            dispatch_slash(f"/resume {target_id}", session, console)
+        console, output = _capture()
+
+        dispatch_slash("/resume weekly review", session, console)
+
+        assert session.session_id == target_id
+        assert session.agent.messages[0] == ("user", "weekly review")
+        if already_current:
+            assert "current session" in output.getvalue()
+            assert "resumed session" not in output.getvalue()
+
     def test_rename_persists_for_listing_and_resume_then_resets(
         self, isolated_sessions: Path
     ) -> None:

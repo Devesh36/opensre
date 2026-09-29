@@ -232,13 +232,16 @@ def _lookup_resume_session_data(
     data = repo.load_session(prefix)
     name_query = " ".join(prefix.lower().split())
     if data is None and len(name_query) >= 3:
-        candidates = [
-            e
-            for e in repo.load_recent(20)
-            if name_query in " ".join((e.get("name") or "").lower().split())
-            and e["session_id"] != session.session_id
-        ]
+        recent = repo.load_recent(20)
+        candidates = [e for e in recent if (e.get("name") or "").lower() == prefix.lower()]
+        if not candidates:
+            candidates = [
+                e for e in recent if name_query in " ".join((e.get("name") or "").lower().split())
+            ]
         if len(candidates) == 1:
+            if candidates[0]["session_id"] == session.session_id:
+                console.print(f"[{DIM}]'{escape(prefix)}' is the current session.[/]")
+                return None
             data = repo.load_session(candidates[0]["session_id"])
         elif len(candidates) > 1:
             console.print(
