@@ -64,16 +64,19 @@ def test_edit_and_restore_remaps_progress_once_per_duplicate() -> None:
     assert goal.status == SessionGoalStatus.PAUSED
 
 
-def test_edit_and_restore_preserves_explicit_items_for_prose_condition() -> None:
+@pytest.mark.parametrize("condition", ["Investigate latency", "1. Inspect API 2. Inspect database"])
+def test_edit_and_restore_preserves_explicit_items_for_prose_condition(condition: str) -> None:
     session = _session()
-    goal = build_session_goal("Investigate latency", checklist=("Check API", "Check database"))
+    goal = build_session_goal(condition, checklist=("Check API", "Check database"))
     attach_session_goal(session, goal.with_completed(frozenset({0})))
+    session = _edit_and_restore(session, condition)
     restored = _edit_and_restore(session, "Investigate latency in production")
     goal = restored.session_goal
     assert goal is not None
     assert goal.checklist == ("Check API", "Check database")
     assert goal.completed == frozenset({0})
     assert goal.step_count == 2
+    assert goal.checklist_explicit is True
     assert session.terminal.pending_prompt_default == goal.condition
 
 
