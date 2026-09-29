@@ -205,6 +205,24 @@ class TestResumeScenarioMatrix:
             assert "current session" in output.getvalue()
             assert "resumed session" not in output.getvalue()
 
+    @pytest.mark.parametrize("current_name", ["weekly", "weekly planning"])
+    def test_resume_name_search_ignores_current_session(
+        self, isolated_sessions: Path, current_name: str
+    ) -> None:
+        target_id = "aaaa1111-2222-3333-4444-555566667777"
+        _write_finalized_session(isolated_sessions, target_id, chat_text="weekly notes")
+        SessionState.append_session_name(target_id, "weekly notes")
+        session = Session()
+        _open_current(session)
+        SessionState.append_session_name(session.session_id, current_name)
+        console, output = _capture()
+
+        dispatch_slash("/resume weekly", session, console)
+
+        assert session.session_id == target_id
+        assert session.agent.messages[0] == ("user", "weekly notes")
+        assert "resumed session" in output.getvalue()
+
     def test_rename_persists_for_listing_and_resume_then_resets(
         self, isolated_sessions: Path
     ) -> None:

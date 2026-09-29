@@ -234,14 +234,20 @@ def _lookup_resume_session_data(
     if data is None and len(name_query) >= 3:
         recent = repo.load_recent(20)
         candidates = [e for e in recent if (e.get("name") or "").lower() == prefix.lower()]
+        current_exact = any(e["session_id"] == session.session_id for e in candidates)
+        candidates = [e for e in candidates if e["session_id"] != session.session_id]
         if not candidates:
-            candidates = [
-                e for e in recent if name_query in " ".join((e.get("name") or "").lower().split())
-            ]
+            for entry in recent:
+                if entry["session_id"] == session.session_id:
+                    continue
+                name = " ".join((entry.get("name") or "").lower().split())
+                # An exact current name must not select a whitespace-only variant.
+                if name_query in name and (not current_exact or name != name_query):
+                    candidates.append(entry)
+        if not candidates and current_exact:
+            console.print(f"[{DIM}]'{escape(prefix)}' is the current session.[/]")
+            return None
         if len(candidates) == 1:
-            if candidates[0]["session_id"] == session.session_id:
-                console.print(f"[{DIM}]'{escape(prefix)}' is the current session.[/]")
-                return None
             data = repo.load_session(candidates[0]["session_id"])
         elif len(candidates) > 1:
             console.print(
