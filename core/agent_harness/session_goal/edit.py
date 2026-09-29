@@ -22,8 +22,8 @@ def edit_session_goal(session: Any, goal: SessionGoal, condition: str) -> Sessio
     """Replace the condition, preserving progress only for unchanged checklist items."""
     condition = truncate_message(strip_shell_prompt_chrome(condition), MAX_GOAL_CONDITION_CHARS)
     checklist = derive_session_goal_checklist(condition)
-    if not checklist and goal.checklist != derive_session_goal_checklist(goal.condition):
-        # Separately supplied items remain required unless the edit supplies new steps.
+    if not checklist and not derive_session_goal_checklist(goal.condition):
+        # Prose-only goals retain separately supplied items across prose edits.
         checklist = goal.checklist
     if (
         condition == goal.condition

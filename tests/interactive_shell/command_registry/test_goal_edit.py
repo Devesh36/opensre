@@ -3,6 +3,7 @@
 from io import StringIO
 from typing import Any
 
+import pytest
 from rich.console import Console
 
 from core.agent_harness.session import InMemorySessionStore, SessionManager
@@ -76,7 +77,8 @@ def test_edit_and_restore_preserves_explicit_items_for_prose_condition() -> None
     assert session.terminal.pending_prompt_default == goal.condition
 
 
-def test_unchanged_edit_repairs_a_restored_legacy_checklist() -> None:
+@pytest.mark.parametrize("remove_steps", [False, True])
+def test_edit_repairs_a_restored_legacy_checklist(remove_steps: bool) -> None:
     session = _session()
     condition = "1. Check API 2. Check database 3. Check queue"
     SessionManager.for_session(session).restore_context(
@@ -93,12 +95,14 @@ def test_unchanged_edit_repairs_a_restored_legacy_checklist() -> None:
             }
         },
     )
-    restored = _edit_and_restore(session, condition)
+    restored = _edit_and_restore(session, "Investigate latency" if remove_steps else condition)
     goal = restored.session_goal
     assert goal is not None
-    assert goal.checklist == ("Check API", "Check database", "Check queue")
-    assert goal.step_count == 3
-    assert goal.completed == frozenset({0})
+    assert goal.checklist == (
+        () if remove_steps else ("Check API", "Check database", "Check queue")
+    )
+    assert goal.step_count == (None if remove_steps else 3)
+    assert goal.completed == (frozenset() if remove_steps else frozenset({0}))
 
 
 def test_edit_and_restore_keeps_execution_restricted_after_discarding_plan() -> None:
