@@ -21,10 +21,17 @@ from infrastructure.evidence.evidence_compaction import truncate_message
 def edit_session_goal(session: Any, goal: SessionGoal, condition: str) -> SessionGoal:
     """Replace the condition, preserving progress only for unchanged checklist items."""
     condition = truncate_message(strip_shell_prompt_chrome(condition), MAX_GOAL_CONDITION_CHARS)
-    if condition == goal.condition:
+    checklist = derive_session_goal_checklist(condition)
+    if not checklist and goal.checklist != derive_session_goal_checklist(goal.condition):
+        # Separately supplied items remain required unless the edit supplies new steps.
+        checklist = goal.checklist
+    if (
+        condition == goal.condition
+        and checklist == goal.checklist
+        and goal.step_count == (len(checklist) or None)
+    ):
         return goal
 
-    checklist = derive_session_goal_checklist(condition)
     prior_indices: dict[str, deque[int]] = {}
     for index, item in enumerate(goal.checklist):
         prior_indices.setdefault(item, deque()).append(index)
@@ -56,8 +63,12 @@ def edit_session_goal(session: Any, goal: SessionGoal, condition: str) -> Sessio
         last_progress_turns_used=goal.turns_used,
     )
     # A prior plan may contain removed work or credit a changed step by fuzzy match.
+    plan_only = getattr(session, "plan_only_until_authorized", False)
     discard_task_plan(session)
-    return attach_session_goal(session, refresh_session_goal_reason(edited))
+    edited = attach_session_goal(session, refresh_session_goal_reason(edited))
+    if plan_only:
+        session.plan_only_until_authorized = True
+    return edited
 
 
 __all__ = ["edit_session_goal"]
