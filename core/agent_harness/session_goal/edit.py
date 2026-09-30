@@ -37,6 +37,7 @@ def edit_session_goal(session: Any, goal: SessionGoal, condition: str) -> Sessio
         and goal.step_count == (len(checklist) or None)
     ):
         return goal
+    condition_changed = condition != goal.condition
 
     prior_indices: dict[str, deque[int]] = {}
     for index, item in enumerate(goal.checklist):
@@ -67,6 +68,8 @@ def edit_session_goal(session: Any, goal: SessionGoal, condition: str) -> Sessio
         last_answer="",
         last_verdict="",
         verdict_repeated=False,
+        tool_evidence=() if condition_changed else goal.tool_evidence,
+        tool_success_seen=False if condition_changed else goal.tool_success_seen,
         last_progress_turns_used=goal.turns_used,
     )
     # A prior plan may contain removed work or credit a changed step by fuzzy match.

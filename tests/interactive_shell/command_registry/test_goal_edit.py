@@ -7,13 +7,16 @@ import pytest
 from rich.console import Console
 
 from core.agent_harness.session import InMemorySessionStore, SessionManager
+from core.agent_harness.session_goal.evaluate import evaluate_session_goal
 from core.agent_harness.session_goal.goal import (
     SessionGoal,
     SessionGoalStatus,
     attach_session_goal,
     build_session_goal,
 )
+from core.agent_harness.session_goal.judge import SessionGoalJudgeVerdict
 from core.agent_harness.task_plan import PlanStep, PlanStepStatus, TaskPlan
+from core.agent_harness.turns.turn_results import ToolCallingTurnResult, TurnResult
 from surfaces.interactive_shell.command_registry.session_cmds.goal import _cmd_goal
 from surfaces.interactive_shell.session import Session
 from tools.interactive_shell.shared.execution_policy import allow_tool, apply_plan_only_gate
@@ -121,3 +124,34 @@ def test_edit_and_restore_keeps_execution_restricted_after_discarding_plan() -> 
             allow_tool("shell"), plan_only_active=current.plan_only_until_authorized
         )
         assert verdict.verdict == "ask"
+
+
+@pytest.mark.parametrize("old_evidence", [("old tool result",), None])
+def test_edit_and_restore_resets_prior_tool_evidence(
+    old_evidence: tuple[str, ...] | None,
+) -> None:
+    session = _session()
+    attach_session_goal(
+        session,
+        SessionGoal(
+            condition="Investigate API latency",
+            tool_evidence=old_evidence,
+            tool_success_seen=True,
+        ),
+    )
+    restored = _edit_and_restore(session, "Investigate database latency")
+    goal = restored.session_goal
+    assert goal is not None
+    assert goal.tool_evidence == ()
+    assert goal.tool_success_seen is False
+
+    def _reached(**_kwargs: object) -> SessionGoalJudgeVerdict:
+        return SessionGoalJudgeVerdict(verdict="GOAL_REACHED", reason="investigated")
+
+    no_tool = TurnResult("cli_agent_handled", ToolCallingTurnResult(0, 0, 0, False, True), "Done")
+    assert evaluate_session_goal(goal, no_tool, judge=_reached).status == SessionGoalStatus.ACTIVE
+
+    new_tool = TurnResult("cli_agent_handled", ToolCallingTurnResult(1, 1, 1, False, True), "Done")
+    assert (
+        evaluate_session_goal(goal, new_tool, judge=_reached).status == SessionGoalStatus.ACHIEVED
+    )
