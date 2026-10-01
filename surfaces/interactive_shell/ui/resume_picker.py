@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from infrastructure.terminal import theme as ui_theme
-from surfaces.interactive_shell.ui.session_picker import _choose_scrollable
+from surfaces.interactive_shell.ui.scrollable_picker import choose_scrollable
 from surfaces.shared.terminal.components.choice_menu import (
     erase_menu_lines,
     menu_columns,
@@ -27,6 +27,7 @@ class ResumeMenuItem:
     session_id: str
     title: str
     activity_at: str | datetime | int | float | None
+    is_current: bool = False
 
 
 def _as_datetime(value: str | datetime | int | float | None) -> datetime | None:
@@ -69,7 +70,9 @@ def _row(item: ResumeMenuItem, *, selected: bool, index: int, width: int, now: d
     age = clip_prompt_text(_time_ago(item.activity_at, now), _AGE_WIDTH)
     prefix = clip_prompt_text(f"  {'›' if selected else ' '} {age:<{_AGE_WIDTH}}  ", width)
     title_width = max(0, width - prompt_text_width(prefix))
-    title = clip_prompt_text(item.title, title_width)
+    title = clip_prompt_text(
+        f"● current  {item.title}" if item.is_current else item.title, title_width
+    )
     padding = " " * max(0, width - prompt_text_width(prefix + title))
     if selected:
         return (
@@ -85,7 +88,8 @@ def _row(item: ResumeMenuItem, *, selected: bool, index: int, width: int, now: d
     background = ui_theme.INPUT_SURFACE_BG_ANSI if index % 2 else ui_theme.SURFACE_BG_ANSI
     return (
         f"{background}{ui_theme.DIM_COUNTER_ANSI}{prefix}"
-        f"{title_styles[index % len(title_styles)]}{title}{padding}{ui_theme.ANSI_RESET}"
+        f"{ui_theme.HIGHLIGHT_ANSI if item.is_current else title_styles[index % len(title_styles)]}"
+        f"{title}{padding}{ui_theme.ANSI_RESET}"
     )
 
 
@@ -97,6 +101,7 @@ def _draw(
     visible_rows: int,
     erase_lines: int,
     now: datetime,
+    heading: str = "Resume session",
 ) -> int:
     width = menu_columns()
     if erase_lines:
@@ -104,7 +109,7 @@ def _draw(
     write_menu_line()
     write_menu_line(
         f"{ui_theme.PROMPT_ACCENT_ANSI}"
-        f"{clip_prompt_text('  Resume session', width)}{ui_theme.ANSI_RESET}"
+        f"{clip_prompt_text(f'  {heading}', width)}{ui_theme.ANSI_RESET}"
     )
     write_menu_line(f"{ui_theme.DIM_COUNTER_ANSI}{'─' * width}{ui_theme.ANSI_RESET}")
     end = min(len(items), top + visible_rows)
@@ -125,22 +130,31 @@ def _draw(
         f"{ui_theme.DIM_COUNTER_ANSI}{clip_prompt_text(status, width)}{ui_theme.ANSI_RESET}"
     )
     write_menu_line(f"{ui_theme.DIM_COUNTER_ANSI}{'─' * width}{ui_theme.ANSI_RESET}")
+    footer = (
+        "  Enter already here   ↑↓/j/k move   Esc exit" if items[selected].is_current else _FOOTER
+    )
     write_menu_line(
-        f"{ui_theme.DIM_COUNTER_ANSI}{clip_prompt_text(_FOOTER, width)}{ui_theme.ANSI_RESET}"
+        f"{ui_theme.DIM_COUNTER_ANSI}{clip_prompt_text(footer, width)}{ui_theme.ANSI_RESET}"
     )
     sys.stdout.flush()
     return visible_rows + _CHROME_ROWS
 
 
-def choose_resume_session(items: Sequence[ResumeMenuItem]) -> str | None:
+def choose_resume_session(
+    items: Sequence[ResumeMenuItem],
+    *,
+    heading: str = "Resume session",
+) -> str | None:
     """Select a conversation by scrolling a bounded terminal viewport."""
     oldest = datetime.min.replace(tzinfo=UTC)
     ordered = sorted(items, key=lambda item: _as_datetime(item.activity_at) or oldest, reverse=True)
     now = datetime.now(UTC)
-    picked = _choose_scrollable(
+    selected = next((index for index, item in enumerate(ordered) if not item.is_current), 0)
+    picked = choose_scrollable(
         ordered,
-        draw=lambda rows, **kwargs: _draw(rows, now=now, **kwargs),
+        draw=lambda rows, **kwargs: _draw(rows, now=now, heading=heading, **kwargs),
         max_visible_rows=_MAX_VISIBLE_ROWS,
         chrome_rows=_CHROME_ROWS,
+        selected=selected,
     )
     return picked.session_id if picked is not None else None

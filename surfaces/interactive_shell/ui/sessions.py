@@ -51,6 +51,9 @@ def session_menu_items(
                 ),
                 turns=(str(entry["total_turns"]) if entry.get("total_turns") is not None else "—"),
                 is_current=is_current,
+                activity_at=entry.get("activity_at")
+                or entry.get("started_at")
+                or (current_started_at if is_current else None),
             )
         )
     return items
