@@ -30,6 +30,10 @@ def choose_recent_session(items: Sequence[SessionMenuItem]) -> str | None:
                 title=item.title,
                 activity_at=item.activity_at,
                 is_current=item.is_current,
+                detail=(
+                    f"{item.session_id[:8]}  ·  {item.started_full or item.started}  ·  "
+                    f"{item.duration}  ·  {item.turns} turns"
+                ),
             )
             for item in items
         ],

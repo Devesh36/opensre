@@ -21,7 +21,7 @@ description: "Browse recent sessions, resume a conversation, compact long contex
 /sessions
 ```
 
-In a terminal, **↑/↓** moves the highlight, **Enter** resumes that session, and **Esc** closes the picker. It shows up to 20 sessions with relative times. The current session is marked, and the most recent previous session is highlighted by default when one exists.
+In a terminal, **↑/↓** moves the highlight, **Enter** resumes that session, and **Esc** closes the picker. It shows up to 20 sessions with relative times. The status line shows the selected session's ID, start time, duration, and turn count. The current session is marked, and the most recent previous session is highlighted by default when one exists.
 
 When output is piped, `/sessions` prints a table with IDs, start times, durations, and turn counts. Use the displayed ID with `/resume <id>`. The current session updates its elapsed time live.
 

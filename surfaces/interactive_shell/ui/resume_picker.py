@@ -28,6 +28,7 @@ class ResumeMenuItem:
     title: str
     activity_at: str | datetime | int | float | None
     is_current: bool = False
+    detail: str = ""
 
 
 def _as_datetime(value: str | datetime | int | float | None) -> datetime | None:
@@ -123,7 +124,8 @@ def _draw(
     if end < len(items):
         more = f"{more}    ↓ more" if more else "↓ more"
     position = f"{selected + 1}/{len(items)}"
-    status = f"  {more}" if more else ""
+    status_detail = "  ".join(part for part in (items[selected].detail, more) if part)
+    status = clip_prompt_text(f"  {status_detail}", max(0, width - len(position) - 2))
     status += " " * max(0, width - prompt_text_width(status) - len(position) - 2)
     status += f"{position}  "
     write_menu_line(

@@ -70,6 +70,7 @@ def test_recent_previous_highlight_follows_activity_order(monkeypatch: pytest.Mo
         rows: list[resume_picker.ResumeMenuItem], **kwargs: Any
     ) -> resume_picker.ResumeMenuItem:
         assert [item.session_id for item in rows] == ["current", "active-recent", "started-newer"]
+        assert rows[kwargs["selected"]].detail.startswith("active-r")
         return rows[kwargs["selected"]]
 
     monkeypatch.setattr(resume_picker, "choose_scrollable", _choose)
@@ -149,6 +150,7 @@ def test_sessions_uses_full_width_resume_layout(
                 title="Current work",
                 activity_at=now,
                 is_current=True,
+                detail="current  ·  10-01 16:00  ·  7s  ·  2 turns",
             )
         ],
         selected=0,
@@ -162,5 +164,23 @@ def test_sessions_uses_full_width_resume_layout(
     lines = [Text.from_ansi(line).plain for line in capsys.readouterr().out.splitlines()]
     assert "Sessions  ·  1 recent" in "\n".join(lines)
     assert any("● current  Current work" in line for line in lines)
+    assert any("current  ·  10-01 16:00  ·  7s  ·  2 turns" in line for line in lines)
     assert any("Enter already here" in line for line in lines)
     assert max(prompt_text_width(line) for line in lines) == 120
+
+
+def test_matching_titles_keep_selected_id_visible_at_narrow_width(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(resume_picker, "menu_columns", lambda: 42)
+    now = datetime.now(UTC)
+    items = [
+        resume_picker.ResumeMenuItem("first-id", "Same title", now, detail="first-id  ·  3 turns"),
+        resume_picker.ResumeMenuItem("second-id", "Same title", now, detail="second-i  ·  4 turns"),
+    ]
+    resume_picker._draw(
+        items, selected=1, top=0, visible_rows=2, erase_lines=0, now=now, heading="Sessions"
+    )
+
+    lines = [Text.from_ansi(line).plain for line in capsys.readouterr().out.splitlines()]
+    assert any("second-i" in line and "2/2" in line for line in lines)
