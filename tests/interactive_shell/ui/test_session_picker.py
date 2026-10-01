@@ -177,10 +177,12 @@ def test_matching_titles_keep_selected_id_visible_at_narrow_width(
     items = [
         resume_picker.ResumeMenuItem("first-id", "Same title", now, detail="first-id  ·  3 turns"),
         resume_picker.ResumeMenuItem("second-id", "Same title", now, detail="second-i  ·  4 turns"),
+        resume_picker.ResumeMenuItem("third-id", "Same title", now, detail="third-id  ·  5 turns"),
+        resume_picker.ResumeMenuItem("fourth-id", "Same title", now, detail="fourth-i  ·  6 turns"),
     ]
     resume_picker._draw(
-        items, selected=1, top=0, visible_rows=2, erase_lines=0, now=now, heading="Sessions"
+        items, selected=1, top=1, visible_rows=2, erase_lines=0, now=now, heading="Sessions"
     )
 
     lines = [Text.from_ansi(line).plain for line in capsys.readouterr().out.splitlines()]
-    assert any("second-i" in line and "2/2" in line for line in lines)
+    assert any("↑↓" in line and "second-i" in line and "2/4" in line for line in lines)

@@ -123,8 +123,10 @@ def _draw(
     more = "↑ earlier" if top else ""
     if end < len(items):
         more = f"{more}    ↓ more" if more else "↓ more"
+    if items[selected].detail and width < 64:
+        more = ("↑" if top else "") + ("↓" if end < len(items) else "")
     position = f"{selected + 1}/{len(items)}"
-    status_detail = "  ".join(part for part in (items[selected].detail, more) if part)
+    status_detail = "  ".join(part for part in (more, items[selected].detail) if part)
     status = clip_prompt_text(f"  {status_detail}", max(0, width - len(position) - 2))
     status += " " * max(0, width - prompt_text_width(status) - len(position) - 2)
     status += f"{position}  "
