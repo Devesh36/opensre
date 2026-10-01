@@ -31,9 +31,16 @@ def _repo(monkeypatch: pytest.MonkeyPatch) -> None:
         {"session_id": "current-session", "name": "Current work"},
         {"session_id": "target-session", "name": "Investigate latency"},
     ]
+
+    def _load_recent(_limit: int) -> list[dict[str, str]]:
+        return rows
+
+    def _default_session_repo() -> SimpleNamespace:
+        return SimpleNamespace(load_recent=_load_recent)
+
     monkeypatch.setattr(
         "core.agent_harness.spi.defaults.default_session_repo",
-        lambda: SimpleNamespace(load_recent=lambda _n: rows),
+        _default_session_repo,
     )
 
 
