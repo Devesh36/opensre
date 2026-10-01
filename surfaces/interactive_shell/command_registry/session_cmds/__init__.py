@@ -19,7 +19,7 @@ COMMANDS: list[SlashCommand] = [
     SlashCommand("/clear", "Clear the screen and re-render the banner.", _cmd_clear),
     SlashCommand(
         "/sessions",
-        "List recent REPL sessions.",
+        "Browse recent sessions and resume one with Enter.",
         _cmd_sessions,
         usage=("/sessions",),
     ),

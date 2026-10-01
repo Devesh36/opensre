@@ -23,7 +23,7 @@ from tools.interactive_shell.shared import allow_tool
 
 # Slash commands that adopt a different session file must record the turn after
 # the handler settles session identity (see /resume).
-_DEFER_SLASH_RECORDING: frozenset[str] = frozenset({"/resume"})
+_DEFER_SLASH_RECORDING: frozenset[str] = frozenset({"/resume", "/sessions"})
 
 
 def _latest_record_ok(session: Session, kind: str, *, default: bool = True) -> bool:

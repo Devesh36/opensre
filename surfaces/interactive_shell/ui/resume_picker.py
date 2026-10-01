@@ -2,20 +2,16 @@
 
 from __future__ import annotations
 
-import shutil
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from infrastructure.terminal import theme as ui_theme
+from surfaces.interactive_shell.ui.session_picker import _choose_scrollable
 from surfaces.shared.terminal.components.choice_menu import (
-    enter_inline_menu,
     erase_menu_lines,
-    leave_inline_menu,
     menu_columns,
-    read_menu_action,
-    repl_tty_interactive,
     write_menu_line,
 )
 from surfaces.shared.terminal.prompt_layout import clip_prompt_text, prompt_text_width
@@ -31,14 +27,6 @@ class ResumeMenuItem:
     session_id: str
     title: str
     activity_at: str | datetime | int | float | None
-
-
-def _visible_row_count() -> int:
-    terminal_rows = shutil.get_terminal_size(fallback=(80, 24)).lines
-    # Leave one row below the menu for the cursor. The erase helper can only
-    # climb ``terminal_rows - 1`` rows without touching prior scrollback.
-    available = terminal_rows - _CHROME_ROWS - 1
-    return min(_MAX_VISIBLE_ROWS, max(1, available))
 
 
 def _as_datetime(value: str | datetime | int | float | None) -> datetime | None:
@@ -146,40 +134,13 @@ def _draw(
 
 def choose_resume_session(items: Sequence[ResumeMenuItem]) -> str | None:
     """Select a conversation by scrolling a bounded terminal viewport."""
-    if not items or not repl_tty_interactive():
-        return None
     oldest = datetime.min.replace(tzinfo=UTC)
     ordered = sorted(items, key=lambda item: _as_datetime(item.activity_at) or oldest, reverse=True)
-    selected = 0
-    top = 0
-    drawn_height = 0
     now = datetime.now(UTC)
-    enter_inline_menu()
-    try:
-        while True:
-            visible_rows = _visible_row_count()
-            top = min(top, max(0, len(ordered) - visible_rows))
-            if selected < top:
-                top = selected
-            elif selected >= top + visible_rows:
-                top = selected - visible_rows + 1
-            drawn_height = _draw(
-                ordered,
-                selected=selected,
-                top=top,
-                visible_rows=visible_rows,
-                erase_lines=drawn_height,
-                now=now,
-            )
-            action = read_menu_action()
-            if action == "up":
-                selected = (selected - 1) % len(ordered)
-            elif action == "down":
-                selected = (selected + 1) % len(ordered)
-            elif action == "enter":
-                return ordered[selected].session_id
-            elif action in ("cancel", "eof"):
-                return None
-    finally:
-        erase_menu_lines(drawn_height, delete=True)
-        leave_inline_menu()
+    picked = _choose_scrollable(
+        ordered,
+        draw=lambda rows, **kwargs: _draw(rows, now=now, **kwargs),
+        max_visible_rows=_MAX_VISIBLE_ROWS,
+        chrome_rows=_CHROME_ROWS,
+    )
+    return picked.session_id if picked is not None else None
