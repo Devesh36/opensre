@@ -64,7 +64,7 @@ def _session_name(
         name = str(entry["conversation_title"])
     if is_current and not name and resumed_from_name:
         name = f"↩ {resumed_from_name}"
-    return " ".join(name.split()) or "Untitled session"
+    return name.strip() or "Untitled session"
 
 
 def _session_duration(

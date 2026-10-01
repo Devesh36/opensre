@@ -98,3 +98,38 @@ def test_sessions_prints_list_when_not_interactive(monkeypatch: pytest.MonkeyPat
     assert "target-s" in output.getvalue()
     assert "/resume <id>" in output.getvalue()
     assert session.records == [("slash", "/sessions")]
+
+
+def test_agent_observes_noninteractive_session_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+    from surfaces.interactive_shell.command_registry import dispatch_slash
+    from surfaces.interactive_shell.session import Session
+    from tools.interactive_shell.actions.slash import _slash_observation
+
+    _repo(monkeypatch)
+    session = Session()
+    console = Console(file=StringIO(), force_terminal=False)
+
+    assert dispatch_slash("/sessions", session, console, is_tty=False)
+    observation = _slash_observation(SimpleNamespace(session=session, history_start=0), "/sessions")
+    assert isinstance(observation, dict)
+    assert "target-s" in observation["output"]
+    assert "/resume <id>" in observation["output"]
+
+
+def test_sessions_with_arguments_never_opens_picker(monkeypatch: pytest.MonkeyPatch) -> None:
+    from surfaces.interactive_shell.command_registry import dispatch_slash
+    from surfaces.interactive_shell.session import Session
+
+    command = importlib.import_module(
+        "surfaces.interactive_shell.command_registry.session_cmds.list"
+    )
+
+    def _unexpected_picker(_items: Any) -> None:
+        pytest.fail("invalid arguments must not open the picker")
+
+    monkeypatch.setattr(command, "choose_recent_session", _unexpected_picker)
+    session = Session()
+    output = StringIO()
+    assert dispatch_slash("/sessions ignored", session, Console(file=output))
+    assert "usage: /sessions" in output.getvalue()
+    assert session.history[-1]["ok"] is False

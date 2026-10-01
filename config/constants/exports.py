@@ -200,6 +200,7 @@ EXPORTS: dict[str, str] = {
     "OPENSRE_COMMIT_COAUTHOR_NAME": "git",
     "OPENSRE_COMMIT_COAUTHOR_TRAILER": "git",
     # hosted gateway
+    "HOSTED_GATEWAY_CONNECT_TIMEOUT_SECONDS": "hosted_gateway",
     "HOSTED_GATEWAY_HEALTH_PATH": "hosted_gateway",
     "HOSTED_GATEWAY_HTTP_TIMEOUT_SECONDS": "hosted_gateway",
     "HOSTED_GATEWAY_LOOPBACK_HOSTS": "hosted_gateway",
@@ -211,6 +212,7 @@ EXPORTS: dict[str, str] = {
     "HOSTED_GATEWAY_PROMPT_POLL_SECONDS": "hosted_gateway",
     "HOSTED_GATEWAY_PROMPT_WAIT_SECONDS": "hosted_gateway",
     "HOSTED_GATEWAY_QUEUE_NOTICE_SECONDS": "hosted_gateway",
+    "HOSTED_GATEWAY_UNANSWERED_GRACE_SECONDS": "hosted_gateway",
     # github
     "GH_TOKEN_ENV": "github",
     "GITHUB_API_BASE_URL": "github",

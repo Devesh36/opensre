@@ -16,6 +16,10 @@ from surfaces.shared.terminal.components.choice_menu import (
 )
 
 
+def _validate_sessions_args(args: list[str]) -> str | None:
+    return "usage: /sessions" if args else None
+
+
 def _cmd_sessions(session: Session, console: Console, _args: list[str]) -> bool:
     from core.agent_harness.spi.defaults import default_session_repo
 

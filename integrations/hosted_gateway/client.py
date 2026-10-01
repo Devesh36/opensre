@@ -19,6 +19,7 @@ import httpx
 
 from config.account import load_account_record, resolve_account_token
 from config.constants.hosted_gateway import (
+    HOSTED_GATEWAY_CONNECT_TIMEOUT_SECONDS,
     HOSTED_GATEWAY_HEALTH_PATH,
     HOSTED_GATEWAY_HTTP_TIMEOUT_SECONDS,
     HOSTED_GATEWAY_LOOPBACK_HOSTS,
@@ -31,12 +32,12 @@ from infrastructure.analytics.capture import capture_hosted_gateway_task_submitt
 ERR_NOT_SIGNED_IN = "not_signed_in"
 ERR_INSECURE_APP_URL = "insecure_app_url"
 ERR_UNREACHABLE = "unreachable"
+# The app answered, but the gateway behind it did not: starting, restarting, or down.
+ERR_GATEWAY_UNAVAILABLE = "gateway_unavailable"
 ERR_UNAUTHORIZED = "unauthorized"
 ERR_INVALID_RESPONSE = "invalid_response"
 # The app is older than this CLI and has no hosted-gateway routes yet.
 ERR_NOT_SUPPORTED = "not_supported"
-# Only an organization admin may start or stop the gateway.
-ERR_ADMIN_REQUIRED = "admin_required"
 # The organization has no gateway to start or stop.
 ERR_NOT_PROVISIONED = "not_provisioned"
 # The gateway exists but no task of it is running, so it cannot take a prompt.
@@ -51,6 +52,17 @@ ERR_ALREADY_ANSWERED = "already_answered"
 #: A prompt id as the gateway mints it; anything else never becomes part of a URL.
 _PROMPT_ID = re.compile(r"^p_[0-9a-f]{32}$")
 
+#: Failures before a connection existed, so no byte of the request reached the app.
+_CONNECT_FAILURES = (httpx.ConnectError, httpx.ConnectTimeout)
+
+#: The app's answer when it, or the control plane behind it, could not reach the gateway.
+_UNAVAILABLE_STATUSES = frozenset(
+    {HTTPStatus.BAD_GATEWAY, HTTPStatus.SERVICE_UNAVAILABLE, HTTPStatus.GATEWAY_TIMEOUT}
+)
+
+#: Failures that pass on their own: nobody answered, and a later request may succeed.
+TRANSIENT_ERRORS = frozenset({ERR_UNREACHABLE, ERR_GATEWAY_UNAVAILABLE})
+
 #: Failures of the account or its setup, not of the service: nothing to report as an incident.
 EXPECTED_ERRORS = frozenset(
     {
@@ -58,7 +70,6 @@ EXPECTED_ERRORS = frozenset(
         ERR_INSECURE_APP_URL,
         ERR_UNAUTHORIZED,
         ERR_NOT_SUPPORTED,
-        ERR_ADMIN_REQUIRED,
         ERR_NOT_PROVISIONED,
         ERR_NOT_RUNNING,
         ERR_UNKNOWN_PROMPT,
@@ -163,7 +174,9 @@ class HostedGatewayClient:
         self._http = httpx.Client(
             base_url=self.app_url,
             headers={"Authorization": f"Bearer {token}"},
-            timeout=HOSTED_GATEWAY_HTTP_TIMEOUT_SECONDS,
+            timeout=httpx.Timeout(
+                HOSTED_GATEWAY_HTTP_TIMEOUT_SECONDS, connect=HOSTED_GATEWAY_CONNECT_TIMEOUT_SECONDS
+            ),
             follow_redirects=False,
             transport=transport,
         )
@@ -196,7 +209,7 @@ class HostedGatewayClient:
         return _gateway_health(self._request("GET", HOSTED_GATEWAY_HEALTH_PATH, _REFUSALS))
 
     def start(self) -> GatewayHealth:
-        """Ask the app to start the organization's gateway; organization admins only."""
+        """Ask the app to start the organization's gateway."""
         return _gateway_health(
             self._request("POST", HOSTED_GATEWAY_START_PATH, _LIFECYCLE_REFUSALS)
         )
@@ -206,7 +219,7 @@ class HostedGatewayClient:
         return _gateway_health(self._request("POST", HOSTED_GATEWAY_STOP_PATH, _LIFECYCLE_REFUSALS))
 
     def send_prompt(self, prompt: str, *, context: dict[str, str]) -> PromptRecord:
-        """Queue a prompt on the organization's running gateway; admins only."""
+        """Queue a prompt on the organization's running gateway."""
         payload = self._request(
             "POST",
             HOSTED_GATEWAY_PROMPTS_PATH,
@@ -249,13 +262,15 @@ class HostedGatewayClient:
         body_codes: frozenset[str] = frozenset(),
     ) -> dict[str, Any]:
         try:
-            response = self._http.request(method, path, json=body)
+            response = self._send(method, path, body)
         except httpx.HTTPError as exc:
             raise HostedGatewayError(ERR_UNREACHABLE) from exc
         refusal = refusals.get(response.status_code)
         if refusal is not None:
             code = _refusal_code(response, refusal, body_codes)
             raise HostedGatewayError(code, response.status_code)
+        if response.status_code in _UNAVAILABLE_STATUSES:
+            raise HostedGatewayError(ERR_GATEWAY_UNAVAILABLE, response.status_code)
         if not response.is_success:
             raise HostedGatewayError(f"http_{response.status_code}", response.status_code)
         try:
@@ -266,6 +281,17 @@ class HostedGatewayClient:
             raise HostedGatewayError(ERR_INVALID_RESPONSE, response.status_code)
         return payload
 
+    def _send(self, method: str, path: str, body: dict[str, Any] | None) -> httpx.Response:
+        """Send, with one fresh connection if the first could not be made.
+
+        Only a connect failure is retried: the request never left, so a prompt
+        cannot be queued twice. A read timeout may follow an accepted prompt.
+        """
+        try:
+            return self._http.request(method, path, json=body)
+        except _CONNECT_FAILURES:
+            return self._http.request(method, path, json=body)
+
 
 #: Status codes every hosted-gateway route uses to refuse a request, as stable client codes.
 _REFUSALS: dict[int, str] = {
@@ -273,17 +299,15 @@ _REFUSALS: dict[int, str] = {
     HTTPStatus.NOT_FOUND: ERR_NOT_SUPPORTED,
 }
 
-#: Start and stop also refuse non-admins and organizations without a gateway.
+#: Start and stop also refuse organizations without a gateway.
 _LIFECYCLE_REFUSALS: dict[int, str] = {
     **_REFUSALS,
-    HTTPStatus.FORBIDDEN: ERR_ADMIN_REQUIRED,
     HTTPStatus.CONFLICT: ERR_NOT_PROVISIONED,
 }
 
-#: A prompt needs an admin and a running task; the app answers 409 for both missing cases.
+#: A prompt needs a running task; the app answers 409 when there is none.
 _PROMPT_REFUSALS: dict[int, str] = {
     **_REFUSALS,
-    HTTPStatus.FORBIDDEN: ERR_ADMIN_REQUIRED,
     HTTPStatus.CONFLICT: ERR_NOT_RUNNING,
     HTTPStatus.REQUEST_ENTITY_TOO_LARGE: ERR_PROMPT_TOO_LARGE,
 }
@@ -291,7 +315,6 @@ _PROMPT_REFUSALS: dict[int, str] = {
 #: Reading a result: 404 is the prompt, not the route, being unknown.
 _PROMPT_RESULT_REFUSALS: dict[int, str] = {
     HTTPStatus.UNAUTHORIZED: ERR_UNAUTHORIZED,
-    HTTPStatus.FORBIDDEN: ERR_ADMIN_REQUIRED,
     HTTPStatus.NOT_FOUND: ERR_UNKNOWN_PROMPT,
     HTTPStatus.CONFLICT: ERR_NOT_RUNNING,
 }
@@ -408,7 +431,7 @@ def _text(value: object) -> str:
 
 
 __all__ = [
-    "ERR_ADMIN_REQUIRED",
+    "ERR_GATEWAY_UNAVAILABLE",
     "ERR_INSECURE_APP_URL",
     "ERR_INVALID_RESPONSE",
     "ERR_NOT_PROVISIONED",
@@ -424,4 +447,5 @@ __all__ = [
     "HostedGatewayClient",
     "HostedGatewayError",
     "PromptRecord",
+    "TRANSIENT_ERRORS",
 ]

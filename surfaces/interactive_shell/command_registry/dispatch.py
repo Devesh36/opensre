@@ -177,7 +177,9 @@ def dispatch_slash(
                 if policy_precleared or not cmd.mutating:
                     if name not in _DEFER_SLASH_RECORDING:
                         record_slash(ok=True)
-                    return cmd.handler(session, console, args)
+                    result = cmd.handler(session, console, args)
+                    slash_recorded |= name == "/sessions"
+                    return result
                 policy = allow_tool("slash")
                 if not execution_allowed(
                     policy,
@@ -191,7 +193,9 @@ def dispatch_slash(
                     return True
                 if name not in _DEFER_SLASH_RECORDING:
                     record_slash(ok=True)
-                return cmd.handler(session, console, args)
+                result = cmd.handler(session, console, args)
+                slash_recorded |= name == "/sessions"
+                return result
             finally:
                 if slash_recorded:
                     _attach_slash_analytics(

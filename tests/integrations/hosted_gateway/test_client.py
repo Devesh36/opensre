@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from http import HTTPStatus
+
 import httpx
 import pytest
 
 from integrations.hosted_gateway import (
+    ERR_GATEWAY_UNAVAILABLE,
     ERR_INSECURE_APP_URL,
     ERR_INVALID_RESPONSE,
     ERR_NOT_SIGNED_IN,
@@ -101,8 +104,12 @@ def test_plain_http_is_allowed_only_to_this_machine(app_url: str) -> None:
     [
         (httpx.Response(401, json={"error": "unauthorized"}), ERR_UNAUTHORIZED),
         (httpx.Response(404, text="<html>no such route</html>"), ERR_NOT_SUPPORTED),
-        (httpx.Response(502, json={"error": "gateway_lookup_failed"}), "http_502"),
-        # Health has no admin or provisioning refusal: these are unexpected, reportable failures.
+        # The app answered for a gateway that did not: retryable, not an unknown failure.
+        (
+            httpx.Response(HTTPStatus.BAD_GATEWAY, json={"error": "gateway_lookup_failed"}),
+            ERR_GATEWAY_UNAVAILABLE,
+        ),
+        # Health has no provisioning refusal: these are unexpected, reportable failures.
         (httpx.Response(403, text="<html>blocked</html>"), "http_403"),
         (httpx.Response(409, json={"error": "conflict"}), "http_409"),
         (httpx.Response(200, text="<html>not json</html>"), ERR_INVALID_RESPONSE),
@@ -139,6 +146,54 @@ def test_a_network_failure_is_reported_as_unreachable_without_the_token() -> Non
     # Assert
     assert excinfo.value.code == ERR_UNREACHABLE
     assert _TOKEN not in str(excinfo.value)
+
+
+def test_a_connection_that_could_not_be_made_is_tried_once_more(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A TLS handshake timeout left the request on this machine; one fresh try is safe."""
+    # Arrange
+    from integrations.hosted_gateway import client as client_module
+
+    submitted: list[str] = []
+    monkeypatch.setattr(client_module, "capture_hosted_gateway_task_submitted", submitted.append)
+    prompt_id = "p_" + "b" * 32
+    attempts: list[httpx.Request] = []
+
+    def handshake_times_out_once(request: httpx.Request) -> httpx.Response:
+        attempts.append(request)
+        if len(attempts) == 1:
+            raise httpx.ConnectTimeout("The handshake operation timed out", request=request)
+        return httpx.Response(HTTPStatus.ACCEPTED, json={"prompt_id": prompt_id, "state": "queued"})
+
+    # Act
+    with _client(httpx.MockTransport(handshake_times_out_once)) as client:
+        record = client.send_prompt("probe github access", context={})
+
+    # Assert
+    assert record.prompt_id == prompt_id
+    assert len(attempts) == 2
+    assert submitted == [prompt_id]
+
+
+def test_a_read_timeout_is_not_retried_so_a_prompt_is_never_queued_twice() -> None:
+    """The app may have accepted the prompt before the answer timed out."""
+    # Arrange
+    attempts: list[httpx.Request] = []
+
+    def answer_times_out(request: httpx.Request) -> httpx.Response:
+        attempts.append(request)
+        raise httpx.ReadTimeout("timed out", request=request)
+
+    client = _client(httpx.MockTransport(answer_times_out))
+
+    # Act
+    with pytest.raises(HostedGatewayError) as excinfo:
+        client.send_prompt("probe github access", context={})
+
+    # Assert
+    assert excinfo.value.code == ERR_UNREACHABLE
+    assert len(attempts) == 1
 
 
 def test_redirects_are_not_followed_so_the_token_cannot_be_forwarded_to_another_host() -> None:
