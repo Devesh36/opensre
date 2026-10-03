@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
@@ -48,12 +49,14 @@ def test_reload_preserves_concurrent_changes(
     )
     snapshot_read = threading.Event()
     resume = threading.Event()
-    next_run = runner.compute_next_run(original, datetime(2026, 10, 3, tzinfo=UTC))
+    now = datetime(2026, 10, 3, tzinfo=UTC)
+    next_run = runner.compute_next_run(original, now)
+    compute_next = runner._next_run_from_trigger
 
-    def blocked_next_run(_trigger: object) -> str | None:
+    def blocked_next_run(trigger: object) -> str | None:
         snapshot_read.set()
         assert resume.wait(_SYNC_TIMEOUT_SECONDS)
-        return next_run
+        return compute_next(trigger, now)
 
     scheduler = BackgroundScheduler()
     scheduler.start(paused=True)
@@ -81,6 +84,8 @@ def test_reload_preserves_concurrent_changes(
                         edited.params = {"loop_prompt": "new prompt"}
                         edited.last_run = "2026-10-03T00:00:00+00:00"
                     assert task_store.update_task(edited)
+                # The host may consume the edit signal before checking the stale snapshot.
+                reload_signal.consume_scheduler_reload_request()
             finally:
                 resume.set()
             pending.result(timeout=_SYNC_TIMEOUT_SECONDS)
@@ -95,13 +100,9 @@ def test_reload_preserves_concurrent_changes(
                 exclude={"next_run"}
             )
             if mutation == "reschedule":
-                assert stored.next_run == edited.next_run
+                assert stored.next_run == compute_next(runner._make_trigger(edited), now)
             elif mutation == "metadata":
                 assert stored.next_run == next_run
-        if mutation != "metadata":
-            assert scheduler.get_job(original.id) is None
-
-        runner.resync_scheduler_jobs(scheduler, runners)
         if mutation in {"disable", "delete"}:
             assert scheduler.get_job(original.id) is None
         elif mutation == "reschedule":
@@ -202,3 +203,45 @@ def test_skill_bookkeeping_does_not_replace_a_newer_skill_selection() -> None:
     task_builders._record_followed_revision(snapshot, "stale-resolution")
 
     assert task_store.get_task(snapshot.id) == edited
+
+
+@pytest.mark.parametrize("persistent_failure", [False, True])
+def test_startup_handles_unpersisted_legacy_migration(
+    persistent_failure: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "tasks.json"
+    legacy = ScheduledTask(
+        id="legacy-loop",
+        kind=TaskKind.MANUAL_LOOP,
+        cron="0 0 1 1 *",
+        provider=Provider.SLACK,
+        params={"loop_prompt": "Summarize incidents"},
+    ).model_dump(mode="json")
+    legacy["kind"] = "custom_investigation"
+    path.write_text(json.dumps([legacy]), encoding="utf-8")
+    original_bytes = path.read_bytes()
+    save = task_store._save_raw
+    attempts = 0
+
+    def fail_migration_write(store_path: Path, data: list[dict[str, object]]) -> None:
+        nonlocal attempts
+        attempts += 1
+        if persistent_failure or attempts == 1:
+            raise OSError("Migration write unavailable")
+        save(store_path, data)
+
+    monkeypatch.setattr(task_store, "_save_raw", fail_migration_write)
+    scheduler, count = runner.start_background_scheduler(SchedulerRunners(agent=_unexpected_agent))
+    try:
+        assert scheduler is not None
+        assert count == 1
+        assert scheduler.get_job("legacy-loop") is not None
+        if persistent_failure:
+            assert path.read_bytes() == original_bytes
+        else:
+            stored = json.loads(path.read_text(encoding="utf-8"))[0]
+            assert stored["kind"] == "manual_loop"
+            assert stored["next_run"] is not None
+    finally:
+        if scheduler is not None:
+            scheduler.shutdown(wait=True)

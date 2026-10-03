@@ -176,6 +176,19 @@ def _save_raw(store_path: Path, data: list[dict[str, object]]) -> None:
         raise
 
 
+def _save_migrated_tasks(path: Path, raw: list[dict[str, object]]) -> None:
+    """Persist normalized legacy rows, retaining in-memory use on write failure."""
+    try:
+        _save_raw(path, raw)
+    except OSError:
+        logger.warning(
+            "Could not persist migrated legacy scheduler tasks at %s; "
+            "using the migrated definitions for this process",
+            path,
+            exc_info=True,
+        )
+
+
 def get_task_store_snapshot(
     store_path: Path | None = None, *, lock_timeout_seconds: float | None = None
 ) -> TaskStoreSnapshot:
@@ -186,15 +199,7 @@ def get_task_store_snapshot(
     with lock:
         raw, complete, missing = _read_raw(path)
         if complete and migrate_legacy_task_entries(raw):
-            try:
-                _save_raw(path, raw)
-            except OSError:
-                logger.warning(
-                    "Could not persist migrated legacy scheduler tasks at %s; "
-                    "using the migrated definitions for this process",
-                    path,
-                    exc_info=True,
-                )
+            _save_migrated_tasks(path, raw)
     tasks: list[ScheduledTask] = []
     for entry in raw:
         try:
@@ -375,13 +380,17 @@ def _record_task_fields(
     path = store_path or default_task_store_path()
     with FileLock(_lock_path(path)):
         raw = _load_raw(path)
+        migrated = migrate_legacy_task_entries(raw)
         for entry in raw:
             if entry.get("id") != task_id:
                 continue
             if not matches(ScheduledTask.model_validate(entry)):
                 return False
-            if any(entry.get(key) != value for key, value in fields.items()):
-                entry.update(fields)
+            changed = any(entry.get(key) != value for key, value in fields.items())
+            entry.update(fields)
+            if migrated:
+                _save_migrated_tasks(path, raw)
+            elif changed:
                 _save_raw(path, raw)
             return True
     return False

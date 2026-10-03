@@ -17,6 +17,7 @@ from contextlib import suppress
 from datetime import UTC, datetime
 from typing import Any, cast
 
+from config.constants.ci_repair import CI_REPAIR_REPORT_BUILDER
 from config.constants.turn_concurrency import (
     DEFAULT_SCHEDULED_RUN_CONCURRENCY,
     OPENSRE_SCHEDULER_MAX_CONCURRENT_RUNS_ENV,
@@ -24,6 +25,7 @@ from config.constants.turn_concurrency import (
 from config.constants.work_items import WORK_ITEM_REMINDER_RUN_AT_PARAM
 from infrastructure.scheduling.scheduler.cron_expression import build_cron_trigger
 from infrastructure.scheduling.scheduler.executor import execute_task
+from infrastructure.scheduling.scheduler.loop_constants import LOOP_REPORT_PARAM
 from infrastructure.scheduling.scheduler.operation_log import (
     record_scheduler_execution_operation,
     record_scheduler_service_operation,
@@ -298,6 +300,27 @@ def _register_recovery_job(
     )
 
 
+def _immediate_ci_repair_fire(task: ScheduledTask, now: datetime) -> datetime | None:
+    """Due time for a never-run CI repair whose stored next run is already due."""
+    if task.last_run is not None:
+        return None
+    if task.params.get(LOOP_REPORT_PARAM) != CI_REPAIR_REPORT_BUILDER:
+        return None
+    raw = (task.next_run or "").strip()
+    if not raw:
+        return None
+    try:
+        due = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if due.tzinfo is None:
+        due = due.replace(tzinfo=UTC)
+    due = due.astimezone(UTC)
+    if due > now:
+        return None
+    return due
+
+
 def _register_jobs(
     scheduler: Any,
     runners: SchedulerRunners,
@@ -308,46 +331,59 @@ def _register_jobs(
     from apscheduler.jobstores.base import JobLookupError
 
     enabled_count = 0
-    for task in list_tasks():
-        if not task.enabled:
-            continue
-        if task_filter is not None and not task_filter(task):
-            continue
-        try:
-            trigger = _make_trigger(task)
-        except ValueError as exc:
-            logger.error("Skipping task %s: %s", task.id, exc)
-            continue
-        next_run = _next_run_from_trigger(trigger)
-        if not record_task_next_run(task, next_run):
-            with suppress(JobLookupError):
-                scheduler.remove_job(task.id)
-            continue
-        task.next_run = next_run
+    now = datetime.now(UTC)
+    for snapshot in list_tasks():
+        task: ScheduledTask | None = snapshot
+        while task is not None:
+            if not task.enabled:
+                break
+            if task_filter is not None and not task_filter(task):
+                break
+            try:
+                trigger = _make_trigger(task)
+            except ValueError as exc:
+                logger.error("Skipping task %s: %s", task.id, exc)
+                break
+            immediate = _immediate_ci_repair_fire(task, now)
+            job_kwargs: dict[str, Any] = {}
+            if immediate is not None:
+                # Preserve the first immediate CI repair fire across reloads.
+                next_run = immediate.isoformat()
+                job_kwargs["next_run_time"] = immediate
+            else:
+                next_run = _next_run_from_trigger(trigger)
+            if not record_task_next_run(task, next_run):
+                with suppress(JobLookupError):
+                    scheduler.remove_job(task.id)
+                task = get_task(task.id)
+                continue
+            task.next_run = next_run
 
-        scheduler.add_job(
-            _scheduled_job,
-            trigger=trigger,
-            args=[task.id, runners],
-            id=task.id,
-            name=f"{task.kind.value}:{task.id}",
-            replace_existing=True,
-            misfire_grace_time=None,
-            max_instances=1,
-        )
-        enabled_count += 1
-        record_scheduler_task_operation(
-            "scheduler_job_registered",
-            task,
-            extra={"next_run": next_run},
-        )
-        logger.info(
-            "Registered task %s (%s) with cron=%s tz=%s",
-            task.id,
-            task.kind,
-            task.cron,
-            task.timezone,
-        )
+            scheduler.add_job(
+                _scheduled_job,
+                trigger=trigger,
+                args=[task.id, runners],
+                id=task.id,
+                name=f"{task.kind.value}:{task.id}",
+                replace_existing=True,
+                misfire_grace_time=None,
+                max_instances=1,
+                **job_kwargs,
+            )
+            enabled_count += 1
+            record_scheduler_task_operation(
+                "scheduler_job_registered",
+                task,
+                extra={"next_run": next_run},
+            )
+            logger.info(
+                "Registered task %s (%s) with cron=%s tz=%s",
+                task.id,
+                task.kind,
+                task.cron,
+                task.timezone,
+            )
+            break
     return enabled_count
 
 
