@@ -346,6 +346,7 @@ def _register_jobs(
                 break
             immediate = _immediate_ci_repair_fire(task, now)
             job_kwargs: dict[str, Any] = {}
+            next_run: str | None
             if immediate is not None:
                 # Preserve the first immediate CI repair fire across reloads.
                 next_run = immediate.isoformat()
