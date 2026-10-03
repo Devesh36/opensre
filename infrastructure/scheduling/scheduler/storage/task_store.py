@@ -8,7 +8,7 @@ import logging
 import os
 import tempfile
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -366,6 +366,62 @@ def _job_registration_changed(previous: dict[str, object], updated: dict[str, ob
     )
 
 
+def _record_task_fields(
+    task_id: str,
+    fields: Mapping[str, object],
+    matches: Callable[[ScheduledTask], bool],
+    store_path: Path | None,
+) -> bool:
+    path = store_path or default_task_store_path()
+    with FileLock(_lock_path(path)):
+        raw = _load_raw(path)
+        for entry in raw:
+            if entry.get("id") != task_id:
+                continue
+            if not matches(ScheduledTask.model_validate(entry)):
+                return False
+            if any(entry.get(key) != value for key, value in fields.items()):
+                entry.update(fields)
+                _save_raw(path, raw)
+            return True
+    return False
+
+
+def record_task_next_run(
+    task: ScheduledTask, next_run: str | None, store_path: Path | None = None
+) -> bool:
+    """Update only ``next_run`` if the task is enabled and its trigger is unchanged."""
+    expected = task.model_dump(mode="json")
+
+    def matches(current: ScheduledTask) -> bool:
+        return current.enabled and not _job_registration_changed(
+            current.model_dump(mode="json"), expected
+        )
+
+    return _record_task_fields(task.id, {"next_run": next_run}, matches, store_path)
+
+
+def record_task_skill_pin(
+    task: ScheduledTask,
+    *,
+    skill_name: str,
+    skill_revision: str,
+    store_path: Path | None = None,
+) -> bool:
+    """Update only the skill pin if the task's kind and previous pin still match."""
+    expected = (task.kind, task.skill_name, task.skill_revision)
+
+    def matches(current: ScheduledTask) -> bool:
+        return (current.kind, current.skill_name, current.skill_revision) == expected
+
+    return _record_task_fields(
+        task.id,
+        {"skill_name": skill_name, "skill_revision": skill_revision},
+        matches,
+        store_path,
+    )
+
+
 def record_task_success(task_id: str, store_path: Path | None = None) -> bool:
     """Update completion fields on the latest task while preserving user edits."""
     path = store_path or default_task_store_path()
@@ -389,6 +445,8 @@ __all__ = [
     "get_task",
     "get_task_store_snapshot",
     "list_tasks",
+    "record_task_next_run",
+    "record_task_skill_pin",
     "record_task_success",
     "remove_task",
     "update_task",

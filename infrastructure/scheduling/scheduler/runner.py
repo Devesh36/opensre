@@ -13,6 +13,7 @@ import os
 import signal
 import threading
 from collections.abc import Callable
+from contextlib import suppress
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -40,10 +41,10 @@ from infrastructure.scheduling.scheduler.storage import (
     get_recoverable_runs,
     get_task,
     list_tasks,
+    record_task_next_run,
     record_task_success,
     try_claim,
     try_queue_run,
-    update_task,
 )
 from infrastructure.scheduling.scheduler.types import (
     Provider,
@@ -304,6 +305,8 @@ def _register_jobs(
     task_filter: TaskFilter | None = None,
 ) -> int:
     """Register all enabled tasks on *scheduler*; invalid tasks are logged and skipped."""
+    from apscheduler.jobstores.base import JobLookupError
+
     enabled_count = 0
     for task in list_tasks():
         if not task.enabled:
@@ -316,9 +319,11 @@ def _register_jobs(
             logger.error("Skipping task %s: %s", task.id, exc)
             continue
         next_run = _next_run_from_trigger(trigger)
-        if task.next_run != next_run:
-            task.next_run = next_run
-            update_task(task)
+        if not record_task_next_run(task, next_run):
+            with suppress(JobLookupError):
+                scheduler.remove_job(task.id)
+            continue
+        task.next_run = next_run
 
         scheduler.add_job(
             _scheduled_job,
@@ -365,12 +370,12 @@ def resync_scheduler_jobs(
     task_filter: TaskFilter | None = None,
 ) -> int:
     """Replace registered jobs on a live scheduler with the current task store."""
-    existing_ids = {job.id for job in scheduler.get_jobs()}
     enabled_count = _register_jobs(
         scheduler,
         runners,
         task_filter=task_filter,
     )
+    existing_ids = {job.id for job in scheduler.get_jobs()}
     desired_ids = _desired_task_ids(task_filter=task_filter)
     for job_id in existing_ids - desired_ids - {_RECOVERY_JOB_ID}:
         try:
