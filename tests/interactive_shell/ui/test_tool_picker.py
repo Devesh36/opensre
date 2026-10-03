@@ -121,3 +121,44 @@ def test_expanded_marker_and_spacing_match_content(monkeypatch: pytest.MonkeyPat
     assert "▾  tool" in visible[3]
     assert visible[4] == ""
     assert visible[8] == ""
+
+
+def test_multiline_description_keeps_blank_lines_and_headings() -> None:
+    entry = ToolCatalogEntry("tool", ("chat",), "Intro\n\n## Heading\n\tstep", "", "(no params)")
+
+    details = tool_picker._detail_lines(entry, 50)
+
+    assert [line[12:] for line in details[2:]] == ["Intro", "", "## Heading", " step"]
+
+
+def test_narrow_terminal_keeps_description_label_and_value() -> None:
+    entry = ToolCatalogEntry("tool", ("chat",), "First words", "", "id: string")
+
+    details = tool_picker._detail_lines(entry, 15)
+
+    assert "description" in details
+    assert "First words" in details
+    assert all(prompt_width <= 11 for prompt_width in map(tool_picker.prompt_text_width, details))
+
+
+def test_resizing_clamps_open_detail_page(monkeypatch: pytest.MonkeyPatch) -> None:
+    entry = ToolCatalogEntry("tool", ("chat",), "Description " * 4, "", "id: string")
+    actions = iter(("enter", "enter", "cancel"))
+    sizes = iter((terminal_size((80, 10)), terminal_size((80, 10)), terminal_size((80, 30))))
+    pages: list[tuple[int, int]] = []
+    monkeypatch.setattr(tool_picker, "repl_tty_interactive", lambda: True)
+    monkeypatch.setattr(tool_picker, "menu_columns", lambda: 40)
+    monkeypatch.setattr(tool_picker.shutil, "get_terminal_size", lambda **_kwargs: next(sizes))
+    monkeypatch.setattr(tool_picker, "enter_inline_menu", lambda: None)
+    monkeypatch.setattr(tool_picker, "leave_inline_menu", lambda: None)
+    monkeypatch.setattr(tool_picker, "erase_menu_lines", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(tool_picker, "read_menu_action", lambda: next(actions))
+
+    def _draw(_items: object, **kwargs: int) -> int:
+        pages.append((kwargs["detail_rows"], kwargs["detail_page"]))
+        return 6
+
+    monkeypatch.setattr(tool_picker, "_draw", _draw)
+
+    tool_picker.browse_tools([entry])
+    assert pages == [(0, 0), (2, 0), (10, 0)]

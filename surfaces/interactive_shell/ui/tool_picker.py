@@ -28,7 +28,9 @@ _MAX_VISIBLE_ROWS = 18
 def _wrap(value: str, width: int) -> list[str]:
     """Wrap without dropping characters from tool metadata."""
     lines: list[str] = []
-    for source in strip_terminal_controls(value).split("\n"):
+    for source in (
+        strip_terminal_controls(value, keep_whitespace=True).replace("\t", " ").split("\n")
+    ):
         line = ""
         used = 0
         for char in source:
@@ -45,13 +47,17 @@ def _wrap(value: str, width: int) -> list[str]:
 
 def _detail_lines(item: ToolCatalogEntry, width: int) -> list[str]:
     inner = max(1, width - 4)
-    label_width = min(12, max(1, inner - 1))
     lines: list[str] = []
     for label, value in (
         ("surfaces", ", ".join(item.surfaces)),
         ("params", item.input_schema_summary),
         ("description", item.description or "-"),
     ):
+        if inner <= 12:
+            lines.extend(_wrap(label, inner))
+            lines.extend(_wrap(value, inner))
+            continue
+        label_width = 12
         wrapped = _wrap(value, max(1, inner - label_width))
         lines.extend(
             f"{label:<{label_width}}{part}" if index == 0 else f"{'':<{label_width}}{part}"
@@ -131,15 +137,13 @@ def browse_tools(items: Sequence[ToolCatalogEntry]) -> None:
         while True:
             terminal_rows = shutil.get_terminal_size(fallback=(80, 24)).lines
             detail_rows = min(10, max(1, (terminal_rows - 6) // 2)) if expanded else 0
-            detail_length = (
-                len(
-                    _detail_lines(items[selected], menu_columns())[
-                        detail_page * detail_rows : (detail_page + 1) * detail_rows
-                    ]
+            detail_length = 0
+            if expanded:
+                details = _detail_lines(items[selected], menu_columns())
+                detail_page = min(detail_page, (len(details) - 1) // detail_rows)
+                detail_length = len(
+                    details[detail_page * detail_rows : (detail_page + 1) * detail_rows]
                 )
-                if expanded
-                else 0
-            )
             visible_rows = min(
                 _MAX_VISIBLE_ROWS,
                 max(1, terminal_rows - (7 + detail_length if expanded else 5)),
