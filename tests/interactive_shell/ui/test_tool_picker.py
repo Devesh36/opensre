@@ -144,15 +144,27 @@ def test_narrow_terminal_keeps_description_label_and_value() -> None:
 def test_resizing_clamps_open_detail_page(monkeypatch: pytest.MonkeyPatch) -> None:
     entry = ToolCatalogEntry("tool", ("chat",), "Description " * 4, "", "id: string")
     actions = iter(("enter", "enter", "cancel"))
-    sizes = iter((terminal_size((80, 10)), terminal_size((80, 10)), terminal_size((80, 30))))
+    terminal_height = 10
     pages: list[tuple[int, int]] = []
+
+    def _read_action() -> str:
+        nonlocal terminal_height
+        action = next(actions)
+        if action == "enter" and pages[-1] == (2, 0):
+            terminal_height = 30
+        return action
+
     monkeypatch.setattr(tool_picker, "repl_tty_interactive", lambda: True)
     monkeypatch.setattr(tool_picker, "menu_columns", lambda: 40)
-    monkeypatch.setattr(tool_picker.shutil, "get_terminal_size", lambda **_kwargs: next(sizes))
+    monkeypatch.setattr(
+        tool_picker.shutil,
+        "get_terminal_size",
+        lambda **_kwargs: terminal_size((80, terminal_height)),
+    )
     monkeypatch.setattr(tool_picker, "enter_inline_menu", lambda: None)
     monkeypatch.setattr(tool_picker, "leave_inline_menu", lambda: None)
     monkeypatch.setattr(tool_picker, "erase_menu_lines", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(tool_picker, "read_menu_action", lambda: next(actions))
+    monkeypatch.setattr(tool_picker, "read_menu_action", _read_action)
 
     def _draw(_items: object, **kwargs: int) -> int:
         pages.append((kwargs["detail_rows"], kwargs["detail_page"]))
