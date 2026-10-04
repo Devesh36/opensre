@@ -85,6 +85,8 @@ class Event(StrEnum):
     SCHEDULED_TASK_STARTED = "scheduled_task_started"
     SCHEDULED_TASK_COMPLETED = "scheduled_task_completed"
     SCHEDULED_TASK_FAILED = "scheduled_task_failed"
+    SCHEDULED_TASKS_REGISTERED = "scheduled_tasks_registered"
+    SCHEDULED_TASK_REPORTED = "scheduled_task_reported"
 
     # Suggested loops (interactive-shell startup picker shown when no
     # scheduled tasks are configured)
