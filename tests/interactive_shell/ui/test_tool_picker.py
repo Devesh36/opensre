@@ -174,3 +174,42 @@ def test_resizing_clamps_open_detail_page(monkeypatch: pytest.MonkeyPatch) -> No
 
     tool_picker.browse_tools([entry])
     assert pages == [(0, 0), (2, 0), (10, 0)]
+
+
+@pytest.mark.parametrize(
+    ("columns", "lines"),
+    [(6, 6), (15, 8), (40, 10), (80, 24), (160, 40)],
+)
+def test_picker_fits_terminal_viewport(
+    monkeypatch: pytest.MonkeyPatch, columns: int, lines: int
+) -> None:
+    entry = ToolCatalogEntry("tool", ("chat",), "Description " * 20, "", "id: string")
+    frame: list[str] = []
+    frames: list[list[str]] = []
+    actions = iter(("enter", "cancel"))
+
+    def _read_action() -> str:
+        frames.append(frame.copy())
+        return next(actions)
+
+    monkeypatch.setattr(tool_picker, "repl_tty_interactive", lambda: True)
+    monkeypatch.setattr(tool_picker, "menu_columns", lambda: columns - 1)
+    monkeypatch.setattr(
+        tool_picker.shutil,
+        "get_terminal_size",
+        lambda **_kwargs: terminal_size((columns, lines)),
+    )
+    monkeypatch.setattr(tool_picker, "enter_inline_menu", lambda: None)
+    monkeypatch.setattr(tool_picker, "leave_inline_menu", lambda: None)
+    monkeypatch.setattr(tool_picker, "write_menu_line", lambda row="": frame.append(row))
+    monkeypatch.setattr(tool_picker, "erase_menu_lines", lambda *_args, **_kwargs: frame.clear())
+    monkeypatch.setattr(tool_picker, "read_menu_action", _read_action)
+
+    tool_picker.browse_tools([entry])
+
+    assert len(frames) == 2
+    for rendered in frames:
+        assert len(rendered) <= lines - 1
+        assert all(
+            tool_picker.prompt_text_width(Text.from_ansi(row).plain) < columns for row in rendered
+        )

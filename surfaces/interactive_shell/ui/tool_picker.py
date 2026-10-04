@@ -75,11 +75,13 @@ def _draw(
     detail_rows: int,
     detail_page: int,
     erase_lines: int,
+    compact: bool = False,
 ) -> int:
     width = menu_columns()
     if erase_lines:
         erase_menu_lines(erase_lines)
-    write_menu_line()
+    if not compact:
+        write_menu_line()
     write_menu_line(
         f"{ui_theme.PROMPT_ACCENT_ANSI}"
         f"{clip_prompt_text(f'  Tools  ·  {len(items)} registered', width)}"
@@ -98,7 +100,8 @@ def _draw(
         style = ui_theme.prominent_menu_selection_ansi() if index == selected else background
         write_menu_line(f"{style}{row}{ui_theme.ANSI_RESET}")
         if detail_rows and index == selected:
-            write_menu_line()
+            if not compact:
+                write_menu_line()
             first = detail_page * detail_rows
             page_lines = details[first : first + detail_rows]
             shown_detail_lines = len(page_lines)
@@ -107,7 +110,8 @@ def _draw(
                     f"{ui_theme.TEXT_ANSI}    {clip_prompt_text(line, width - 4)}"
                     f"{ui_theme.ANSI_RESET}"
                 )
-            write_menu_line()
+            if not compact:
+                write_menu_line()
     for _ in range(visible_rows - (end - top)):
         write_menu_line()
     position = f"{selected + 1}/{len(items)}"
@@ -123,7 +127,9 @@ def _draw(
         f"{ui_theme.DIM_COUNTER_ANSI}{clip_prompt_text(hint, width)}{ui_theme.ANSI_RESET}"
     )
     sys.stdout.flush()
-    return visible_rows + (shown_detail_lines + 2 if detail_rows else 0) + 4
+    chrome_rows = 3 if compact else 4
+    detail_spacing = 2 if detail_rows and not compact else 0
+    return visible_rows + shown_detail_lines + detail_spacing + chrome_rows
 
 
 def browse_tools(items: Sequence[ToolCatalogEntry]) -> None:
@@ -136,6 +142,7 @@ def browse_tools(items: Sequence[ToolCatalogEntry]) -> None:
     try:
         while True:
             terminal_rows = shutil.get_terminal_size(fallback=(80, 24)).lines
+            compact = terminal_rows < 9
             detail_rows = min(10, max(1, (terminal_rows - 6) // 2)) if expanded else 0
             detail_length = 0
             if expanded:
@@ -144,9 +151,14 @@ def browse_tools(items: Sequence[ToolCatalogEntry]) -> None:
                 detail_length = len(
                     details[detail_page * detail_rows : (detail_page + 1) * detail_rows]
                 )
+            chrome_rows = 3 if compact else 4
+            detail_spacing = 2 if expanded and not compact else 0
             visible_rows = min(
                 _MAX_VISIBLE_ROWS,
-                max(1, terminal_rows - (7 + detail_length if expanded else 5)),
+                max(
+                    1,
+                    terminal_rows - 1 - chrome_rows - detail_length - detail_spacing,
+                ),
             )
             top = min(top, max(0, len(items) - visible_rows))
             if selected < top:
@@ -161,6 +173,7 @@ def browse_tools(items: Sequence[ToolCatalogEntry]) -> None:
                 detail_rows=detail_rows,
                 detail_page=detail_page,
                 erase_lines=drawn_height,
+                compact=compact,
             )
             action = read_menu_action()
             if action in ("up", "down"):

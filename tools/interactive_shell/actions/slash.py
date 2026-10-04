@@ -48,6 +48,7 @@ _INTERACTIVE_PICKER_SUBCOMMANDS: frozenset[tuple[str, str]] = frozenset(
         ("/loops", "show"),
         ("/mcp", "connect"),
         ("/mcp", "disconnect"),
+        # Defer agent-selected tool browsing until the REPL reserves stdin.
         ("/tools", "list"),
         ("/tools", "ls"),
         ("/tools", "tool"),
