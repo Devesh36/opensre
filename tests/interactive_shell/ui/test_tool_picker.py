@@ -5,8 +5,11 @@ from __future__ import annotations
 from os import terminal_size
 
 import pytest
+from rich.console import Console
 from rich.text import Text
 
+from surfaces.interactive_shell.command_registry import tools_cmds
+from surfaces.interactive_shell.runtime import Session
 from surfaces.interactive_shell.ui import tool_picker
 from surfaces.shared.terminal.tables.tool_catalog import ToolCatalogEntry
 
@@ -204,10 +207,14 @@ def test_picker_fits_terminal_viewport(
     monkeypatch.setattr(tool_picker, "write_menu_line", lambda row="": frame.append(row))
     monkeypatch.setattr(tool_picker, "erase_menu_lines", lambda *_args, **_kwargs: frame.clear())
     monkeypatch.setattr(tool_picker, "read_menu_action", _read_action)
+    monkeypatch.setattr(tools_cmds, "build_tool_catalog", lambda: [entry])
+    monkeypatch.setattr(tools_cmds, "repl_tty_interactive", lambda: True)
 
-    tool_picker.browse_tools([entry])
+    assert tools_cmds._cmd_tools(Session(), Console(), ["list"]) is True
 
     assert len(frames) == 2
+    if columns >= 15:
+        assert any("tool" in Text.from_ansi(row).plain for row in frames[0])
     for rendered in frames:
         assert len(rendered) <= lines - 1
         assert all(
