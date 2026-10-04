@@ -176,7 +176,7 @@ def _save_raw(store_path: Path, data: list[dict[str, object]]) -> None:
         raise
 
 
-def _save_migrated_tasks(path: Path, raw: list[dict[str, object]]) -> None:
+def _save_migrated_tasks(path: Path, raw: list[dict[str, object]]) -> bool:
     """Persist normalized legacy rows, retaining in-memory use on write failure."""
     try:
         _save_raw(path, raw)
@@ -187,6 +187,8 @@ def _save_migrated_tasks(path: Path, raw: list[dict[str, object]]) -> None:
             path,
             exc_info=True,
         )
+        return False
+    return True
 
 
 def get_task_store_snapshot(
@@ -376,6 +378,8 @@ def _record_task_fields(
     fields: Mapping[str, object],
     matches: Callable[[ScheduledTask], bool],
     store_path: Path | None,
+    *,
+    allow_unpersisted_migration: bool = False,
 ) -> bool:
     path = store_path or default_task_store_path()
     with FileLock(_lock_path(path)):
@@ -389,7 +393,7 @@ def _record_task_fields(
             changed = any(entry.get(key) != value for key, value in fields.items())
             entry.update(fields)
             if migrated:
-                _save_migrated_tasks(path, raw)
+                return _save_migrated_tasks(path, raw) or allow_unpersisted_migration
             elif changed:
                 _save_raw(path, raw)
             return True
@@ -399,7 +403,10 @@ def _record_task_fields(
 def record_task_next_run(
     task: ScheduledTask, next_run: str | None, store_path: Path | None = None
 ) -> bool:
-    """Update only ``next_run`` if the task is enabled and its trigger is unchanged."""
+    """Accept ``next_run`` only for an enabled task with an unchanged trigger.
+
+    Legacy migration write failures still allow in-memory registration.
+    """
     expected = task.model_dump(mode="json")
 
     def matches(current: ScheduledTask) -> bool:
@@ -407,7 +414,13 @@ def record_task_next_run(
             current.model_dump(mode="json"), expected
         )
 
-    return _record_task_fields(task.id, {"next_run": next_run}, matches, store_path)
+    return _record_task_fields(
+        task.id,
+        {"next_run": next_run},
+        matches,
+        store_path,
+        allow_unpersisted_migration=True,
+    )
 
 
 def record_task_skill_pin(

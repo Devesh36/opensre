@@ -245,3 +245,43 @@ def test_startup_handles_unpersisted_legacy_migration(
     finally:
         if scheduler is not None:
             scheduler.shutdown(wait=True)
+
+
+def test_failed_migration_write_does_not_report_a_skill_pin_as_saved(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    name, revision = pin_recurring_skill("delivering-morning-briefings")
+    task = ScheduledTask(
+        id="repin-write-failure",
+        kind=TaskKind.RECURRING_SKILL,
+        cron="0 9 * * *",
+        provider=Provider.SLACK,
+        skill_name=name,
+        skill_revision=revision,
+    )
+    legacy = ScheduledTask(
+        id="legacy-loop",
+        kind=TaskKind.MANUAL_LOOP,
+        cron="0 0 1 1 *",
+        provider=Provider.SLACK,
+        params={"loop_prompt": "Summarize incidents"},
+    ).model_dump(mode="json")
+    legacy["kind"] = "custom_investigation"
+    path = tmp_path / "tasks.json"
+    path.write_text(json.dumps([task.model_dump(mode="json"), legacy]), encoding="utf-8")
+    original_bytes = path.read_bytes()
+
+    def fail_save(_path: Path, _data: list[dict[str, object]]) -> None:
+        raise OSError("Store write unavailable")
+
+    def unexpected_saved_operation(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("An unsaved skill pin must not emit a persisted-change operation")
+
+    monkeypatch.setattr(task_store, "_save_raw", fail_save)
+    monkeypatch.setattr(
+        task_builders, "record_scheduler_task_operation", unexpected_saved_operation
+    )
+    task_builders._record_followed_revision(task, "new-revision")
+
+    assert path.read_bytes() == original_bytes
+    assert "running with an unsaved pin" in caplog.text
