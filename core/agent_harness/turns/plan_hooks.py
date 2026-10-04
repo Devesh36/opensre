@@ -1,9 +1,9 @@
-"""Tool-execution wraps for task-plan evidence and the plan guards.
+"""Tool-execution wraps for task-plan evidence, the plan guard, and host advance.
 
-Rules live in ``task_plan.evidence``, ``task_plan.required``, and
-``task_plan.solo_advance``. This module records returns, refuses the next
-work call when no plan is open, and refuses a lone ``update_plan`` that
-starts or advances a step.
+Rules live in ``task_plan.evidence``, ``task_plan.required`` and
+``task_plan.advance``. This module records returns, refuses the next work call
+when no plan is open, and moves the plan forward before the first work call
+of a batch that carries no ``update_plan``.
 """
 
 from __future__ import annotations
@@ -12,13 +12,14 @@ from collections.abc import Sequence
 from typing import Any
 
 from config.constants.tooling import ToolBlockedBy
-from core.agent_harness.task_plan.evidence import record_plan_evidence, reset_plan_evidence
-from core.agent_harness.task_plan.plan import TaskPlan
-from core.agent_harness.task_plan.required import PLAN_REQUIRED_REASON, plan_required
-from core.agent_harness.task_plan.solo_advance import (
-    SOLO_PLAN_ADVANCE_REASON,
-    solo_plan_advance_reason,
+from core.agent_harness.task_plan.advance import auto_advance_task_plan
+from core.agent_harness.task_plan.evidence import (
+    UPDATE_PLAN_TOOL,
+    is_plan_work_name,
+    record_plan_evidence,
+    reset_plan_evidence,
 )
+from core.agent_harness.task_plan.required import PLAN_REQUIRED_REASON, plan_required
 from core.domain.types.tools import ToolRole
 from core.llm.types import ToolCall
 from core.tool.execution import (
@@ -31,41 +32,64 @@ from core.tool.execution import (
 )
 
 
-def with_task_plan_hooks(base: ToolExecutionHooks | None, session: Any) -> ToolExecutionHooks:
-    """Wrap ``base`` so plan evidence is recorded and plan guards can refuse a call."""
+def with_task_plan_hooks(
+    base: ToolExecutionHooks | None,
+    session: Any,
+    *,
+    turn_user_message: str = "",
+    answer_continues: bool = False,
+) -> ToolExecutionHooks:
+    """Wrap ``base`` so plan evidence is recorded, the plan guard can refuse a call,
+    and the plan advances when the next step's tool is called.
+
+    Advancement is armed once per provider batch (``before_tool_batch``) and
+    fires at the first work call the guards let through, so a refused call or
+    a batch that never reaches execution moves nothing. A batch carrying
+    ``update_plan`` is the model's own write and is never advanced.
+    ``turn_user_message`` lets an Ask User answer earn the step it settles.
+    ``answer_continues`` (computed once at turn start) says the turn answers
+    the plan owner's question; without it only a plan written this turn moves.
+    """
     reset_plan_evidence(session)
     base_before = base.before_tool_call if base is not None else None
     base_after = base.after_tool_call if base is not None else None
     base_update = base.on_tool_update if base is not None else None
     base_batch = base.before_tool_batch if base is not None else None
-    batch: list[ToolCall] = []
+    advance_armed = False
 
     def before_batch(tool_calls: Sequence[ToolCall]) -> None:
-        batch[:] = list(tool_calls)
+        nonlocal advance_armed
         if base_batch is not None:
             base_batch(tool_calls)
+        advance_armed = all(call.name.strip() != UPDATE_PLAN_TOOL for call in tool_calls)
 
     def before(request: ToolExecutionRequest) -> BeforeToolCallResult | None:
+        nonlocal advance_armed
         decision = base_before(request) if base_before is not None else None
         if decision is not None and decision.blocked:
             return decision
-        prior = getattr(session, "task_plan", None)
-        if solo_plan_advance_reason(batch, prior=prior if isinstance(prior, TaskPlan) else None):
-            return BeforeToolCallResult(
-                blocked=True,
-                reason=SOLO_PLAN_ADVANCE_REASON,
-                metadata={ToolBlockedBy.SOLO_PLAN_ADVANCE: True},
-            )
+        role = tool_role(request.tool)
         if plan_required(
             session,
             tool_name=request.tool_call.name,
             arguments=request.arguments,
-            is_action=tool_role(request.tool) is ToolRole.ACTION,
+            is_action=role is ToolRole.ACTION,
         ):
             return BeforeToolCallResult(
                 blocked=True,
                 reason=PLAN_REQUIRED_REASON,
                 metadata={ToolBlockedBy.PLAN_REQUIRED: True},
+            )
+        if (
+            advance_armed
+            and role is not ToolRole.BOOKKEEPING
+            and is_plan_work_name(request.tool_call.name, request.arguments)
+        ):
+            advance_armed = False
+            auto_advance_task_plan(
+                session,
+                turn_user_message=turn_user_message,
+                answer_continues=answer_continues,
             )
         return decision
 

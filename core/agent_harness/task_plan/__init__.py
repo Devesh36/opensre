@@ -8,10 +8,11 @@ Leaves:
 
 * :mod:`plan` — ``TaskPlan``, parse/validate, item JSON schema
 * :mod:`completion` — which completions this write has earned
+* :mod:`advance` — host moves the plan forward on the next step's tool
+* :mod:`ownership` — whether an Ask User answer continues the plan's own workflow
 * :mod:`write_result` — model-facing ``update_plan`` instruction
 * :mod:`evidence` — work-return counters for a turn
 * :mod:`required` — second work tool needs an open plan
-* :mod:`solo_advance` — a lone ``update_plan`` must not start or advance a step
 * :mod:`conclusion` — whether the plan still blocks ending the turn
 * :mod:`update_plan_policy` — Ask User / plan-only latch
 * :mod:`persist` — flush / restore
