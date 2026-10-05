@@ -24,6 +24,7 @@ from infrastructure.scheduling.scheduler import reload_signal
 from infrastructure.scheduling.scheduler.loop_constants import (
     LOOP_CREATED_BY_PARAM,
     LOOP_DESCRIPTION_PARAM,
+    LOOP_GROUP_ID_PARAM,
     LOOP_PROMPT_PARAM,
     LOOP_TEMPLATE_PARAM,
 )
@@ -249,12 +250,13 @@ def _schedule_identity(entry: Mapping[str, Any]) -> tuple[Any, ...]:
     for. Identity deliberately excludes ``id``, ``name``, skill revision, who
     created it, and the run bookkeeping (``created_at``, ``last_run``,
     ``next_run``), which differ between two confirmations of the same schedule.
+    Generated loop group IDs are bookkeeping too, not schedule configuration.
     The owning organization is part of it: two organizations with the same
     schedule hold two rows. A template loop is identified by its template name,
     not by the prompt and description copied from it.
     """
     raw_params = entry.get("params") or {}
-    ignored = {LOOP_CREATED_BY_PARAM}
+    ignored = {LOOP_CREATED_BY_PARAM, LOOP_GROUP_ID_PARAM}
     if raw_params.get(LOOP_TEMPLATE_PARAM):
         ignored.update(_TEMPLATE_LOOP_TEXT)
     params = {key: value for key, value in raw_params.items() if key not in ignored}
