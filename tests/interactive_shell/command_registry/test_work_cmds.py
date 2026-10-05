@@ -64,6 +64,7 @@ def test_work_add_rejects_unscheduled_reminder_before_persistence(
     ("arguments", "flag"),
     [
         ("Audit --project --priority urgent", "--project"),
+        ('Audit --project " --priority"', "--project"),
         ("Audit --owner --unknown value", "--owner"),
         ("Audit --priority --due 2026-10-06", "--priority"),
         ("Audit --due", "--due"),

@@ -63,7 +63,7 @@ def _split_options(args: list[str]) -> tuple[list[str], dict[str, str], str | No
             if (
                 index + 1 >= len(args)
                 or not args[index + 1].strip()
-                or args[index + 1].startswith("--")
+                or args[index + 1].strip().startswith("--")
             ):
                 return [], {}, f"{arg} requires a value"
             options[arg.removeprefix("--")] = args[index + 1]
