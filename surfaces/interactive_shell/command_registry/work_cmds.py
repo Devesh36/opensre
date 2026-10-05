@@ -45,26 +45,33 @@ def _unsupported_reminder_error(args: Sequence[str]) -> str | None:
 
 def _validate_work_args(args: list[str]) -> str | None:
     if args and args[0].lower() == "add":
-        return _unsupported_reminder_error(args[1:])
+        reminder_error = _unsupported_reminder_error(args[1:])
+        if reminder_error is not None:
+            return reminder_error
+        _, _, error = _split_options(args[1:])
+        return error
     return None
 
 
-def _split_options(args: list[str]) -> tuple[list[str], dict[str, str]]:
+def _split_options(args: list[str]) -> tuple[list[str], dict[str, str], str | None]:
     remaining: list[str] = []
     options: dict[str, str] = {}
     index = 0
     while index < len(args):
         arg = args[index]
         if arg in _OPTION_NAMES:
-            if index + 1 >= len(args):
-                options[arg.removeprefix("--")] = ""
-                break
+            if (
+                index + 1 >= len(args)
+                or not args[index + 1].strip()
+                or args[index + 1].startswith("--")
+            ):
+                return [], {}, f"{arg} requires a value"
             options[arg.removeprefix("--")] = args[index + 1]
             index += 2
             continue
         remaining.append(arg)
         index += 1
-    return remaining, options
+    return remaining, options, None
 
 
 def _render_work_table(console: Console, rows: Sequence[object], *, title: str) -> bool:
@@ -116,7 +123,10 @@ def _add(console: Console, args: list[str]) -> bool:
         console.print(reminder_error)
         return True
 
-    words, options = _split_options(args)
+    words, options, error = _split_options(args)
+    if error is not None:
+        console.print(f"[{ERROR}]{escape(error)}[/]")
+        return True
     title = " ".join(words).strip()
     if not title:
         console.print(
