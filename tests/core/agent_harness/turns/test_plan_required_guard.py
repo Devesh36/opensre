@@ -8,6 +8,7 @@ from typing import Any
 
 from rich.console import Console
 
+from core.agent_harness.session_goal.goal import SessionGoal, SessionGoalStatus
 from core.agent_harness.task_plan.plan import PlanStepStatus, parse_task_plan
 from core.agent_harness.task_plan.required import PLAN_REQUIRED_REASON
 from core.agent_harness.tools.tool_context import ActionToolScope
@@ -61,7 +62,7 @@ def _returned(
 
 def test_the_second_work_tool_is_refused_until_a_plan_is_stored() -> None:
     # Arrange: a fresh turn in which one work tool has returned.
-    session = Session()
+    session = Session(active_skill="repair-github-ci")
     hooks = with_task_plan_hooks(None, session)
     _returned(hooks, "shell_run")
 
@@ -89,6 +90,15 @@ def test_the_first_work_tool_and_non_work_calls_are_never_refused() -> None:
     assert hooks.before_tool_call(_request("slash_invoke")) is None
 
 
+def test_tool_search_does_not_consume_the_skill_work_lookup() -> None:
+    session = Session(active_skill="repair-github-ci")
+    hooks = with_task_plan_hooks(None, session)
+
+    _returned(hooks, "tool_search")
+
+    assert hooks.before_tool_call(_request("shell_run")) is None
+
+
 def test_slash_commands_and_failed_calls_do_not_count_as_work() -> None:
     """The live run: `rg` was not installed, and the retry with `grep` was refused."""
     # Arrange: two shell commands, one tool error, and one command that failed to start.
@@ -111,7 +121,7 @@ def test_slash_commands_and_failed_calls_do_not_count_as_work() -> None:
 
 def test_an_open_plan_lets_work_continue_but_a_settled_one_does_not() -> None:
     # Arrange: one work tool already returned this turn.
-    session = Session()
+    session = Session(active_skill="repair-github-ci")
     hooks = with_task_plan_hooks(None, session)
     _returned(hooks, "shell_run")
 
@@ -125,7 +135,7 @@ def test_an_open_plan_lets_work_continue_but_a_settled_one_does_not() -> None:
 
 def test_a_base_refusal_wins_over_the_plan_rule() -> None:
     # Arrange: the wrapped hook already refuses the call for its own reason.
-    session = Session()
+    session = Session(active_skill="repair-github-ci")
     base = ToolExecutionHooks(
         before_tool_call=lambda _request: BeforeToolCallResult(blocked=True, reason="duplicate")
     )
@@ -182,7 +192,7 @@ def test_a_lone_plan_write_that_starts_a_step_is_stored() -> None:
 def test_the_refusal_prescribes_a_paired_write_that_runs_in_one_response() -> None:
     # Arrange: one work tool returned and no plan is open. The refusal used to
     # prescribe a lone update_plan first, which spent a model call on its own.
-    session = Session()
+    session = Session(active_skill="repair-github-ci")
     hooks = with_task_plan_hooks(None, session)
     _returned(hooks, "shell_run")
     scope = ActionToolScope(session=session, console=Console(file=io.StringIO()))
@@ -227,3 +237,25 @@ def test_the_refusal_prescribes_a_paired_write_that_runs_in_one_response() -> No
     # Assert: both ran in one response.
     assert [result.is_error for result in results] == [False, False]
     assert "in one response with update_plan listed before it" in PLAN_REQUIRED_REASON
+
+
+def test_ordinary_and_session_goal_turns_do_not_force_a_plan() -> None:
+    ordinary = Session()
+    ordinary_hooks = with_task_plan_hooks(None, ordinary)
+    _returned(ordinary_hooks, "shell_run")
+    assert ordinary_hooks.before_tool_call(_request("shell_run")) is None
+
+    goal = Session(active_skill="repair-github-ci")
+    goal.session_goal = SessionGoal(condition="finish the repair")
+    goal_hooks = with_task_plan_hooks(None, goal)
+    _returned(goal_hooks, "shell_run")
+    assert goal_hooks.before_tool_call(_request("shell_run")) is None
+
+    goal.session_goal = SessionGoal(
+        condition="finished repair",
+        status=SessionGoalStatus.ACHIEVED,
+    )
+    finished_hooks = with_task_plan_hooks(None, goal)
+    _returned(finished_hooks, "shell_run")
+    decision = finished_hooks.before_tool_call(_request("shell_run"))
+    assert decision is not None and decision.blocked is True

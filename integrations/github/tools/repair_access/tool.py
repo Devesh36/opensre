@@ -8,6 +8,11 @@ from typing import Any
 from core.domain.types.tools import ToolSurface
 from core.tool import SideEffectLevel, report_run_error
 from core.tool_framework import tool
+from integrations.github.agent_tools import (
+    github_tool_available,
+    github_tool_params,
+    require_webapp_github,
+)
 from integrations.github.client import GitHubApiError, GitHubRestClient
 from integrations.github.helpers import (
     GITHUB_INJECTED_PARAMS,
@@ -92,6 +97,7 @@ def _failed(exc: Exception) -> dict[str, Any]:
     name="probe_github_repair_access",
     source="github",
     display_name="Probe GitHub repair access",
+    compact_description="Check which GitHub owners can host a private CI repair demo.",
     use_cases=["See which GitHub owners can host a private CI repair demo"],
     description=(
         "Read this token's GitHub login, whether it is a classic PAT (scopes from the "
@@ -102,8 +108,8 @@ def _failed(exc: Exception) -> dict[str, Any]:
     ),
     surfaces=(ToolSurface.ACTION,),
     side_effect_level=SideEffectLevel.READ_ONLY,
-    is_available=github_source_available,
-    extract_params=_credentials,
+    is_available=github_tool_available(github_source_available),
+    extract_params=github_tool_params(_credentials),
     injected_params=GITHUB_INJECTED_PARAMS,
     input_schema={
         "type": "object",
@@ -111,6 +117,7 @@ def _failed(exc: Exception) -> dict[str, Any]:
         "additionalProperties": False,
     },
 )
+@require_webapp_github
 def probe_github_repair_access(
     github_token: str | None = None,
     **_kwargs: Any,

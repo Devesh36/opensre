@@ -27,6 +27,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from config.account import account_metadata_stamp
 from config.constants.paths import integrations_store_stamp
 from config.strict_config import StrictConfigModel
 
@@ -49,6 +50,13 @@ ConfiguredIntegrationServicesFn = Callable[[], tuple[str, ...]]
 SetupableIntegrationServicesFn = Callable[[], tuple[str, ...]]
 AccountIntegrationsFetcherFn = Callable[[], list[dict[str, Any]]]
 AccountIntegrationsGenerationFn = Callable[[], int]
+FleetVaultConfiguredFn = Callable[[], bool]
+
+
+def _default_setup_url() -> str:
+    from config.constants.account import OPENSRE_APP_URL_DEFAULT
+
+    return f"{OPENSRE_APP_URL_DEFAULT}/home"
 
 
 def _default_fetch_remote(org_id: str, auth_token: str) -> list[dict[str, Any]]:
@@ -102,6 +110,10 @@ def _default_fetch_account_integrations() -> list[dict[str, Any]]:
     return []
 
 
+def _default_fleet_vault_configured() -> bool:
+    return False
+
+
 def _default_account_integrations_generation() -> int:
     return 0
 
@@ -131,7 +143,9 @@ class IntegrationResolutionAdapters:
     merge_integrations_by_service: MergeIntegrationsByServiceFn = _default_merge_by_service
     configured_services: ConfiguredIntegrationServicesFn = _default_configured_services
     setupable_services: SetupableIntegrationServicesFn = _default_setupable_services
+    setup_url: Callable[[], str] = _default_setup_url
     fetch_webapp_vault: WebappVaultFetcherFn = _default_fetch_webapp_vault
+    fleet_vault_configured: FleetVaultConfiguredFn = _default_fleet_vault_configured
     fetch_account_integrations: AccountIntegrationsFetcherFn = _default_fetch_account_integrations
     account_integrations_generation: AccountIntegrationsGenerationFn = (
         _default_account_integrations_generation
@@ -187,19 +201,28 @@ def configured_integration_services() -> tuple[str, ...]:
     return _adapters().configured_services()
 
 
-def integration_sources_stamp() -> tuple[int, int]:
+def integration_sources_stamp() -> tuple[int, int, int]:
     """A value that changes when any integration source behind a session changes.
 
-    Combines the local store file's stamp with the signed-in account's
-    remote-set generation, so a credential saved either locally or in the web
-    app invalidates a session's resolved cache on its next turn.
+    Combines the local store and account metadata stamps with the signed-in
+    account's remote-set generation, so credentials and workspace switches
+    invalidate a session's resolved cache on its next turn.
     """
-    return (integrations_store_stamp(), _adapters().account_integrations_generation())
+    return (
+        integrations_store_stamp(),
+        account_metadata_stamp(),
+        _adapters().account_integrations_generation(),
+    )
 
 
 def setupable_integration_services() -> tuple[str, ...]:
     """Service ids that have a real setup handler (never invent outside this set)."""
     return _adapters().setupable_services()
+
+
+def integration_setup_url() -> str:
+    """Return the host app page for connecting integrations."""
+    return _adapters().setup_url()
 
 
 def integration_setup_command(service_id: str) -> str:
@@ -314,8 +337,8 @@ def _resolve_integrations_request(
 def _resolve_from_webapp_vault_or_local() -> IntegrationResolutionResult:
     """Silo path: pull org vault from opensre-webapp, else account/local sources.
 
-    Merge order is vault → store → env so ops can still override a vault
-    secret with ``GITHUB_MCP_AUTH_TOKEN`` (etc.) on the task definition.
+    Other integrations retain vault → store → env precedence. The integrations
+    adapter preserves live app GitHub grants before classifying them.
     On a signed-in laptop (no fleet vault) the account's organization
     integrations fill the remote role instead, and there they win over the
     local store and env.
@@ -323,8 +346,11 @@ def _resolve_from_webapp_vault_or_local() -> IntegrationResolutionResult:
     adapters = _adapters()
     remote = adapters.fetch_webapp_vault()
     if not remote:
-        # No fleet vault (None) or an explicitly empty one: a signed-in
-        # laptop still reads its organization's integrations from the app.
+        # A configured fleet vault that failed, or an org with nothing exported,
+        # stays on this silo. The signed-in account is only for a laptop that
+        # has no fleet vault; that account can belong to a different organization.
+        if adapters.fleet_vault_configured():
+            return _resolve_from_local_sources()
         account_records = adapters.fetch_account_integrations()
         if account_records:
             return _resolve_remote_with_local_fallback(account_records)
@@ -463,6 +489,7 @@ __all__ = [
     "configured_integration_services",
     "fetch_remote_integrations",
     "integration_setup_command",
+    "integration_setup_url",
     "integration_sources_stamp",
     "resolve_integrations",
     "resolve_integrations_with_metadata",

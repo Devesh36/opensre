@@ -24,6 +24,10 @@ if TYPE_CHECKING:
     from prompt_toolkit.history import History
 
     from core.agent_harness.spi.session_state import SetupResume
+    from surfaces.interactive_shell.session.connection_checks import (
+        ConnectionCheck,
+        ConnectionCheckKey,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +70,14 @@ def _autosubmit_label(text: str) -> str:
 class TerminalSession:
     """Shell-surface session state, composed onto ``Session`` for the interactive shell."""
 
+    connection_checks: dict[str, ConnectionCheck] = field(
+        default_factory=dict, repr=False, kw_only=True
+    )
+    """Last explicit check results, shared by the connection lists for this session only."""
+
+    connection_check_key: ConnectionCheckKey | None = field(default=None, repr=False, kw_only=True)
+    """Scope/source snapshot that owns the cached display results."""
+
     active_theme_name: str = "green"
     """Interactive shell palette name for this REPL session (``/theme``, prompts)."""
 
@@ -91,6 +103,12 @@ class TerminalSession:
     Stored here (instead of accessed via ``get_app_or_none()``) so that worker-thread
     slash commands (e.g. ``/theme``) can refresh styles via ``call_soon_threadsafe`` on
     the main asyncio loop."""
+
+    transcript: Any = None
+    """The full-screen transcript store, when the shell runs full screen.
+
+    Screen resets (``/clear``, a theme change) reset it instead of clearing the
+    terminal, because the full-screen view draws from it."""
 
     main_loop: Any = None
     """The asyncio event loop for the main REPL coroutine.
@@ -218,13 +236,6 @@ class TerminalSession:
     metrics: TerminalMetrics = field(default_factory=TerminalMetrics)
     """Interactive-shell turn/intervention analytics counters (see ``/status``)."""
 
-    submitted_turn_count: int = 0
-    """Prompts the user has submitted this session; drives the ``[N]`` prompt label.
-
-    Deliberately independent of ``session.history``: one submitted request may
-    append many history rows (shell commands, tool executions), but it occupies
-    exactly one numbered prompt line."""
-
     _turn_outcome_hint: str | None = field(default=None, repr=False, compare=False)
     """Optional structured outcome set by a terminal handler for analytics."""
 
@@ -239,11 +250,6 @@ class TerminalSession:
     ``pop_pending_turn_error`` so it cannot leak into later turns."""
 
     # ── behavior over the fields above (Session delegates via ``session.terminal``) ──
-
-    def claim_turn_number(self) -> int:
-        """Advance and return the 1-based ``[N]`` number for a just-submitted prompt."""
-        self.submitted_turn_count += 1
-        return self.submitted_turn_count
 
     def has_collapsed_tool_output(self) -> bool:
         """True when Ctrl+O can expand at least one stashed peek."""

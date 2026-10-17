@@ -17,20 +17,10 @@ opensre onboard
 uv run opensre   # open the interactive shell
 ```
 
-## Quality gates (same as CI)
+## Local checks and PR validation
 
-From the repo root:
-
-```bash
-make lint          # ruff check
-make format-check  # ruff format --check (CI-enforced)
-make typecheck     # mypy config core gateway integrations infrastructure surfaces tools
-make test-cov      # pytest + coverage (default unit suite)
-```
-
-One-shot (includes heavier `test-full`): `make check`.
-
-Before a PR, run at least `make lint`, `make format-check`, `make typecheck`, and `make test-cov` (see [CONTRIBUTING.md](https://github.com/Tracer-Cloud/opensre/blob/main/CONTRIBUTING.md)).
+Follow [CI.md](https://github.com/Tracer-Cloud/opensre/blob/main/CI.md) for local
+validation, required PR checks, and review follow-through.
 
 ## Interactive shell action policy
 
@@ -107,9 +97,6 @@ first-party fields to exclude automated environments from product funnels.
 
 A random install ID is stored under `~/.opensre/anonymous_id`. Telemetry is off
 in GitHub Actions and pytest.
-
-When a user signs in to GitHub (wizard or `/integrations setup`), OpenSRE emits
-`github_username` on subsequent product events.
 
 ### Kill-switch matrix
 

@@ -23,35 +23,110 @@ from surfaces.interactive_shell.session import Session
 from tests.shared.harness_turn_driver import run_harness_turn
 
 
-def test_turn_needs_exclusive_stdin_for_bare_integration_menu(
+def test_turn_needs_exclusive_stdin_for_integration_list_browser(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(loop_input_policy, "repl_tty_interactive", lambda: True)
     session = Session()
 
-    assert loop_input_policy.turn_needs_exclusive_stdin("/integrations", session) is True
-    assert loop_input_policy.turn_needs_exclusive_stdin("/mcp", session) is True
+    assert loop_input_policy.turn_needs_exclusive_stdin("/integrations", session) is False
+    assert loop_input_policy.turn_needs_exclusive_stdin("/mcp", session) is False
+    assert loop_input_policy.turn_needs_exclusive_stdin("/integrations list", session) is True
+    assert loop_input_policy.turn_needs_exclusive_stdin("/mcp list", session) is True
+    assert loop_input_policy.turn_needs_exclusive_stdin("/integrations ls", session) is False
+    assert loop_input_policy.turn_needs_exclusive_stdin("/mcp ls", session) is False
     assert loop_input_policy.turn_needs_exclusive_stdin("/memory", session) is True
+    assert loop_input_policy.turn_needs_exclusive_stdin("/memory list", session) is True
     assert loop_input_policy.turn_needs_exclusive_stdin("/model", session) is True
     assert loop_input_policy.turn_needs_exclusive_stdin("/loops", session) is True
     assert loop_input_policy.turn_needs_exclusive_stdin("/fleet", session) is True
     assert loop_input_policy.turn_needs_exclusive_stdin("/theme", session) is True
 
-    assert loop_input_policy.turn_needs_exclusive_stdin("/integrations list", session) is False
     # Typed bare `/model set` opens the provider picker.
     assert loop_input_policy.turn_needs_exclusive_stdin("/model set", session) is True
+    # A subcommand that asks for its missing value needs stdin exactly as its
+    # parent menu does; without this, typing it prints usage while choosing the
+    # same row in /help (which reserves stdin for the whole turn) opens a picker.
+    assert loop_input_policy.turn_needs_exclusive_stdin("/model toolcall", session) is True
+    assert loop_input_policy.turn_needs_exclusive_stdin("/history retention", session) is True
     assert loop_input_policy.turn_needs_exclusive_stdin("/loops active", session) is True
     assert loop_input_policy.turn_needs_exclusive_stdin("/loops messages", session) is True
     assert loop_input_policy.turn_needs_exclusive_stdin("/loops show", session) is True
     assert loop_input_policy.turn_needs_exclusive_stdin("/loops show abc123", session) is True
     assert loop_input_policy.turn_needs_exclusive_stdin("/theme blue", session) is True
     assert loop_input_policy.turn_needs_exclusive_stdin("/verify", session) is True
-    assert loop_input_policy.turn_needs_exclusive_stdin("/verify datadog", session) is False
+    assert loop_input_policy.turn_needs_exclusive_stdin("/verify datadog", session) is True
 
     # Gating is literal-/slash only: bare command words are not recognized.
     assert loop_input_policy.turn_needs_exclusive_stdin("integrations", session) is False
     assert loop_input_policy.turn_needs_exclusive_stdin("integrations list", session) is False
     assert loop_input_policy.turn_needs_exclusive_stdin("verify", session) is False
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "/history show",
+        "/model show",
+        "/model toolcall show",
+        "/model restore anthropic",
+        "/model default anthropic",
+        "/model reset anthropic",
+        "/model use anthropic",
+        "/model switch anthropic",
+        "/integrations show github",
+        "/integrations verify",
+        "/integrations verify github",
+        "/verify github",
+        "/fleet budget",
+        "/help all",
+        "/help /model",
+        "/help tasks",
+        "/? /model",
+        "/resume session-id",
+    ],
+)
+def test_table_command_variants_own_stdin(monkeypatch: pytest.MonkeyPatch, command: str) -> None:
+    monkeypatch.setattr(loop_input_policy, "repl_tty_interactive", lambda: True)
+    session = Session()
+    assert loop_input_policy.turn_needs_exclusive_stdin(command, session)
+    # Reserving terminal input must not turn prose into command intent or
+    # serialize headless turns that do not have an interactive prompt.
+    assert not loop_input_policy.turn_needs_exclusive_stdin(command.removeprefix("/"), session)
+    monkeypatch.setattr(loop_input_policy, "repl_tty_interactive", lambda: False)
+    assert not loop_input_policy.turn_needs_exclusive_stdin(command, session)
+
+
+def test_non_table_subcommands_keep_concurrent_prompt_input(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(loop_input_policy, "repl_tty_interactive", lambda: True)
+    for command in (
+        "/history pause",
+        "/memory path",
+        "/work path",
+        "/loops stop loop-id",
+        "/cron run task-id",
+    ):
+        assert not loop_input_policy.turn_needs_exclusive_stdin(command, Session())
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "/work list",
+        "/work next",
+        "/cron",
+        "/cron run",
+        "/cron run --help",
+        "/cron list",
+        "/cron logs task-id",
+        "/cron status",
+    ],
+)
+def test_responsive_lists_own_stdin(monkeypatch: pytest.MonkeyPatch, command: str) -> None:
+    monkeypatch.setattr(loop_input_policy, "repl_tty_interactive", lambda: True)
+    assert loop_input_policy.turn_needs_exclusive_stdin(command, Session())
 
 
 def test_turn_needs_exclusive_stdin_for_exit_commands(

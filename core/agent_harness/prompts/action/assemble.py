@@ -30,7 +30,7 @@ from core.agent_harness.prompts.runtime_facts import (
     build_live_runtime_facts_block,
     render_static_runtime_facts,
 )
-from core.agent_harness.prompts.skills import load_skills_index
+from core.agent_harness.prompts.skills import load_skills_prompt_index
 from core.agent_harness.task_plan.prompt import (
     ask_user_answered_block,
     current_task_plan_block,
@@ -40,6 +40,7 @@ from infrastructure.harness_providers import action_prompt_vendor_fragments
 
 if TYPE_CHECKING:
     from core.agent_harness.turns.turn_snapshot import TurnSnapshot
+    from core.domain.repositories import RepositoryPreferences
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +149,7 @@ def build_action_system_prompt_envelope(turn_snapshot: TurnSnapshot) -> PromptEn
             filter(
                 None,
                 (
-                    load_skills_index(),
+                    load_skills_prompt_index(),
                     load_getting_started_block(surface=turn_snapshot.prompt_surface or ""),
                 ),
             )
@@ -197,7 +198,7 @@ def build_action_system_prompt_envelope(turn_snapshot: TurnSnapshot) -> PromptEn
     )
     # Volatile before ephemeral so render_cached + render_ephemeral reassemble
     # into render() and the cache breakpoint can sit after memory.
-    memory_block = long_term_memory_block()
+    memory_block = _long_term_memory(turn_snapshot)
     blocks.extend(
         _optional_block(
             id=PromptBlockId.LONG_TERM_MEMORY,
@@ -350,28 +351,59 @@ def connected_integrations_block(turn_snapshot: TurnSnapshot) -> str:
     return f"CONNECTED INTEGRATIONS (this install, right now): {listing}\n{gate_note}\n"
 
 
+_VCS_INTEGRATIONS = frozenset({"github", "gitlab", "bitbucket"})
+
+
 def repository_context_block(turn_snapshot: TurnSnapshot) -> str:
-    """Render one active repo plus every repo retained in session memory."""
+    """Render the session's repositories and the organization's standing choices."""
     active = turn_snapshot.active_vcs_repositories
     known = turn_snapshot.known_vcs_repositories
+    preferences = turn_snapshot.repository_preferences
     vendors = sorted(set(active) | set(known))
-    if not vendors:
+    vcs_connected = bool(_VCS_INTEGRATIONS & set(turn_snapshot.configured_integrations))
+    if not vendors and preferences.empty and not vcs_connected:
         return ""
 
-    lines: list[str] = []
-    for vendor in vendors:
-        active_repo = active.get(vendor, "none")
-        remembered = known.get(vendor, ())
-        remembered_text = ", ".join(remembered) if remembered else "none"
-        lines.append(f"- {vendor}: active={active_repo}; remembered={remembered_text}")
-    repository_lines = "\n".join(lines)
+    sections: list[str] = []
+    if vendors:
+        lines: list[str] = []
+        for vendor in vendors:
+            active_repo = active.get(vendor, "none")
+            remembered = known.get(vendor, ())
+            remembered_text = ", ".join(remembered) if remembered else "none"
+            lines.append(f"- {vendor}: active={active_repo}; remembered={remembered_text}")
+        repository_lines = "\n".join(lines)
+        sections.append(
+            "REPOSITORY CONTEXT (this session; one active target per vendor, many "
+            "remembered repositories):\n"
+            f"{repository_lines}\n"
+            "Use the active target for an unqualified repository request. A user-named "
+            "repository becomes active without deleting the others. Do not describe the "
+            "active repository as the only repository OpenSRE remembers.\n"
+        )
+    sections.append(_repository_preferences_section(preferences))
+    return "\n".join(sections) + "\n"
+
+
+def _repository_preferences_section(preferences: RepositoryPreferences) -> str:
+    primary = ", ".join(preferences.primary) or "none saved"
+    excluded = ", ".join(preferences.excluded) or "none saved"
+    notes = "".join(
+        f"- note on {repository}: {note}\n" for repository, note in preferences.notes.items()
+    )
     return (
-        "REPOSITORY CONTEXT (this session; one active target per vendor, many "
-        "remembered repositories):\n"
-        f"{repository_lines}\n"
-        "Use the active target for an unqualified repository request. A user-named "
-        "repository becomes active without deleting the others. Do not describe the "
-        "active repository as the only repository OpenSRE remembers.\n\n"
+        "REPOSITORY PREFERENCES (whole organization, kept across sessions):\n"
+        f"- primary: {primary}\n"
+        f"- never change: {excluded}\n"
+        f"{notes}"
+        'A repository named only by its short name ("the opensre repo") is the '
+        "primary repository with that name. With no primary for it, pick the "
+        "original over its forks and mirrors (a fork's parent wins), say which you "
+        "picked, and do not ask the user to choose between a repository and its "
+        "forks; ask only when unrelated repositories that are not forks share the "
+        "name. Never create branches, commits, pushes, pull requests or issues in a "
+        "never-change repository. When the user says which repository to work on or "
+        "to leave alone, save it with repository_preferences in the same turn.\n"
     )
 
 
@@ -446,15 +478,21 @@ def long_term_memory_block() -> str:
     )
 
 
+def _long_term_memory(turn_snapshot: TurnSnapshot) -> str:
+    """The memory index, unless the host runs this turn without long-term memory."""
+    return long_term_memory_block() if turn_snapshot.long_term_memory_enabled else ""
+
+
 def relevant_memories_block(turn_snapshot: TurnSnapshot) -> str:
     """Full text of the stored memories that match this turn's request.
 
     Ranked against the user's message, with the active repositories and the
-    connected integrations as lower-weight context.
+    connected integrations as lower-weight context. Empty when the host runs
+    this turn without long-term memory.
     """
     from core.domain.memory import memory_available_here, render_relevant_memories
 
-    if not memory_available_here():
+    if not turn_snapshot.long_term_memory_enabled or not memory_available_here():
         return ""
     rendered = render_relevant_memories(
         turn_snapshot.text,

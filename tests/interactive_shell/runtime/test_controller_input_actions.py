@@ -163,8 +163,8 @@ def test_decide_submits_text_matching_the_placeholder() -> None:
 
 
 def test_decide_submits_normal_turn_with_exclusive_stdin_wait() -> None:
-    assert _decide(InputSubmitted("/integrations"), needs_exclusive_stdin=True) == SubmitTurn(
-        text="/integrations",
+    assert _decide(InputSubmitted("/integrations list"), needs_exclusive_stdin=True) == SubmitTurn(
+        text="/integrations list",
         wait_until_idle=True,
     )
 
@@ -513,7 +513,7 @@ async def test_exit_control_stops_the_running_dispatch_without_queueing(
         assert not shutdown.done()
         assert flushed_after_turn == []
         release_turn.set()
-        await shutdown
+        _ = await shutdown
 
         assert turn_finished.is_set()
         assert flushed_after_turn == [True]
@@ -967,7 +967,7 @@ def test_inflight_goal_pause_keeps_input_open_and_does_not_leak_to_queued_turns(
         finally:
             controller.state.request_exit()
             await controller.state.queue.put("")
-            await worker
+            _ = await worker
 
     asyncio.run(_scenario())
 
@@ -1049,7 +1049,7 @@ async def test_goal_pause_after_dispatch_finish_still_pauses_before_queued_work(
     finally:
         controller.state.request_exit()
         await controller.state.queue.put("")
-        await worker
+        _ = await worker
 
 
 @pytest.mark.asyncio
@@ -1123,7 +1123,7 @@ async def test_goal_clear_does_not_remove_a_goal_created_by_earlier_queued_work(
     finally:
         controller.state.request_exit()
         await controller.state.queue.put("")
-        await worker
+        _ = await worker
 
 
 @pytest.mark.asyncio
@@ -1202,13 +1202,13 @@ async def test_shutdown_persists_pause_after_boundary_wait_is_cancelled() -> Non
     import contextlib
     import threading
 
+    import surfaces.interactive_shell.runtime.session_shutdown as session_shutdown
     from core.agent_harness.session import InMemorySessionStore, SessionManager
     from core.agent_harness.session_goal.goal import SessionGoal, attach_session_goal
     from core.agent_harness.session_goal.persist import SESSION_GOAL_STATE_CUSTOM_TYPE
     from core.agent_harness.spi.cancel import HostCancelEvent, HostCancelReason
     from infrastructure.turn_host.session_lock import session_execution_lock
     from surfaces.interactive_shell.controller import InteractiveShellController
-    from surfaces.interactive_shell.runtime.session_shutdown import close_repl_session
     from surfaces.interactive_shell.runtime.turn_host import run_agent_turn_queue
     from surfaces.interactive_shell.session import Session
 
@@ -1267,13 +1267,13 @@ async def test_shutdown_persists_pause_after_boundary_wait_is_cancelled() -> Non
 
         queue_worker.cancel()
         with contextlib.suppress(asyncio.CancelledError):
-            await queue_worker
+            _ = await queue_worker
 
         assert controller.state.requested_goal_control() is HostCancelReason.GOAL_PAUSE
         release_lease.set()
         await asyncio.to_thread(lease_worker.join, 1)
         assert not lease_worker.is_alive()
-        await asyncio.to_thread(close_repl_session, session, controller.state)
+        await asyncio.to_thread(session_shutdown.close_repl_session, session, controller.state)
 
         records = [
             record
@@ -1288,16 +1288,16 @@ async def test_shutdown_persists_pause_after_boundary_wait_is_cancelled() -> Non
         if not queue_worker.done():
             queue_worker.cancel()
             with contextlib.suppress(asyncio.CancelledError):
-                await queue_worker
+                _ = await queue_worker
 
 
 def test_shutdown_persists_a_pending_goal_clear() -> None:
+    import surfaces.interactive_shell.runtime.session_shutdown as session_shutdown
     from core.agent_harness.session import InMemorySessionStore, SessionManager
     from core.agent_harness.session_goal.goal import SessionGoal, attach_session_goal
     from core.agent_harness.session_goal.persist import SESSION_GOAL_STATE_CUSTOM_TYPE
     from core.agent_harness.spi.cancel import HostCancelEvent, HostCancelReason
     from surfaces.interactive_shell.runtime.core.state import ReplState
-    from surfaces.interactive_shell.runtime.session_shutdown import close_repl_session
     from surfaces.interactive_shell.session import Session
 
     store = InMemorySessionStore()
@@ -1315,7 +1315,7 @@ def test_shutdown_persists_a_pending_goal_clear() -> None:
     state.attach_cancel_event(cancel)
     state.request_exit()
 
-    close_repl_session(session, state)
+    session_shutdown.close_repl_session(session, state)
 
     records = [
         record
@@ -1532,3 +1532,68 @@ async def test_running_dispatch_keeps_a_completed_plan() -> None:
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             _ = await task
+
+
+def test_shell_teardown_never_waits_on_the_closing_memory_pass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The shell schedules the closing pass and leaves; an interrupt skips it entirely.
+
+    Waiting held the terminal for seconds — longer on a resumed session, whose
+    transcript the pass reads in full — with nothing on screen but a spinner.
+    """
+    import surfaces.interactive_shell.runtime.session_shutdown as session_shutdown
+    from core.agent_harness.session import SessionManager
+    from surfaces.interactive_shell.runtime.core.state import ReplState
+    from surfaces.interactive_shell.session import Session
+
+    captured: dict[str, object] = {}
+
+    def _close(_self: object, _session: object, **kwargs: object) -> None:
+        captured.update(kwargs)
+
+    monkeypatch.setattr(SessionManager, "close", _close)
+
+    monkeypatch.setattr(session_shutdown, "ctrl_c_exit_interrupted", lambda: False)
+    session_shutdown.close_repl_session(Session(), ReplState())
+    assert captured["extract_memory"] is True
+    assert captured["wait_for_memory_extraction"] is False
+
+    monkeypatch.setattr(session_shutdown, "ctrl_c_exit_interrupted", lambda: True)
+    session_shutdown.close_repl_session(Session(), ReplState())
+    assert captured["extract_memory"] is False
+
+
+def test_a_teardown_interrupt_still_persists_the_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A Ctrl+C during teardown may cost the memory pass, never the transcript.
+
+    The press raises wherever it lands once the exit is armed, so the flush has
+    to sit in a finally ahead of the only call that blocks.
+    """
+    import surfaces.interactive_shell.runtime.session_shutdown as session_shutdown
+    from core.agent_harness.session import SessionManager
+    from surfaces.interactive_shell.runtime.core.state import ReplState
+    from surfaces.interactive_shell.session import Session
+
+    flushed: list[str] = []
+
+    def _refresh(_self: object, _session: object) -> None:
+        raise KeyboardInterrupt
+
+    def _flush(_self: object, session: Session) -> None:
+        flushed.append(session.session_id)
+
+    def _close(_self: object, _session: object, **_kwargs: object) -> None:
+        pytest.fail("close() must not run once the interrupt has unwound past it")
+
+    monkeypatch.setattr(SessionManager, "refresh_from_storage", _refresh)
+    monkeypatch.setattr(SessionManager, "flush", _flush)
+    monkeypatch.setattr(SessionManager, "close", _close)
+
+    session = Session()
+    with pytest.raises(KeyboardInterrupt):
+        session_shutdown.close_repl_session(session, ReplState())
+
+    assert flushed == [session.session_id]

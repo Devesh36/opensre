@@ -25,6 +25,9 @@ ALLOWED_FLAT_MODULES = frozenset(
         # creds from the signed-in account's webapp route), not a vendor — the
         # laptop peer of secrets_vault.py / webapp_vault.py.
         "account_integrations.py",
+        # The hosted peer of account_integrations.py: the acting Slack
+        # member's view of the webapp vault for one gateway turn.
+        "member_integrations.py",
         # Cross-vendor alert-source routing/alias catalog data (spans every
         # vendor's alert-source key), not one vendor's own integration.
         "alert_source_catalog.py",
@@ -37,6 +40,9 @@ ALLOWED_FLAT_MODULES = frozenset(
         "daily_update.py",
         "effective_models.py",
         "harness_adapters.py",
+        # Chat setup reply: the webapp page for every catalog integration,
+        # not one vendor's package.
+        "hosted_setup.py",
         # Shared MCP transport lifecycle and result normalization for MCP vendor
         # packages, not a vendor integration itself.
         "mcp_client.py",
@@ -69,6 +75,9 @@ ALLOWED_FLAT_MODULES = frozenset(
         "setup_flow.py",
         "store.py",
         "verify.py",
+        # Signed-in CLI peer of webapp_vault.py: fetches every vendor's org
+        # integrations with the account token, not one vendor's package.
+        "account_vault.py",
         # Cross-cutting credential-resolution infra (fetches every vendor's org
         # creds from the webapp vault), not a vendor — like store.py / registry.py.
         "webapp_vault.py",

@@ -59,6 +59,7 @@ from infrastructure.harness_providers.integration_resolution import (
     configured_integration_services,
     fetch_remote_integrations,
     integration_setup_command,
+    integration_setup_url,
     integration_sources_stamp,
     resolve_integrations,
     resolve_integrations_with_metadata,
@@ -67,6 +68,10 @@ from infrastructure.harness_providers.integration_resolution import (
 )
 from infrastructure.harness_providers.integration_resolution import (
     reset as _reset_integration_resolution,
+)
+from infrastructure.harness_providers.integration_selection import (
+    bound_github_connection,
+    current_github_connection_id,
 )
 from infrastructure.harness_providers.message_context import (
     MessageContextPrefixStripper,
@@ -218,6 +223,7 @@ __all__ = [
     "flatten_cli_messages_to_prompt",
     "gateway_persona_fragments",
     "integration_setup_command",
+    "integration_setup_url",
     "integration_sources_stamp",
     "metric_cohort_resolved_for",
     "metric_query_draft_for",
@@ -240,6 +246,8 @@ __all__ = [
     "registered_skill_prerequisite_checks",
     "reset_harness_providers",
     "resolve_integrations",
+    "bound_github_connection",
+    "current_github_connection_id",
     "resolve_integrations_with_metadata",
     "select_github_connection",
     "resolve_runbook_source",

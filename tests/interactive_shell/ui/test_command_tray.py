@@ -109,7 +109,9 @@ async def test_tray_is_attached_bounded_and_keeps_selected_result_visible() -> N
         lines = _screen_lines(prompt)
         assert lines[0] == "Working"
         assert "Commands" in lines[2]
-        assert "› /integrations" in lines[3]
+        assert lines[3].startswith("│") and lines[3].endswith("│")
+        assert not lines[3].strip("│ ")
+        assert "› /integrations" in lines[4]
         assert sum("│ › /" in line or "│   /" in line for line in lines) == 6
         assert lines[-5].startswith("│") and lines[-5].endswith("│")
         assert not lines[-5].strip("│ ")
@@ -160,15 +162,14 @@ async def test_tab_on_slash_command_opens_its_subcommand_tray() -> None:
         assert prompt.default_buffer.text == "/integrations "
         assert state is not None
         assert [completion.text for completion in state.completions] == [
+            "list",
             "setup",
             "remove",
-            "list",
-            "ls",
             "verify",
             "show",
         ]
         lines = _screen_lines(prompt)
-        assert any("› setup" in line for line in lines)
+        assert any("› list" in line for line in lines)
         assert any("Subcommands · /integrations" in line for line in lines)
 
 
@@ -197,6 +198,7 @@ async def test_enter_submits_the_selected_subcommand_from_the_continuation_tray(
     async with _running_prompt() as prompt:
         _complete(prompt, "/")
         _press(prompt, Keys.Tab)
+        _press(prompt, Keys.Down)
         _press(prompt, Keys.Down)
 
         _press(prompt, Keys.ControlM)
@@ -366,3 +368,55 @@ async def test_escape_closes_completions_before_clearing_or_cancelling(
             state.cancel_current_dispatch.assert_called_once()
         else:
             assert prompt.default_buffer.text == ""
+
+
+@pytest.mark.asyncio
+async def test_memory_list_is_first_submenu_choice() -> None:
+    async with _running_prompt() as prompt:
+        _complete(prompt, "/memory ")
+        state = prompt.default_buffer.complete_state
+        assert state is not None
+        assert state.completions[0].text == "list"
+        assert any("list" in line for line in _screen_lines(prompt))
+        prompt.default_buffer.go_to_completion(0)
+        _press(prompt, Keys.Tab)
+        assert prompt.default_buffer.text == "/memory list"
+
+
+@pytest.mark.asyncio
+async def test_cron_and_nested_cli_groups_select_actions_before_dispatch() -> None:
+    async with _running_prompt() as prompt:
+        buffer = prompt.default_buffer
+        buffer.document = Document("/cron", len("/cron"))
+        _press(prompt, Keys.Enter)
+        assert buffer.text == "/cron "
+        state = buffer.complete_state
+        assert state is not None
+        assert [c.text for c in state.completions] == [
+            "list",
+            "add",
+            "logs",
+            "remove",
+            "run",
+            "status",
+            "start",
+        ]
+        assert not prompt.app.is_done
+        _press(prompt, Keys.Escape)
+        assert buffer.complete_state is None
+        assert not prompt.app.is_done
+
+        _complete(prompt, "/sentry ")
+        _press(prompt, Keys.Enter)
+        assert buffer.text == "/sentry digest "
+        assert buffer.complete_state is not None
+        assert [c.text for c in buffer.complete_state.completions] == ["run", "schedule"]
+        _press(prompt, Keys.Down)
+        _press(prompt, Keys.Enter)
+        assert buffer.text == "/sentry digest schedule "
+        assert buffer.complete_state is not None
+        assert buffer.complete_state.completions[0].text == "list"
+        assert any("Subcommands · /sentry digest schedule" in row for row in _screen_lines(prompt))
+        _press(prompt, Keys.Enter)
+        assert prompt.app.is_done
+        assert prompt.app.future.result() == "/sentry digest schedule list"

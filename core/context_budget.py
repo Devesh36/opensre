@@ -7,6 +7,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from config.llm_models import DEFAULT_MAX_TOKENS
+
 logger = logging.getLogger(__name__)
 
 # Prompt windows are substring-matched against provider model ids. Unknown
@@ -17,8 +19,14 @@ _MODEL_CONTEXT_WINDOWS: dict[str, int] = {
     "gpt-4o": 128_000,
     "gpt-4.1": 1_000_000,
     "gpt-4": 128_000,
-    # Lookup is first-substring-match in insertion order, so gpt-5.4 / gpt-5.6
-    # must stay above the gpt-5 catch-all or they are never reached.
+    # Lookup is first-substring-match in insertion order, so a longer family
+    # id must stay above any shorter prefix that it contains. GPT-6.1 Sol's
+    # published window is 1,050,000 tokens with a 922,000 input cap and
+    # 128,000 max output. The trimmer only reserves DEFAULT_MAX_TOKENS
+    # (25,000), so the stored window is that input cap plus the reserve.
+    # A full 1,050,000 window would admit prompts the API rejects.
+    "gpt-6.1": 947_000,
+    # gpt-5.4 / gpt-5.6 must stay above the gpt-5 catch-all or they are never reached.
     "gpt-5.6": 1_000_000,
     "gpt-5.4": 1_000_000,
     # gpt-5 window is conservatively pinned to 128k until confirmed for the
@@ -29,8 +37,7 @@ _MODEL_CONTEXT_WINDOWS: dict[str, int] = {
 }
 _DEFAULT_CONTEXT_WINDOW = 128_000
 
-_RESPONSE_HEADROOM_TOKENS = 16_000
-_TOKEN_BUDGET_CEILING = _DEFAULT_CONTEXT_WINDOW - _RESPONSE_HEADROOM_TOKENS
+_TOKEN_BUDGET_CEILING = _DEFAULT_CONTEXT_WINDOW - DEFAULT_MAX_TOKENS
 
 # Conservative char-to-token estimate for JSON-heavy tool payloads.
 _TOKENS_PER_CHAR = 0.50
@@ -196,8 +203,10 @@ def _eviction_priority(exchange: _ToolExchange) -> tuple[int, int, int]:
     return (duplicate_rank, -exchange.token_estimate, exchange.start)
 
 
-def context_budget_ceiling_for_model(model: str | None) -> int:
-    """Trim ceiling for the active model = its context window − response headroom.
+def context_budget_ceiling_for_model(
+    model: str | None, *, max_output_tokens: int = DEFAULT_MAX_TOKENS
+) -> int:
+    """Trim ceiling after reserving at least the configured output budget.
 
     Substring match (case-insensitive) so dated snapshots and provider prefixes
     resolve to the right family. Unknown → conservative default, which only ever
@@ -210,7 +219,8 @@ def context_budget_ceiling_for_model(model: str | None) -> int:
             if family in key:
                 window = family_window
                 break
-    return max(window - _RESPONSE_HEADROOM_TOKENS, _RESPONSE_HEADROOM_TOKENS)
+    response_headroom = max(DEFAULT_MAX_TOKENS, max_output_tokens)
+    return max(window - response_headroom, 0)
 
 
 def _message_token_estimate(message: dict[str, Any]) -> int:

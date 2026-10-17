@@ -11,6 +11,7 @@ import pytest
 
 from core.agent_harness.turns.display_text import is_outcome_report
 from infrastructure.text.data_blob import is_data_blob
+from integrations.github.agent_tools import require_webapp_github
 from integrations.github.tools.ci_repair_loop.models import RepairRun, RepairStatus
 from integrations.github.tools.ci_repair_loop.storage import RepairStore
 from integrations.github.tools.ci_repair_run import tool as run_tool
@@ -165,11 +166,11 @@ def _install(
             return RepairEvidence()
         return read_repair_evidence(task_id, store=store)
 
-    monkeypatch.setattr(run_tool, "seed_ci_repair_demo", _seed)
+    monkeypatch.setattr(run_tool, "seed_ci_repair_demo", require_webapp_github(_seed))
     monkeypatch.setattr(run_tool, "read_repair_evidence", _evidence)
-    monkeypatch.setattr(run_tool, "schedule_ci_repair_loop", _schedule)
-    monkeypatch.setattr(run_tool, "get_ci_repair_loop", _get)
-    monkeypatch.setattr(run_tool, "finish_ci_repair_demo", _finish)
+    monkeypatch.setattr(run_tool, "schedule_ci_repair_loop", require_webapp_github(_schedule))
+    monkeypatch.setattr(run_tool, "get_ci_repair_loop", require_webapp_github(_get))
+    monkeypatch.setattr(run_tool, "finish_ci_repair_demo", require_webapp_github(_finish))
     monkeypatch.setattr(run_tool, "run_gh_json", _pull)
 
 
@@ -179,7 +180,13 @@ def test_run_schedules_the_seeded_pr_once_then_waits_and_finishes(
     record = _Record()
     _install(monkeypatch, record)
 
-    result = run_tool.run_ci_repair_demo(_OWNER, _REQUESTED_REPO)
+    result = run_tool.run_ci_repair_demo(
+        _OWNER,
+        _REQUESTED_REPO,
+        github_connection_origin="webapp",
+        github_token="app-token",
+        github_connection_id="selected-app",
+    )
 
     assert record.seeds == 1
     assert record.schedules == [
@@ -196,6 +203,7 @@ def test_run_schedules_the_seeded_pr_once_then_waits_and_finishes(
     ]
     assert len(record.finishes) == 1
     finished = record.finishes[0]
+    assert finished["github_connection_id"] == "selected-app"
     assert finished["repo"] == f"{_OWNER}/{_SEEDED_REPO}"
     assert finished["pr_number"] == _PR_NUMBER
     assert finished["loop_id"] == _TASK_ID
@@ -226,7 +234,9 @@ def test_a_rearmed_retained_demo_is_reported_with_the_fault_it_reintroduced(
     seeded = {**_seed_ok(_OWNER, _SEEDED_REPO), "reused": True, "rearmed": True}
     _install(monkeypatch, record, seed_result=seeded, store=_repair_store(tmp_path))
 
-    result = run_tool.run_ci_repair_demo(_OWNER, _SEEDED_REPO)
+    result = run_tool.run_ci_repair_demo(
+        _OWNER, _SEEDED_REPO, github_connection_origin="webapp", github_token="app-token"
+    )
 
     assert result["outcome"] == "success"
     assert result["rearmed"] is True
@@ -279,7 +289,9 @@ def test_a_repaired_demo_reports_full_github_urls_and_its_root_cause(
     _install(monkeypatch, record, seed_result=seeded, store=_repair_store(tmp_path))
 
     # Act
-    result = run_tool.run_ci_repair_demo(_OWNER, _REQUESTED_REPO)
+    result = run_tool.run_ci_repair_demo(
+        _OWNER, _REQUESTED_REPO, github_connection_origin="webapp", github_token="app-token"
+    )
 
     # Assert: every URL is written out, since a terminal shows link text without its URL
     base = f"https://github.com/{_OWNER}/{_SEEDED_REPO}"
@@ -331,7 +343,9 @@ def test_a_green_head_pushed_after_the_repair_is_not_reported_as_its_fix(
     monkeypatch.setattr(run_tool, "run_gh_json", _pull)
 
     # Act
-    result = run_tool.run_ci_repair_demo(_OWNER, _REQUESTED_REPO)
+    result = run_tool.run_ci_repair_demo(
+        _OWNER, _REQUESTED_REPO, github_connection_origin="webapp", github_token="app-token"
+    )
 
     # Assert: neither the other head nor its passing run is linked or credited
     assert set(result["links"]) == {"pull_request", "failing_commit", "failed_run"}
@@ -348,7 +362,9 @@ def test_seed_failure_does_not_schedule_or_finish(monkeypatch: pytest.MonkeyPatc
     failure = {"ok": False, "error": "Could not seed the CI repair demo: GitHubApiError."}
     _install(monkeypatch, record, seed_result=failure)
 
-    result = run_tool.run_ci_repair_demo(_OWNER, _REQUESTED_REPO)
+    result = run_tool.run_ci_repair_demo(
+        _OWNER, _REQUESTED_REPO, github_connection_origin="webapp", github_token="app-token"
+    )
 
     assert result == failure
     assert record.seeds == 1
@@ -364,7 +380,9 @@ def test_schedule_failure_does_not_schedule_again_or_finish(
     failure = {"ok": False, "error": "Could not schedule CI repair: the pull request was refused."}
     _install(monkeypatch, record, schedule_result=failure)
 
-    result = run_tool.run_ci_repair_demo(_OWNER, _REQUESTED_REPO)
+    result = run_tool.run_ci_repair_demo(
+        _OWNER, _REQUESTED_REPO, github_connection_origin="webapp", github_token="app-token"
+    )
 
     assert result == failure
     assert record.schedules == [
@@ -386,7 +404,9 @@ def test_a_rearm_is_reported_when_the_run_stops_early(monkeypatch: pytest.Monkey
     seeded = {**_seed_ok(_OWNER, _SEEDED_REPO), "reused": True, "rearmed": True}
     _install(monkeypatch, record, seed_result=seeded, schedule_result=failure)
 
-    result = run_tool.run_ci_repair_demo(_OWNER, _SEEDED_REPO)
+    result = run_tool.run_ci_repair_demo(
+        _OWNER, _SEEDED_REPO, github_connection_origin="webapp", github_token="app-token"
+    )
 
     assert result["ok"] is False
     assert result["rearmed"] is True
@@ -403,7 +423,9 @@ def test_a_running_report_leaves_the_schedule(monkeypatch: pytest.MonkeyPatch) -
         observe_result={"ok": True, "status": "running", "task_id": _TASK_ID},
     )
 
-    result = run_tool.run_ci_repair_demo(_OWNER, _REQUESTED_REPO)
+    result = run_tool.run_ci_repair_demo(
+        _OWNER, _REQUESTED_REPO, github_connection_origin="webapp", github_token="app-token"
+    )
 
     assert result["ok"] is False
     assert result["task_id"] == _TASK_ID
@@ -416,7 +438,9 @@ def test_a_failed_report_read_removes_the_schedule(monkeypatch: pytest.MonkeyPat
     record = _Record()
     _install(monkeypatch, record, observe_result={"ok": False, "error": "missing"})
 
-    result = run_tool.run_ci_repair_demo(_OWNER, _REQUESTED_REPO)
+    result = run_tool.run_ci_repair_demo(
+        _OWNER, _REQUESTED_REPO, github_connection_origin="webapp", github_token="app-token"
+    )
 
     assert result["ok"] is False
     assert result["task_id"] == _TASK_ID
@@ -434,7 +458,9 @@ def test_a_pull_read_failure_removes_the_schedule(monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setattr(run_tool, "run_gh_json", _boom)
 
-    result = run_tool.run_ci_repair_demo(_OWNER, _REQUESTED_REPO)
+    result = run_tool.run_ci_repair_demo(
+        _OWNER, _REQUESTED_REPO, github_connection_origin="webapp", github_token="app-token"
+    )
 
     assert result["ok"] is False
     assert result["task_id"] == _TASK_ID
@@ -464,7 +490,9 @@ def test_a_neutral_check_beside_a_success_still_counts_as_passed(
 
     monkeypatch.setattr(run_tool, "run_gh_json", _pull)
 
-    result = run_tool.run_ci_repair_demo(_OWNER, _REQUESTED_REPO)
+    result = run_tool.run_ci_repair_demo(
+        _OWNER, _REQUESTED_REPO, github_connection_origin="webapp", github_token="app-token"
+    )
 
     assert result["outcome"] == "success"
     assert result["passing_run_id"] == _PASSING_RUN
@@ -474,7 +502,9 @@ def test_the_result_says_the_demo_loop_was_removed(monkeypatch: pytest.MonkeyPat
     record = _Record()
     _install(monkeypatch, record)
 
-    result = run_tool.run_ci_repair_demo(_OWNER, _REQUESTED_REPO)
+    result = run_tool.run_ci_repair_demo(
+        _OWNER, _REQUESTED_REPO, github_connection_origin="webapp", github_token="app-token"
+    )
 
     assert result["loop_removed"] is True
     assert result["repository_retained"] is True
@@ -500,11 +530,13 @@ def test_an_empty_owner_seeds_under_the_token_login(monkeypatch: pytest.MonkeyPa
             assert (method, path) == ("GET", "user")
             return {"login": _OWNER}
 
-    monkeypatch.setattr(run_tool, "seed_ci_repair_demo", _seed)
+    monkeypatch.setattr(run_tool, "seed_ci_repair_demo", require_webapp_github(_seed))
     monkeypatch.setattr(run_tool, "GitHubRestClient", _Client)
     monkeypatch.setattr(run_tool, "configured_token", lambda _explicit=None: "ghp_demo")
 
-    result = run_tool.run_ci_repair_demo(repo=_REQUESTED_REPO)
+    result = run_tool.run_ci_repair_demo(
+        github_connection_origin="webapp", github_token="app-token", repo=_REQUESTED_REPO
+    )
 
     assert seeded_owners == [_OWNER]
     assert result["ok"] is True
@@ -517,7 +549,7 @@ def test_a_token_without_a_login_does_not_seed(monkeypatch: pytest.MonkeyPatch) 
 
     class _Client:
         def __init__(self, token: str) -> None:
-            del token
+            self.token = token
 
         def request(self, method: str, path: str) -> dict[str, Any]:
             del method, path
@@ -526,7 +558,12 @@ def test_a_token_without_a_login_does_not_seed(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(run_tool, "GitHubRestClient", _Client)
     monkeypatch.setattr(run_tool, "configured_token", lambda _explicit=None: "ghp_demo")
 
-    result = run_tool.run_ci_repair_demo(owner="  ", repo=_REQUESTED_REPO)
+    result = run_tool.run_ci_repair_demo(
+        github_connection_origin="webapp",
+        github_token="app-token",
+        owner="  ",
+        repo=_REQUESTED_REPO,
+    )
 
     assert result["ok"] is False
     assert "pass owner" in result["error"]

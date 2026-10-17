@@ -8,7 +8,11 @@ from core.agent_harness.tools import action_context_from_agent_context
 from core.domain.types.tools import ToolSurface
 from core.tool import SideEffectLevel
 from core.tool_framework import tool
-from integrations.github.client import resolve_github_token
+from integrations.github.agent_tools import (
+    github_tool_available,
+    github_tool_params,
+    require_webapp_github,
+)
 from integrations.github.helpers import (
     GITHUB_INJECTED_PARAMS,
     github_creds,
@@ -49,7 +53,11 @@ _INPUT_SCHEMA: dict[str, Any] = {
         },
         "workspace": {
             "type": "string",
-            "description": "Explicit matching checkout. Shipped repairs use an isolated clone when omitted; local-only fixes use CODING_WORKSPACE or cwd.",
+            "description": (
+                "Explicit matching checkout. When omitted, a local-only fix uses CODING_WORKSPACE "
+                "or cwd if it is a checkout of the repository; otherwise the repository is "
+                "cloned and the fix is always shipped as a pull request."
+            ),
         },
         "model": {
             "type": "string",
@@ -73,14 +81,7 @@ _INPUT_SCHEMA: dict[str, Any] = {
 
 
 def _github_security_fix_available(sources: dict[str, dict]) -> bool:
-    if sources.get("github", {}).get("connection_selection_error"):
-        return False
-    gh = sources.get("github", {})
-    return bool(
-        github_source_available(sources)
-        or resolve_github_token(None)
-        or github_creds(gh).get("github_token")
-    )
+    return github_source_available(sources)
 
 
 def _github_security_fix_extract_params(sources: dict[str, dict]) -> dict[str, Any]:
@@ -136,10 +137,11 @@ def _confirm_fn(context: Any) -> Any:
     side_effect_level=SideEffectLevel.MUTATING,
     accepts_runtime_context=True,
     input_schema=_INPUT_SCHEMA,
-    is_available=_github_security_fix_available,
-    extract_params=_github_security_fix_extract_params,
+    is_available=github_tool_available(_github_security_fix_available),
+    extract_params=github_tool_params(_github_security_fix_extract_params),
     injected_params=GITHUB_INJECTED_PARAMS,
 )
+@require_webapp_github
 def fix_github_security_alert(
     owner: str | None = None,
     repo: str | None = None,

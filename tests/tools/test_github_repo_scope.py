@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from integrations.github.accessible_repos import AccessibleRepository, repository_named_in
 from integrations.github.mcp import GitHubMCPConfig
 from integrations.github.repo_scope import (
     GITHUB_VCS_REPO_SCOPE_PROVIDER,
@@ -113,7 +114,7 @@ def test_detect_git_remote_repo_scope_parses_ssh_remote() -> None:
         assert detect_git_remote_repo_scope() == ("org", "repo")
 
 
-def test_detect_git_remote_repo_scope_falls_back_to_upstream() -> None:
+def test_detect_git_remote_repo_scope_falls_back_to_origin() -> None:
     with patch("integrations.github.repo_scope.subprocess.run") as run:
         run.side_effect = [
             MagicMock(returncode=2, stdout=""),
@@ -125,7 +126,7 @@ def test_detect_git_remote_repo_scope_falls_back_to_upstream() -> None:
 
         assert detect_git_remote_repo_scope() == ("Tracer-Cloud", "opensre")
 
-    assert [call.args[0][-1] for call in run.call_args_list] == ["origin", "upstream"]
+    assert [call.args[0][-1] for call in run.call_args_list] == ["upstream", "origin"]
 
 
 def test_detect_git_remote_repo_scope_rejects_non_github_remote() -> None:
@@ -154,8 +155,20 @@ def test_apply_github_repo_scope_merges_into_github_mcp_config() -> None:
 
 
 def test_apply_github_repo_scope_noop_without_github() -> None:
-    resolved = {"datadog": {"connection_verified": True}}
-    assert apply_github_repo_scope(resolved, "o", "r") == {"datadog": {"connection_verified": True}}
+    resolved = {
+        "datadog": {
+            "connection_origin": "webapp",
+            "auth_token": "app-token",
+            "connection_verified": True,
+        }
+    }
+    assert apply_github_repo_scope(resolved, "o", "r") == {
+        "datadog": {
+            "connection_origin": "webapp",
+            "auth_token": "app-token",
+            "connection_verified": True,
+        }
+    }
 
 
 def test_workspace_scope_adds_public_github_source_without_integration() -> None:
@@ -203,13 +216,87 @@ def test_workspace_scope_keeps_configured_github_authenticated() -> None:
     assert scope is not None
 
     resolved = GITHUB_VCS_REPO_SCOPE_PROVIDER.apply(
-        {"github": {"connection_verified": True, "auth_token": "secret"}},
+        {
+            "github": {
+                "connection_origin": "webapp",
+                "connection_verified": True,
+                "auth_token": "secret",
+            }
+        },
         scope,
     )
 
     assert resolved["github"] == {
+        "connection_origin": "webapp",
         "connection_verified": True,
         "auth_token": "secret",
         "owner": "Tracer-Cloud",
         "repo": "opensre",
     }
+
+
+def test_short_repository_name_resolves_to_the_primary_not_a_fork() -> None:
+    """'fix the opensre repo' must target the organization's repo, not ask which fork."""
+    from core.domain.repositories import set_primary_repository
+
+    set_primary_repository("Tracer-Cloud/opensre")
+
+    scope = GITHUB_VCS_REPO_SCOPE_PROVIDER.infer(
+        message="fix the failing issues in the opensre repo",
+        conversation_messages=[("assistant", "Forks: KindaJayant/opensre, vrk7/opensre")],
+        env={},
+        cwd="/not/a/repository",
+        cached=("KindaJayant", "opensre"),
+    )
+
+    assert scope == ("Tracer-Cloud", "opensre")
+
+
+_REACHABLE = (
+    AccessibleRepository("Tracer-Cloud/opensre", fork=False),
+    AccessibleRepository("Tracer-Cloud/opensre-webapp", fork=False),
+    AccessibleRepository("vrk7/opensre", fork=True),
+)
+
+
+def test_short_name_resolves_to_the_reachable_original_without_a_preference(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Slack asked "which repository?" for "the opensre repo" the connection could reach."""
+    monkeypatch.setattr(
+        "integrations.github.repo_scope.accessible_repositories", lambda _token: _REACHABLE
+    )
+
+    scope = GITHUB_VCS_REPO_SCOPE_PROVIDER.infer(
+        message="fix all the github security issues in the opensre repo",
+        conversation_messages=[],
+        env={},
+        cwd="/not/a/repository",
+        cached=None,
+    )
+
+    assert scope == ("Tracer-Cloud", "opensre")
+
+
+def test_a_name_shared_by_two_originals_is_not_guessed() -> None:
+    reachable = (*_REACHABLE, AccessibleRepository("other-org/opensre", fork=False))
+
+    assert repository_named_in("fix the opensre repo", reachable) is None
+
+
+def test_a_placeholder_in_the_assistant_question_is_not_a_repository() -> None:
+    """The reply "provide `owner/opensre`" sent the next turn to a 404 repository."""
+    history = [
+        ("user", "fix all the github security issues in the opensre repo"),
+        ("assistant", "Which GitHub repository do you mean? Please provide `owner/opensre`."),
+    ]
+
+    scope = GITHUB_VCS_REPO_SCOPE_PROVIDER.infer(
+        message="fix it",
+        conversation_messages=history,
+        env={},
+        cwd="/not/a/repository",
+        cached=None,
+    )
+
+    assert scope is None

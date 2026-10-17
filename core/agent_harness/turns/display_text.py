@@ -47,9 +47,6 @@ def already_on_screen(tool_call: ToolCall, tool_result: Any) -> bool:
 
 
 _EXPAND_MARKER_RE = re.compile(r"^… \d+ more, Ctrl\+O to view$")
-_PLAN_SNAPSHOT_RE = re.compile(
-    r"Plan\s*[·.]\s*\d+\s*/\s*\d+(?:\s*[·.]\s*\d+\s*blocked)?(?:\s*[✓●○⊘][^✓●○⊘\n]*)*"
-)
 
 
 def _content_to_text(content: Any) -> str:
@@ -58,18 +55,6 @@ def _content_to_text(content: Any) -> str:
     if isinstance(content, list):
         return json.dumps(content, default=str)
     return str(content)
-
-
-def strip_plan_snapshots(text: str) -> str:
-    """Remove ``Plan · n/m`` checklist snapshots the model restates in its reply.
-
-    The plan lives in the pinned overlay, so echoing it — let alone every
-    historical step-completion state — is a redundant wall. Prose (``-``/``•``
-    bullets, sentences) is untouched."""
-    if "Plan" not in text:
-        return text
-    cleaned = _PLAN_SNAPSHOT_RE.sub("", text)
-    return re.sub(r"\n{3,}", "\n\n", cleaned).strip()
 
 
 def looks_like_json(text: str) -> bool:
@@ -131,6 +116,8 @@ def _visible_stdout(stdout: str) -> str:
 
 def format_generic_tool_payload(tool_call: ToolCall, tool_result: Any) -> str:
     """Build a user-visible summary for one non-self-recording tool result."""
+    if getattr(tool_result, "model_only", False):
+        return ""
     if already_on_screen(tool_call, tool_result):
         return ""
     preferred_response = preferred_tool_response_text(tool_result)
@@ -229,5 +216,4 @@ __all__ = [
     "looks_like_json",
     "preferred_tool_response_text",
     "split_output_truncation_markers",
-    "strip_plan_snapshots",
 ]

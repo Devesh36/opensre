@@ -8,6 +8,11 @@ from typing import Any
 from core.domain.types.tools import ToolSurface
 from core.tool import SideEffectLevel, report_run_error
 from core.tool_framework import tool
+from integrations.github.agent_tools import (
+    github_tool_available,
+    github_tool_params,
+    require_webapp_github,
+)
 from integrations.github.client import GitHubApiError, GitHubRestClient
 from integrations.github.helpers import (
     GITHUB_INJECTED_PARAMS,
@@ -198,15 +203,16 @@ def _run(
     repo: str,
     github_token: str | None,
     context: Any,
+    credentials: dict[str, Any],
 ) -> dict[str, Any]:
     owner = owner.strip() or _token_login(github_token)
     if not owner:
         return {"ok": False, "error": "GitHub did not return a login for this token; pass owner."}
-    seeded = seed_ci_repair_demo(owner=owner, repo=repo, github_token=github_token)
+    seeded = seed_ci_repair_demo(owner=owner, repo=repo, **credentials)
     if not seeded.get("ok"):
         return seeded
     try:
-        result = _run_seeded(seeded, github_token, context)
+        result = _run_seeded(seeded, github_token, context, credentials)
     except (GitHubCiFixError, GitHubApiError, OSError, RuntimeError, ValueError) as exc:
         result = _failed(exc)
     return _noted_rearm(seeded, result)
@@ -228,6 +234,7 @@ def _run_seeded(
     seeded: dict[str, Any],
     github_token: str | None,
     context: Any,
+    credentials: dict[str, Any],
 ) -> dict[str, Any]:
     target = _seed_target(seeded)
     if target is None:
@@ -237,7 +244,7 @@ def _run_seeded(
         owner=seeded_owner,
         repo=seeded_repo,
         pr_number=pr_number,
-        github_token=github_token,
+        **credentials,
         context=context,
         fast_checks=True,
     )
@@ -255,9 +262,10 @@ def _run_seeded(
             seeded,
             scheduled,
             github_token,
+            credentials,
         )
     except (GitHubCiFixError, GitHubApiError, OSError, RuntimeError, ValueError) as exc:
-        _remove_schedule(seeded_owner, seeded_repo, pr_number, task_id, github_token)
+        _remove_schedule(seeded_owner, seeded_repo, pr_number, task_id, credentials)
         failed = _failed(exc)
         failed["task_id"] = task_id
         return failed
@@ -268,7 +276,7 @@ def _remove_schedule(
     repo: str,
     pr_number: int,
     task_id: str,
-    github_token: str | None,
+    credentials: dict[str, Any],
 ) -> dict[str, Any]:
     """Drop the schedule after a read failure so the demo does not keep ticking."""
     try:
@@ -277,7 +285,7 @@ def _remove_schedule(
             pr_number=pr_number,
             loop_id=task_id,
             outcome=_OUTCOME_BLOCKED,
-            github_token=github_token,
+            **credentials,
         )
     except (GitHubCiFixError, GitHubApiError, OSError, RuntimeError, ValueError):
         return {"ok": False}
@@ -306,14 +314,15 @@ def _finish_scheduled(
     seeded: dict[str, Any],
     scheduled: dict[str, Any],
     github_token: str | None,
+    credentials: dict[str, Any],
 ) -> dict[str, Any]:
     observed = get_ci_repair_loop(
         task_id=task_id,
         wait_until_terminal=True,
-        github_token=github_token,
+        **credentials,
     )
     if not observed.get("ok"):
-        stopped = _remove_schedule(seeded_owner, seeded_repo, pr_number, task_id, github_token)
+        stopped = _remove_schedule(seeded_owner, seeded_repo, pr_number, task_id, credentials)
         refused = dict(observed)
         refused["task_id"] = task_id
         refused["loop_removed"] = stopped.get("loop_removed") is True
@@ -365,7 +374,7 @@ def _finish_scheduled(
         failed_run_id=failed_run_id,
         fix_commit=fix_commit,
         passing_run_id=passing_run_id,
-        github_token=github_token,
+        **credentials,
         analysis=analysis_text,
     )
     evidence = _text(finished.get("evidence"))
@@ -410,6 +419,7 @@ def _finish_scheduled(
     name="run_ci_repair_demo",
     source="github",
     display_name="Run CI repair demo",
+    compact_description="Run the bounded private GitHub CI repair demo end to end.",
     use_cases=["Run the bounded private CI repair demo through seed, repair, and evidence"],
     description=(
         "Seed one private CI repair demo, schedule repair of the pull request it returns, "
@@ -426,8 +436,8 @@ def _finish_scheduled(
     surfaces=(ToolSurface.ACTION,),
     side_effect_level=SideEffectLevel.MUTATING,
     accepts_runtime_context=True,
-    is_available=github_source_available,
-    extract_params=_credentials,
+    is_available=github_tool_available(github_source_available),
+    extract_params=github_tool_params(_credentials),
     injected_params=GITHUB_INJECTED_PARAMS,
     input_schema={
         "type": "object",
@@ -442,15 +452,28 @@ def _finish_scheduled(
         "additionalProperties": False,
     },
 )
+@require_webapp_github
 def run_ci_repair_demo(
     owner: str = "",
     repo: str = "",
     github_token: str | None = None,
     context: Any = None,
+    github_connection_origin: str = "",
+    github_connection_id: str = "",
     **_kwargs: Any,
 ) -> dict[str, Any]:
     """Seed, schedule, wait, verify, and finish one bounded demo repair."""
     try:
-        return _run(owner, repo, github_token, context)
+        return _run(
+            owner,
+            repo,
+            github_token,
+            context,
+            {
+                "github_token": github_token,
+                "github_connection_origin": github_connection_origin,
+                "github_connection_id": github_connection_id,
+            },
+        )
     except (GitHubCiFixError, GitHubApiError, OSError, RuntimeError, ValueError) as exc:
         return _failed(exc)

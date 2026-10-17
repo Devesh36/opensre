@@ -80,8 +80,10 @@ Package rules: `session_goal/AGENTS.md`. Borders SoT (local notes):
 complete a step that had no tool return while it was `in_progress`
 (`task_plan/completion.py`, fed by `turns/plan_hooks.py`); a step marked
 `verifies` is never exempt, and a text-only closing step is exempt only once
-such a step completed. The second work tool of a turn with no open plan is
-refused (`task_plan/required.py`). A response whose only tool call is
+such a step completed. During a loaded skill workflow, the second work tool of
+a turn with no open plan is refused (`task_plan/required.py`). Ordinary turns
+and turns with an attached session goal execute directly without this guard. A
+response whose only tool call is
 `update_plan` runs: the prompt asks for the write in the same response as the
 step's tool, but refusing it cost the same model call it meant to save and
 sent the model into retries and off-plan tools. The host advances the plan
@@ -147,8 +149,11 @@ Checklist progress uses the `session_goal_complete` tool, not reply tags.
 
 Workflow cards are validated before discovery. Invalid cards are excluded with
 diagnostics, while CI checks the unfiltered catalog and fails on every invalid
-card. Workflow skills retain the available tool catalog and may add declared
-local script tools while active. The per-run catalog refreshes after skill
+card. Large interactive catalogs use progressive disclosure: universal controls
+and `tool_search` are visible first, `tool_search` activates specialist schemas
+on the next ReAct iteration, and workflow-local script tools appear immediately
+while their skill is active. Skills retain access to the complete available
+catalog; they do not declare filters. The per-run catalog refreshes after skill
 changes; execution rechecks the active session. Settling the plan retires its
 helpers. A new user request clears active skill context, while menu answers
 and slash commands retain it. Full contract: `prompts/skills/AGENTS.md`.
@@ -377,6 +382,9 @@ instead of the wrong turn. Compaction (``turns/transcript_compaction.py``) is
 token-based: past ``OPENSRE_HISTORY_TOKEN_BUDGET`` a model writes a handoff
 summary of the older turns, the newest stay verbatim with their evidence, and
 the compaction record keeps both so resume restarts from the same state.
+Tool observations use the shared ``core.tool`` output policy. Preserve that
+observation during replay and summarization; history adds serialization space.
+Audit records are bounded independently and are not a lossless output archive.
 ``OPENSRE_STRUCTURED_HISTORY=0`` restores the text block (``RECENT
 CONVERSATION``) as a kill switch. Code that scans a run's ``result.messages``
 for this turn's output must skip the replayed prefix (``history_count``), or an

@@ -72,7 +72,6 @@ from core.agent_harness.turns.display_text import (
     looks_like_json,
     preferred_tool_response_text,
     split_output_truncation_markers,
-    strip_plan_snapshots,
 )
 from core.agent_harness.turns.goal_review import (
     build_goal_reviewer,
@@ -117,6 +116,7 @@ from infrastructure.observability.trace.decisions import record_decision
 from infrastructure.observability.trace.prompts import persist_turn_system_prompt
 from infrastructure.observability.trace.spans import component_span
 from infrastructure.text import is_data_blob
+from infrastructure.text.plan_snapshots import strip_plan_snapshots
 
 log = logging.getLogger(__name__)
 
@@ -283,6 +283,7 @@ def _generic_tool_results(result: Any) -> list[tuple[ToolCall, Any]]:
         (tool_call, tool_result)
         for tool_call, tool_result in getattr(result, "tool_results", [])
         if tool_call.name not in SELF_RECORDING_ACTION_TOOL_NAMES
+        and not getattr(tool_result, "model_only", False)
     ]
 
 
@@ -365,16 +366,6 @@ def _stash_collapsed_tool_output(session: SessionState, text: str | None) -> Non
     # Minimal test doubles without the ring API: only record a non-None peek.
     if text is not None:
         terminal.collapsed_tool_output = text
-
-
-def _preferred_tool_response_texts(result: Any) -> str:
-    """Reply text of tools whose output is not on screen yet.
-
-    A painted result (``rendered_in_shell``) is skipped like everywhere else in
-    the transcript; otherwise its one-line summary reappears as the closing
-    under the table it summarizes.
-    """
-    return "\n\n".join(_preferred_tool_chunks(result))
 
 
 def _preferred_tool_chunks(
@@ -546,7 +537,11 @@ def _self_recording_tools_only(result: Any) -> bool:
     invented without the command's on-screen output (e.g. claiming ``/health``
     was all-green after the report already showed failures).
     """
-    names = [tool_call.name for tool_call, _tool_result in getattr(result, "tool_results", [])]
+    names = [
+        tool_call.name
+        for tool_call, tool_result in getattr(result, "tool_results", [])
+        if not getattr(tool_result, "model_only", False)
+    ]
     return bool(names) and all(name in SELF_RECORDING_ACTION_TOOL_NAMES for name in names)
 
 
@@ -571,7 +566,11 @@ def _grounded_output_tools_only(result: Any) -> bool:
     any skipped step) instead of ending on raw output, matching how a teammate
     would confirm the outcome.
     """
-    names = [tool_call.name for tool_call, _tool_result in getattr(result, "tool_results", [])]
+    names = [
+        tool_call.name
+        for tool_call, tool_result in getattr(result, "tool_results", [])
+        if not getattr(tool_result, "model_only", False)
+    ]
     return bool(names) and all(name in _GROUNDED_OUTPUT_TOOL_NAMES for name in names)
 
 
@@ -867,7 +866,9 @@ def _build_action_agent(
                 lambda text: _deliverable_shown(session, text, value_insights),
             ),
             blocked_needs_user=lambda: blocked_steps_await_the_user(
-                session, user_answered=bool(parse_ask_user_answers(message))
+                session,
+                user_answered=bool(parse_ask_user_answers(message)),
+                menu_available=snapshot.interactive_choice_available,
             ),
             skill_load_only=lambda: demo_pick_stalled_on_skill_load(
                 session,
@@ -1095,6 +1096,12 @@ def _compose_response(
     closing_chunks = _closing_tool_chunks(
         generic_chunks, include_outcome=not outcome_already_delivered
     )
+    if final_text_chunk and terminal is None:
+        # Chat surfaces (Slack, Telegram, Discord) have no terminal: no tool
+        # transcript and no Ctrl+O to expand a preview. The model's closing is
+        # the answer there, so raw tool previews (gh errors, truncated reads)
+        # are not appended to it. Only a tool's outcome report stays.
+        closing_chunks = [chunk for chunk in closing_chunks if is_outcome_report(chunk)]
     # A queued repair snapshot and the later succeeded snapshot are one report.
     # The report stays ahead of the cap: a long result before it must not hide
     # the outcome, whether or not an earlier snapshot was dropped.

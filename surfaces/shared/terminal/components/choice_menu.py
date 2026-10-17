@@ -85,6 +85,36 @@ def repl_tty_interactive() -> bool:
     return bool(sys.stdin.isatty() and sys.stdout.isatty())
 
 
+def console_output_is_tty(console: Console) -> bool:
+    """True when this console's effective destination is a live terminal.
+
+    ``Console.is_terminal`` is also true when color is forced, including
+    ``FORCE_COLOR=0``, so a redirected buffer would otherwise open a picker.
+    A delegating console inherits the destination's decision rather than its
+    own derived force flag. An explicit force on the destination still wins,
+    which is how a caller opts in.
+    """
+    destination = console
+    seen = {id(destination)}
+    while True:
+        delegated = getattr(destination, "_output", None)
+        if not isinstance(delegated, Console) or id(delegated) in seen:
+            break
+        destination = delegated
+        seen.add(id(destination))
+
+    forced = destination._force_terminal
+    if forced is not None:
+        return bool(forced)
+    isatty = getattr(destination.file, "isatty", None)
+    if not callable(isatty):
+        return False
+    try:
+        return bool(isatty())
+    except (ValueError, OSError):
+        return False
+
+
 def ensure_tty_column_zero() -> None:
     """Reset the cursor column before Rich output when a TTY is active."""
     if repl_tty_interactive():
@@ -275,6 +305,20 @@ def show_terminal_cursor() -> None:
         sys.stdout.flush()
 
 
+def _call_stdout_hook(name: str) -> None:
+    hook = getattr(sys.stdout, name, None)
+    if callable(hook):
+        hook()
+
+
+def begin_inline_menu_output() -> None:
+    """Mark the following paint as an ephemeral menu, not transcript output.
+
+    A transcript-recording stdout skips it; any other stdout ignores the call.
+    """
+    _call_stdout_hook("begin_transient_output")
+
+
 def leave_inline_menu() -> None:
     """Restore cooked stdin and park the cursor at column zero.
 
@@ -292,13 +336,16 @@ def leave_inline_menu() -> None:
         restore_stdin_terminal,
     )
 
-    show_terminal_cursor()
-    restore_stdin_terminal()
-    flush_pending_input()
-    drain_stale_cpr_bytes()
-    # Column zero only — a newline here is a second blank after the reply
-    # (the stream already printed one) and after a deleted menu.
-    reset_tty_column()
+    try:
+        show_terminal_cursor()
+        restore_stdin_terminal()
+        flush_pending_input()
+        drain_stale_cpr_bytes()
+        # Column zero only — a newline here is a second blank after the reply
+        # (the stream already printed one) and after a deleted menu.
+        reset_tty_column()
+    finally:
+        _call_stdout_hook("end_transient_output")
 
 
 def erase_menu_lines(height: int, *, delete: bool = False) -> None:
@@ -336,6 +383,7 @@ def enter_inline_menu() -> None:
     """Prepare the terminal for a raw-key inline menu."""
     from surfaces.shared.terminal.components.cpr_stdin import drain_stale_cpr_bytes
 
+    begin_inline_menu_output()
     _clear_prompt_toolkit_paint()
     drain_stale_cpr_bytes()
     hide_terminal_cursor()
@@ -714,12 +762,14 @@ def print_valid_choice_list(
 
 __all__ = [
     "CRUMB_SEP",
+    "begin_inline_menu_output",
     "erase_menu_lines",
     "hide_terminal_cursor",
     "leave_inline_menu",
     "menu_columns",
     "print_valid_choice_list",
     "read_menu_action",
+    "console_output_is_tty",
     "repl_choose_one",
     "ensure_tty_column_zero",
     "prepare_repl_output_line",

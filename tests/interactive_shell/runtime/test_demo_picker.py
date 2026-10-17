@@ -75,6 +75,7 @@ from tests.core.agent.orchestration.action_execution_test_harness import (
     no_tool_response,
     tool_response,
 )
+from tests.utils.github_connections import connect_github_app
 from tools.system.workspace_git_scan.scan import WorkspaceSnapshot
 
 _TITLE = ONBOARDING_MENU_TITLE
@@ -200,14 +201,15 @@ def test_boot_paints_only_the_skill_menu_then_selected_child_runs_through_real_t
     """Boot output contract: the skill's entry menu is the first paint and needs no model."""
     _offerable(monkeypatch)
     # GitHub is ready, so the demo starts without the setup menu.
-    monkeypatch.setenv(GITHUB_TOKEN_ENV, "ghp_ready")
+    connect_github_app(monkeypatch)
     session = Session()
-    session.resolved_integrations_cache = {}
+    session.resolved_integrations_cache = None
     buffer = io.StringIO()
     console = Console(file=buffer, highlight=False)
     # The pick enters the chosen skill, so its first response is already step 1.
     llm = FakeActionLLM(
         [
+            tool_response("tool_search", {"names": ["scan_local_git_workspace"]}),
             tool_response("scan_local_git_workspace"),
             tool_response(
                 "ask_user_choice",
@@ -289,7 +291,7 @@ def test_boot_paints_only_the_skill_menu_then_selected_child_runs_through_real_t
     assert session.pending_user_choice is not None, buffer.getvalue()
     assert session.pending_user_choice.title == _REPOSITORY_TITLE
     assert session.pending_user_choice.options == _REPOSITORY_OPTIONS
-    assert llm.invocations == 2
+    assert llm.invocations == 3
     # Raw-data analysis retains the full catalog for model-selected collection.
     assert onboarding_outcomes == [("ci_analytics", False)]
 
@@ -304,6 +306,7 @@ def test_boot_paints_only_the_skill_menu_then_selected_child_runs_through_real_t
     replay_answer = _take_prompt(session)
     replay_llm = FakeActionLLM(
         [
+            tool_response("tool_search", {"names": ["scan_local_git_workspace"]}),
             tool_response("scan_local_git_workspace"),
             tool_response(
                 "ask_user_choice",
@@ -327,9 +330,9 @@ def test_a_demo_entered_at_the_pick_is_nudged_past_a_reply_that_runs_nothing(
     """Without a skill load to catch, a no-work reply on the pick's turn still stalls."""
     del onboarding_outcomes
     _offerable(monkeypatch)
-    monkeypatch.setenv(GITHUB_TOKEN_ENV, "ghp_ready")
+    connect_github_app(monkeypatch)
     session = Session()
-    session.resolved_integrations_cache = {}
+    session.resolved_integrations_cache = None
     console = Console(file=io.StringIO(), highlight=False)
     scans: list[str] = []
 
@@ -348,6 +351,7 @@ def test_a_demo_entered_at_the_pick_is_nudged_past_a_reply_that_runs_nothing(
     llm = FakeActionLLM(
         [
             no_tool_response("I'll scan your repositories next."),
+            tool_response("tool_search", {"names": ["scan_local_git_workspace"]}),
             tool_response("scan_local_git_workspace"),
             tool_response(
                 "ask_user_choice",
@@ -363,7 +367,7 @@ def test_a_demo_entered_at_the_pick_is_nudged_past_a_reply_that_runs_nothing(
     assert len(scans) == 1
     assert session.pending_user_choice is not None
     assert session.pending_user_choice.title == _REPOSITORY_TITLE
-    assert llm.invocations == 3
+    assert llm.invocations == 4
 
 
 def test_without_github_the_demo_opens_setup_first_and_resumes_after_it(
@@ -382,7 +386,7 @@ def test_without_github_the_demo_opens_setup_first_and_resumes_after_it(
     monkeypatch.setenv(INTEGRATIONS_STORE_PATH_ENV, str(tmp_path / "integrations.json"))
     assert resolve_store_path().is_relative_to(tmp_path)
     session = Session()
-    session.resolved_integrations_cache = {}
+    session.resolved_integrations_cache = None
     buffer = io.StringIO()
     console = Console(file=buffer, highlight=False)
     load_demo = tool_response("skill_view", {"name": "analyzing-github-ci-performance"})
@@ -390,6 +394,7 @@ def test_without_github_the_demo_opens_setup_first_and_resumes_after_it(
         [
             load_demo,
             load_demo,
+            tool_response("tool_search", {"names": ["scan_local_git_workspace"]}),
             tool_response("scan_local_git_workspace"),
             tool_response(
                 "ask_user_choice",
@@ -399,7 +404,7 @@ def test_without_github_the_demo_opens_setup_first_and_resumes_after_it(
     )
     scans: list[str] = []
     titles: list[str] = []
-    picks = iter([ANALYZE_REPO_OPTION, "Set up GitHub on this machine"])
+    picks = iter([ANALYZE_REPO_OPTION, "I've connected GitHub — continue"])
 
     def scan(root: Any, **_kwargs: Any) -> WorkspaceSnapshot:
         scans.append(str(root))
@@ -407,6 +412,8 @@ def test_without_github_the_demo_opens_setup_first_and_resumes_after_it(
 
     def pick(**kwargs: Any) -> str:
         titles.append(kwargs["title"])
+        if kwargs["title"] == "Connect GitHub to continue":
+            connect_github_app(monkeypatch)
         return next(picks)
 
     def local_wizard(_console: Console, args: list[str], **_kwargs: Any) -> bool:
@@ -435,7 +442,6 @@ def test_without_github_the_demo_opens_setup_first_and_resumes_after_it(
 
     # Act 2: the user sets GitHub up on this machine; the wizard saves a token.
     _run_slash_turn(session, console, _take_prompt(session))
-    _run_slash_turn(session, console, _take_prompt(session))
 
     # Assert: the menu answer is resubmitted exactly as it was first sent.
     replay = _take_prompt(session)
@@ -451,7 +457,7 @@ def test_without_github_the_demo_opens_setup_first_and_resumes_after_it(
     assert session.active_skill == "analyzing-github-ci-performance"
     assert session.pending_user_choice is not None
     assert session.pending_user_choice.title == _REPOSITORY_TITLE
-    assert llm.invocations == 4
+    assert llm.invocations == 5
     assert titles == [_TITLE, "Connect GitHub to continue"]
     assert onboarding_outcomes == [("ci_analytics", False)]
 
@@ -609,7 +615,7 @@ def test_automation_group_submits_the_follow_up_leaf_not_the_group(
     """
     _offerable(monkeypatch)
     # GitHub is ready, so the local repair demo needs no setup first.
-    monkeypatch.setenv(GITHUB_TOKEN_ENV, "ghp_ready")
+    connect_github_app(monkeypatch)
     session = Session()
     session.active_skill = ONBOARDING_SKILL_NAME
     pending = PendingUserChoice(title=_TITLE, options=OUTCOME_MENU_OPTIONS)
@@ -678,7 +684,7 @@ def test_a_repair_pick_with_permission_paints_one_ask_user_card(
     """``/choose`` paints the recap; submitting that same answer must not paint another."""
     del onboarding_outcomes
     _offerable(monkeypatch)
-    monkeypatch.setenv(GITHUB_TOKEN_ENV, "ghp_ready")
+    connect_github_app(monkeypatch)
     session = Session()
     session.active_skill = ONBOARDING_SKILL_NAME
     session.pending_user_choice = PendingUserChoice(title=_TITLE, options=OUTCOME_MENU_OPTIONS)
@@ -744,14 +750,16 @@ def test_without_github_the_local_repair_demo_asks_for_setup_before_its_reposito
     pending = PendingUserChoice(title=_TITLE, options=OUTCOME_MENU_OPTIONS)
     session.pending_user_choice = pending
     titles: list[str] = []
+    held: list[Any] = []
 
     def no_repository_question() -> str:
         raise AssertionError("the demo-repository question must wait for GitHub setup")
 
-    def pick(**kwargs: Any) -> str:
+    def pick(**kwargs: Any) -> str | None:
         titles.append(kwargs["title"])
         if kwargs["title"] == "Connect GitHub to continue":
-            return "Set up GitHub on this machine"
+            held.append(pending_setup_resume(session))
+            return None
         if kwargs["title"] == AUTOMATION_MENU_TITLE:
             return LOCAL_REPAIR_OPTION
         return AUTOMATION_GROUP_OPTION
@@ -762,8 +770,8 @@ def test_without_github_the_local_repair_demo_asks_for_setup_before_its_reposito
     choice_prompt._cmd_choose(session, Console(file=io.StringIO()), [])
 
     assert titles == [_TITLE, AUTOMATION_MENU_TITLE, "Connect GitHub to continue"]
-    assert _take_prompt(session) == "/integrations setup github"
-    parked = pending_setup_resume(session)
+    assert pending_setup_resume(session) is None  # dismissing setup cancels the held turn
+    parked = held[0]
     assert parked is not None
     assert parked.text == format_ask_user_answers(pending.items(), (LOCAL_REPAIR_OPTION,))
     assert parked.skill == "scheduling-github-ci-repairs"
@@ -938,8 +946,15 @@ def test_without_slack_the_slack_demo_connects_it_in_the_app_then_resumes(
         monkeypatch.setattr(module, "load_account_record", lambda: account)
         monkeypatch.setattr(module, "resolve_account_token", lambda: "osre_pat_test")
 
-    def app_get(url: str, *, headers: dict[str, str], timeout: float) -> httpx.Response:
+    def app_get(
+        url: str,
+        *,
+        headers: dict[str, str],
+        timeout: float,
+        params: dict[str, str],
+    ) -> httpx.Response:
         _ = (url, headers, timeout)
+        assert params == {"include": "personal", "github_provenance": "1"}
         return httpx.Response(200, json={"success": True, "data": app_records})
 
     monkeypatch.setattr(
@@ -1134,10 +1149,10 @@ def test_the_analysis_demo_reads_while_its_menus_are_answered(
     _offerable(monkeypatch)
     monkeypatch.setattr(analysis_prefetch, "is_test_run", lambda: False)
     _no_github_token(monkeypatch)
-    monkeypatch.setenv(GITHUB_TOKEN_ENV, "ghp_ready")
+    connect_github_app(monkeypatch)
     monkeypatch.setattr(ci_tool, "snapshot_root", lambda _root=None: tmp_path)
     session = Session()
-    session.resolved_integrations_cache = {}
+    session.resolved_integrations_cache = None
     console = Console(file=io.StringIO(), highlight=False)
     scans: list[str] = []
     reads: list[str] = []
@@ -1162,11 +1177,13 @@ def test_the_analysis_demo_reads_while_its_menus_are_answered(
     owner, repo = _REPOSITORY.split("/")
     llm = FakeActionLLM(
         [
+            tool_response("tool_search", {"names": ["scan_local_git_workspace"]}),
             tool_response("scan_local_git_workspace"),
             tool_response(
                 "ask_user_choice",
                 {"title": _REPOSITORY_TITLE, "options": list(_REPOSITORY_OPTIONS)},
             ),
+            tool_response("tool_search", {"names": ["analyze_github_ci_reliability"]}),
             tool_response(
                 "analyze_github_ci_reliability", {"owner": owner, "repo": repo, "days": 30}
             ),
@@ -1189,4 +1206,4 @@ def test_the_analysis_demo_reads_while_its_menus_are_answered(
     assert session.active_skill == ANALYZING_GITHUB_CI_PERFORMANCE_SKILL_NAME
     assert scans == ["workspace-scan-prefetch"]
     assert reads == [f"{_REPOSITORY} on github-ci-analysis-prefetch"]
-    assert llm.invocations == 4
+    assert llm.invocations == 6

@@ -20,7 +20,6 @@ from surfaces.interactive_shell.ui.action_rendering import (
     tool_call_display,
 )
 from surfaces.interactive_shell.ui.input_prompt.rendering import (
-    _prompt_turn_number,
     render_submitted_prompt,
 )
 from tests.core.agent.orchestration.action_execution_test_harness import (
@@ -674,6 +673,25 @@ def test_generic_tool_end_hides_a_json_blob() -> None:
     assert "login" not in out
 
 
+def test_model_only_discovery_result_drops_its_buffered_action() -> None:
+    observer, buffer = _observer_with_buffer()
+
+    observer("tool_start", {"id": "search-1", "name": "tool_search", "input": {}})
+    observer(
+        "tool_end",
+        {
+            "id": "search-1",
+            "name": "tool_search",
+            "output": {"state": "no_match", "summary": "internal discovery text"},
+            "model_only": True,
+        },
+    )
+    observer("agent_end", {})
+
+    assert buffer.getvalue() == ""
+    assert observer.session.terminal.action_log_entries == []
+
+
 def test_skill_block_renders_live_not_buffered() -> None:
     """Skill blocks print live with one gap; tool calls are buffered, not shown yet."""
     observer, buffer = _observer_with_buffer()
@@ -732,9 +750,6 @@ def test_literal_slash_command_records_single_history_entry(
     assert result.handled is True
     assert dispatched == ["/model show"]
     assert session.history == [{"type": "slash", "text": "/model show", "ok": True}]
-    # The turn's history recording must not advance the prompt number; only the
-    # submission itself does.
-    assert _prompt_turn_number(session) == 2
 
 
 def test_chat_turn_records_single_cli_agent_history_entry() -> None:
@@ -765,9 +780,6 @@ def test_chat_turn_records_single_cli_agent_history_entry() -> None:
     )
 
     assert session.history == [{"type": "cli_agent", "text": "what broke in prod?", "ok": True}]
-    # The turn's history recording must not advance the prompt number; only the
-    # submission itself does.
-    assert _prompt_turn_number(session) == 2
 
 
 def test_set_spinner_phase_does_not_activate_a_suppressed_spinner() -> None:

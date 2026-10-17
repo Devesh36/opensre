@@ -13,6 +13,8 @@ OPENSRE_GATEWAY_HOST_SCHEDULER_ENV = "OPENSRE_GATEWAY_HOST_SCHEDULER"
 # Trace-session metadata key a scheduled tick binds to its task id, so analytics
 # emitted by the turns the tick runs can name the loop they ran for.
 SCHEDULED_TASK_TRACE_KEY = "task_id"
+SCHEDULER_SCHEDULE_CHANGED_AT_PARAM = "schedule_changed_at"
+"""Definition cutover used to reject unstarted ticks from an edited schedule."""
 
 # Build stamp recorded in the per-user background scheduler service definition
 # (launchd plist / systemd unit). A stamp that differs from the running code's
@@ -40,12 +42,19 @@ NON_RETRYABLE_WORK_ERROR_KINDS: frozenset[str] = frozenset(
 # block, which must not present such a run as unfinished, agree on it.
 WORK_UNVERIFIED_ERROR_KIND = "work_unverified"
 
+# The whole reply of a stateless agent loop tick that found nothing to act on.
+# It is a no-op that delivers nothing. Shared so the runner's instructions and
+# ``integrations.scheduled_outcomes``, which scores the reply, agree on it.
+STATELESS_LOOP_IDLE_REPLY = "NO_ACTION"
+
 __all__ = [
     "NON_RETRYABLE_WORK_ERROR_KINDS",
     "OPENSRE_GATEWAY_HOST_SCHEDULER_ENV",
     "OPENSRE_SCHEDULER_BUILD_ENV",
     "SCHEDULED_TASK_TRACE_KEY",
+    "SCHEDULER_SCHEDULE_CHANGED_AT_PARAM",
     "SCHEDULER_MISSED_FIRE_GRACE_SECONDS",
+    "STATELESS_LOOP_IDLE_REPLY",
     "WEEKDAY_CRON_FIELD",
     "WORK_UNVERIFIED_ERROR_KIND",
 ]

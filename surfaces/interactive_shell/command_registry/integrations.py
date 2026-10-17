@@ -2,18 +2,23 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from rich.console import Console
 from rich.markup import escape
 
 import surfaces.interactive_shell.command_registry.repl_data as repl_data
-from core.agent_harness.spi.session_state import session_terminal
+from config.interactive_override import interactive_override_env
+from core.agent_harness.spi.session_state import session_terminal, set_turn_outcome_hint
 from surfaces.interactive_shell.command_registry.cli_parity import (
     publish_headless_slash_response,
     run_cli_command,
 )
+from surfaces.interactive_shell.command_registry.integration_verification import verify_connection
 from surfaces.interactive_shell.command_registry.setup_resume import resume_after_setup
 from surfaces.interactive_shell.command_registry.types import SlashCommand
 from surfaces.interactive_shell.runtime import Session
+from surfaces.interactive_shell.telemetry.turn_outcome import format_terminal_turn_outcome
 from surfaces.interactive_shell.ui import (
     BOLD_BRAND,
     DIM,
@@ -25,11 +30,12 @@ from surfaces.interactive_shell.ui import (
     render_mcp_table,
     repl_table,
 )
+from surfaces.interactive_shell.ui.integration_browser import IntegrationEntry, browse_integrations
 from surfaces.shared.terminal.components.choice_menu import (
     CRUMB_SEP,
+    console_output_is_tty,
     prepare_repl_output_line,
     repl_choose_one,
-    repl_section_break,
     repl_tty_interactive,
 )
 from surfaces.shared.terminal.components.rendering import (
@@ -39,7 +45,6 @@ from surfaces.shared.terminal.components.rendering import (
 )
 
 _ROOT_INTEGRATIONS = "/integrations"
-_ROOT_MCP = "/mcp"
 
 
 def _configured_service_choices() -> list[tuple[str, str]]:
@@ -110,15 +115,6 @@ def _handle_remove(session: Session, console: Console, service: str | None) -> b
         session.mark_latest(ok=False, kind="slash")
     session.refresh_integration_state()
     return True
-
-
-def _mcp_service_choices() -> list[tuple[str, str]]:
-    names = [
-        name
-        for name in repl_data.configured_integration_names()
-        if name in MCP_INTEGRATION_SERVICES
-    ]
-    return [(name, name) for name in names]
 
 
 def _print_verify_summary(
@@ -241,16 +237,11 @@ def _run_integrations_setup(session: Session, console: Console, args: list[str])
         return True
 
     service = args[1]
-    cli_cmd = " ".join(["uv run opensre integrations setup", service, *args[2:]]).strip()
     if headless:
-        message = (
-            f"{escape(service)} setup needs interactive credentials (API keys, URLs, tokens) "
-            f"and cannot finish in Telegram.\n\n"
-            f"Run on the server:\n  {cli_cmd}\n\n"
-            "Then check status with `/integrations list` or "
-            f"`/integrations verify {escape(service)}`."
-        )
-        repl_print(console, message)
+        from integrations.hosted_setup import headless_setup_message
+
+        message = headless_setup_message(service)
+        repl_print(console, escape(message))
         publish_headless_slash_response(session, message=message, ok=True)
         session.refresh_integration_state()
         return True
@@ -268,12 +259,16 @@ def _run_integrations_setup(session: Session, console: Console, args: list[str])
 
 
 def _cmd_integrations(session: Session, console: Console, args: list[str]) -> bool:
-    if not args and repl_tty_interactive():
-        return _interactive_integrations_menu(session, console)
+    if not args:
+        repl_print(console, f"[{DIM}]usage:[/] /integrations list")
+        session.mark_latest(ok=False, kind="slash")
+        return True
 
-    sub = (args[0].lower() if args else "list").strip()
+    sub = args[0].lower().strip()
 
-    if sub in ("list", "ls"):
+    if sub == "list":
+        if _use_browser(console):
+            return _browse_connections(session, console, mcp=False)
         prepare_repl_output_line()
         with console.status(f"[{DIM}]Verifying integrations…[/]", spinner="dots"):
             results = repl_data.load_verified_integrations()
@@ -316,60 +311,69 @@ def _cmd_integrations(session: Session, console: Console, args: list[str]) -> bo
     return True
 
 
-def _interactive_integrations_menu(session: Session, console: Console) -> bool:
-    root = _ROOT_INTEGRATIONS
-    while True:
-        sub = repl_choose_one(
-            title="integrations",
-            breadcrumb=root,
-            choices=[
-                ("list", "/integrations list"),
-                ("verify", "/integrations verify"),
-                ("show", "/integrations show <service>"),
-                ("setup", "/integrations setup <service>"),
-                ("remove", "/integrations remove <service>"),
-                ("done", "done"),
-            ],
+def _use_browser(console: Console) -> bool:
+    return (
+        repl_tty_interactive() and console_output_is_tty(console) and not interactive_override_env()
+    )
+
+
+def _browse_connections(session: Session, console: Console, *, mcp: bool) -> bool:
+    from config.scope_context import current_scope
+    from infrastructure.harness_providers import integration_sources_stamp
+    from integrations.registry import SUPPORTED_VERIFY_SERVICES, resolve_management_service
+
+    command = "/mcp list" if mcp else "/integrations list"
+
+    def set_browser_outcome() -> None:
+        latest_slash: dict[str, Any] = next(
+            (entry for entry in reversed(session.history) if entry.get("type") == "slash"),
+            {},
         )
-        if sub is None or sub == "done":
-            return True
-        show_section_break = False
-        if sub == "list":
-            _cmd_integrations(session, console, ["list"])
-            show_section_break = True
-        elif sub == "verify":
-            _cmd_integrations(session, console, ["verify"])
-            show_section_break = True
-        elif sub == "setup":
-            _cmd_integrations(session, console, ["setup"])
-            show_section_break = True
-        elif sub == "show":
-            choices = _configured_service_choices()
-            if not choices:
-                repl_print(console, f"[{DIM}]no integrations in store to show.[/]")
-                show_section_break = True
-            else:
-                svc = repl_choose_one(
-                    title="service",
-                    breadcrumb=f"{root}{CRUMB_SEP}show",
-                    choices=choices,
-                )
-                if svc and _render_integration_show(console, svc):
-                    show_section_break = True
-        elif sub == "remove":
-            _handle_remove(session, console, None)
-            show_section_break = True
-        if show_section_break:
-            repl_section_break(console)
+        set_turn_outcome_hint(
+            session,
+            format_terminal_turn_outcome(
+                command,
+                kind="slash",
+                ok=bool(latest_slash.get("ok", True)),
+            ),
+        )
+
+    names = repl_data.configured_integration_names()
+    check_key = (current_scope(), integration_sources_stamp())
+    if session.terminal.connection_check_key != check_key:
+        session.terminal.connection_checks = {}
+        session.terminal.connection_check_key = check_key
+    if mcp:
+        names = [name for name in names if name in MCP_INTEGRATION_SERVICES]
+    entries = [
+        IntegrationEntry(name, resolve_management_service(name) in SUPPORTED_VERIFY_SERVICES)
+        for name in names
+    ]
+    set_browser_outcome()
+    selected = browse_integrations(
+        entries, mcp=mcp, verify=verify_connection, checks=session.terminal.connection_checks
+    )
+    if selected is None:
+        return True
+    if selected.action == "remove":
+        result = _handle_remove(session, console, selected.service)
+        set_browser_outcome()
+        return result
+    args = ["setup", selected.service] if selected.service else ["setup"]
+    return _run_integrations_setup(session, console, args)
 
 
 def _cmd_mcp(session: Session, console: Console, args: list[str]) -> bool:
-    if not args and repl_tty_interactive():
-        return _interactive_mcp_menu(session, console)
+    if not args:
+        repl_print(console, f"[{DIM}]usage:[/] /mcp list")
+        session.mark_latest(ok=False, kind="slash")
+        return True
 
-    sub = (args[0].lower() if args else "list").strip()
+    sub = args[0].lower().strip()
 
-    if sub in ("list", "ls"):
+    if sub == "list":
+        if _use_browser(console):
+            return _browse_connections(session, console, mcp=True)
         render_mcp_table(console, repl_data.load_verified_integrations())
         return True
 
@@ -388,58 +392,16 @@ def _cmd_mcp(session: Session, console: Console, args: list[str]) -> bool:
     return True
 
 
-def _interactive_mcp_menu(session: Session, console: Console) -> bool:
-    root = _ROOT_MCP
-    while True:
-        sub = repl_choose_one(
-            title="mcp",
-            breadcrumb=root,
-            choices=[
-                ("list", "/mcp list"),
-                ("connect", "/mcp connect <server>"),
-                ("disconnect", "/mcp disconnect <server>"),
-                ("done", "done"),
-            ],
-        )
-        if sub is None or sub == "done":
-            return True
-        show_section_break = False
-        if sub == "list":
-            _cmd_mcp(session, console, ["list"])
-            show_section_break = True
-        elif sub == "connect":
-            _cmd_mcp(session, console, ["connect"])
-            show_section_break = True
-        elif sub == "disconnect":
-            choices = _mcp_service_choices()
-            if not choices:
-                repl_print(console, f"[{DIM}]no MCP servers configured.[/]")
-                show_section_break = True
-            else:
-                svc = repl_choose_one(
-                    title="server",
-                    breadcrumb=f"{root}{CRUMB_SEP}disconnect",
-                    choices=choices,
-                )
-                if svc:
-                    _cmd_mcp(session, console, ["disconnect", svc])
-                    show_section_break = True
-        if show_section_break:
-            repl_section_break(console)
-
-
 _INTEGRATIONS_FIRST_ARGS: tuple[tuple[str, str], ...] = (
+    ("list", "list all configured integrations"),
     ("setup", "guided setup for an integration"),
     ("remove", "remove a configured integration"),
-    ("list", "list all configured integrations"),
-    ("ls", "alias for list"),
     ("verify", "run health checks on all integrations"),
     ("show", "show details for a single integration"),
 )
 
 _MCP_FIRST_ARGS: tuple[tuple[str, str], ...] = (
     ("list", "list connected MCP servers"),
-    ("ls", "alias for list"),
     ("connect", "add an MCP server via opensre integrations setup"),
     ("disconnect", "remove an MCP server"),
 )
@@ -456,23 +418,24 @@ COMMANDS: list[SlashCommand] = [
         "Manage integrations.",
         _cmd_integrations,
         usage=(
-            "/integrations",
-            "/integrations setup <service>",
             "/integrations list",
+            "/integrations setup <service>",
             "/integrations verify",
             "/integrations verify <service>",
             "/integrations show <service>",
             "/integrations remove <service>",
         ),
-        notes=("In a TTY, bare /integrations opens an interactive menu.",),
+        notes=(
+            "In a TTY, /integrations list browses configured integrations without probing them.",
+        ),
         first_arg_completions=_INTEGRATIONS_FIRST_ARGS,
     ),
     SlashCommand(
         "/mcp",
         "Manage MCP servers.",
         _cmd_mcp,
-        usage=("/mcp", "/mcp list", "/mcp connect", "/mcp disconnect"),
-        notes=("In a TTY, bare /mcp opens an interactive menu.",),
+        usage=("/mcp list", "/mcp connect", "/mcp disconnect"),
+        notes=("In a TTY, /mcp list browses configured MCP servers without probing them.",),
         first_arg_completions=_MCP_FIRST_ARGS,
     ),
 ]

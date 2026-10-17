@@ -20,9 +20,25 @@ def _setupable_services() -> tuple[str, ...]:
 
 def _fetch_webapp_vault() -> list[dict[str, Any]] | None:
     """Webapp org integrations; the vault client imports on first use."""
+    import integrations.member_integrations as member_integrations
     import integrations.webapp_vault as webapp_vault
 
-    return webapp_vault.fetch_webapp_org_integrations()
+    records = webapp_vault.fetch_webapp_org_integrations()
+    if records is None:
+        return None
+    # The member taking this turn sees the workspace's GitHub connections plus
+    # their own, so their personal default outranks the workspace's.
+    member_github = member_integrations.load_member_github_records()
+    if member_github is None:
+        return records
+    return [record for record in records if record.get("service") != "github"] + member_github
+
+
+def _fleet_vault_configured() -> bool:
+    """Whether this process is a silo with a fleet vault, not a signed-in laptop."""
+    import integrations.webapp_vault as webapp_vault
+
+    return webapp_vault.webapp_vault_configured()
 
 
 def _fetch_account_integrations() -> list[dict[str, Any]]:
@@ -34,8 +50,13 @@ def _fetch_account_integrations() -> list[dict[str, Any]]:
 
 def _account_integrations_generation() -> int:
     import integrations.account_integrations as account_integrations
+    import integrations.member_integrations as member_integrations
 
-    return account_integrations.account_integrations_generation()
+    generation = account_integrations.account_integrations_generation()
+    member = member_integrations.member_view_stamp()
+    # Members of one Slack thread share a session; its resolved cache must not
+    # carry one member's GitHub grant into another member's turn.
+    return generation if not member else hash((generation, member))
 
 
 def _github_rest_token_resolves(resolved_integrations: Mapping[str, Any]) -> bool:
@@ -64,6 +85,7 @@ def register_harness_adapters() -> None:
         merge_integrations_by_service,
         merge_local_integrations,
     )
+    from integrations.github import github_setup_url
     from integrations.github.connections import select_github_connection
     from integrations.store import load_integrations, resolve_store_path
 
@@ -77,7 +99,9 @@ def register_harness_adapters() -> None:
         merge_integrations_by_service=merge_integrations_by_service,
         configured_services=lambda: tuple(configured_integration_services()),
         setupable_services=_setupable_services,
+        setup_url=github_setup_url,
         fetch_webapp_vault=_fetch_webapp_vault,
+        fleet_vault_configured=_fleet_vault_configured,
         fetch_account_integrations=_fetch_account_integrations,
         account_integrations_generation=_account_integrations_generation,
     ).install()

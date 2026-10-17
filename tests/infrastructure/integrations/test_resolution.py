@@ -208,6 +208,31 @@ def test_a_signed_in_laptop_resolves_the_account_integrations_over_the_store(
     assert result.progress_message == "Resolved integrations from remote, store: ['github']"
 
 
+def test_a_configured_fleet_vault_failure_does_not_read_the_signed_in_account(
+    monkeypatch: Any,
+) -> None:
+    """A failed or empty fleet vault stays on this silo, not another account."""
+
+    def _account() -> list[dict[str, Any]]:
+        raise AssertionError("signed-in account must not replace a configured fleet vault")
+
+    monkeypatch.delenv("JWT_TOKEN", raising=False)
+    _install_adapters(
+        monkeypatch,
+        fetch_webapp_vault=lambda: None,
+        fleet_vault_configured=lambda: True,
+        fetch_account_integrations=_account,
+        load_integrations=lambda: [],
+        load_env_integrations=lambda: [],
+    )
+
+    result = harness_providers.resolve_integrations_with_metadata()
+
+    assert result.resolved_integrations == {}
+    assert result.progress_message is not None
+    assert result.progress_message.startswith("No auth context and no local integrations found")
+
+
 def test_the_sources_stamp_tracks_the_account_generation(monkeypatch: Any) -> None:
     """A changed remote set must change the stamp, so sessions re-resolve next turn."""
     generation = {"value": 0}
@@ -216,14 +241,15 @@ def test_the_sources_stamp_tracks_the_account_generation(monkeypatch: Any) -> No
         return generation["value"]
 
     monkeypatch.setattr(harness_providers, "integrations_store_stamp", lambda: 7)
+    monkeypatch.setattr(harness_providers, "account_metadata_stamp", lambda: 11)
     _install_adapters(monkeypatch, account_integrations_generation=_generation)
 
     before = harness_providers.integration_sources_stamp()
     generation["value"] = 1
     after = harness_providers.integration_sources_stamp()
 
-    assert before == (7, 0)
-    assert after == (7, 1)
+    assert before == (7, 11, 0)
+    assert after == (7, 11, 1)
 
 
 def test_resolve_without_sources_reports_empty_local_lookup(monkeypatch: Any) -> None:

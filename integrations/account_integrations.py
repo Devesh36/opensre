@@ -1,10 +1,9 @@
-"""The signed-in account's view of its organization's integrations.
+"""The signed-in account's authorized personal and workspace integrations.
 
-A laptop signed in through ``opensre account login`` reads the organization's
-connected integrations from the OpenSRE app
-(``GET /api/auth/cli/integrations``, bearer: the account token). The webapp
-maps the token to the user's organization, so a caller can only ever read its
-own organization's credentials.
+A laptop signed in through ``opensre account login`` reads connections from the
+OpenSRE app (``GET /api/auth/cli/integrations``, bearer: the account token).
+The server authorizes the Clerk user first. This client additionally rejects
+owned records outside that user or their active organization.
 
 This is the laptop peer of :mod:`integrations.webapp_vault` (which
 authenticates the hosted fleet with ``AGENT_USAGE_SECRET``). Everything here
@@ -27,13 +26,17 @@ from urllib.parse import quote
 import httpx
 
 from config.account import (
+    AccountRecord,
     is_secure_account_origin,
     load_account_record,
     normalize_account_app_url,
     resolve_account_token,
 )
 from config.constants.account import (
+    INTEGRATION_APP_ORIGIN,
+    INTEGRATION_RETRIEVAL_ORIGIN_FIELD,
     OPENSRE_ACCOUNT_INTEGRATIONS_PATH,
+    OPENSRE_ACCOUNT_INTEGRATIONS_PERSONAL_PARAMS,
     OPENSRE_ACCOUNT_INTEGRATIONS_TIMEOUT_SECONDS,
     OPENSRE_ACCOUNT_INTEGRATIONS_TTL_SECONDS,
     OPENSRE_ACCOUNT_SERVICE_NAMES,
@@ -53,14 +56,23 @@ class _CacheState:
     fetched_at: float
     #: Whether a fetch ever succeeded; a transient failure keeps this snapshot.
     populated: bool
+    #: Account origin, Clerk user and active organization; snapshots stay isolated.
+    account_scope: tuple[str, str, str] | None
 
 
 _lock = threading.Lock()
-_state = _CacheState(records=[], fingerprint="", generation=0, fetched_at=0.0, populated=False)
+_state = _CacheState(
+    records=[],
+    fingerprint="",
+    generation=0,
+    fetched_at=0.0,
+    populated=False,
+    account_scope=None,
+)
 
 
 def load_account_integrations(*, refresh: bool = False) -> list[dict[str, Any]]:
-    """Return the organization's integrations as v2 store records; never raises.
+    """Return authorized integrations as v2 store records; never raises.
 
     Empty when the machine is signed out, the app is unreachable and no earlier
     snapshot exists, the route is absent (older app), or the response is
@@ -69,8 +81,24 @@ def load_account_integrations(*, refresh: bool = False) -> list[dict[str, Any]]:
     generation, and the outage fallback are kept, so the generation never
     moves backwards and an unreachable app still serves the last good set.
     """
+    record = load_account_record()
+    token = resolve_account_token()
+    account_scope: tuple[str, str, str] | None = None
+    if record is not None and token:
+        try:
+            origin = normalize_account_app_url(record.app_url)
+        except ValueError:
+            origin = record.app_url.strip()
+        account_scope = (origin, record.user_id, record.organization_id or "")
     now = time.monotonic()
     with _lock:
+        if _state.account_scope != account_scope:
+            _state.records = []
+            _state.fingerprint = ""
+            _state.fetched_at = 0.0
+            _state.populated = False
+            _state.account_scope = account_scope
+            _state.generation += 1
         if (
             not refresh
             and _state.populated
@@ -78,8 +106,10 @@ def load_account_integrations(*, refresh: bool = False) -> list[dict[str, Any]]:
         ):
             return [dict(record) for record in _state.records]
 
-    outcome = _fetch()
+    outcome = _fetch(record=record, token=token)
     with _lock:
+        if _state.account_scope != account_scope:
+            return [dict(cached) for cached in _state.records]
         if outcome.kind == "records":
             _state.fetched_at = now
             _state.populated = True
@@ -116,7 +146,12 @@ def reset_account_integrations_cache() -> None:
     global _state
     with _lock:
         _state = _CacheState(
-            records=[], fingerprint="", generation=0, fetched_at=0.0, populated=False
+            records=[],
+            fingerprint="",
+            generation=0,
+            fetched_at=0.0,
+            populated=False,
+            account_scope=None,
         )
 
 
@@ -131,9 +166,7 @@ _EMPTY = _FetchOutcome(kind="empty", records=[])
 _TRANSIENT = _FetchOutcome(kind="transient", records=[])
 
 
-def _fetch() -> _FetchOutcome:
-    record = load_account_record()
-    token = resolve_account_token()
+def _fetch(*, record: AccountRecord | None, token: str) -> _FetchOutcome:
     if record is None or not token:
         return _EMPTY
 
@@ -147,6 +180,9 @@ def _fetch() -> _FetchOutcome:
     try:
         response = httpx.get(
             f"{app_url}{OPENSRE_ACCOUNT_INTEGRATIONS_PATH}",
+            # Opt in to this member's personal connections and owner tags; the
+            # app keeps the legacy workspace-only shape for clients that don't.
+            params=OPENSRE_ACCOUNT_INTEGRATIONS_PERSONAL_PARAMS,
             headers={"Authorization": f"Bearer {token}"},
             timeout=OPENSRE_ACCOUNT_INTEGRATIONS_TIMEOUT_SECONDS,
         )
@@ -173,8 +209,13 @@ def _fetch() -> _FetchOutcome:
         logger.debug("[account-integrations] invalid credential set from the OpenSRE app")
         return _EMPTY
 
-    data: Any = store.as_store_data()["integrations"]
-    records = [_with_cli_service_name(item) for item in data if isinstance(item, dict)]
+    visible = store.visible_to(user_id=record.user_id, organization_id=record.organization_id)
+    data: Any = visible.as_store_data()["integrations"]
+    records = [
+        {**_with_cli_service_name(item), INTEGRATION_RETRIEVAL_ORIGIN_FIELD: INTEGRATION_APP_ORIGIN}
+        for item in data
+        if isinstance(item, dict)
+    ]
     return _FetchOutcome(kind="records", records=records, fingerprint=_fingerprint(records))
 
 
@@ -186,13 +227,13 @@ def _with_cli_service_name(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def account_setup_url() -> str | None:
-    """The OpenSRE app page where the signed-in organization connects integrations.
+    """The OpenSRE app page where the signed-in principal connects integrations.
 
     None when the machine is signed out or the app URL is not one the account
     may be sent to.
     """
     record = load_account_record()
-    if record is None or not record.organization_id.strip():
+    if record is None:
         return None
     try:
         origin = normalize_account_app_url(record.app_url)
@@ -200,8 +241,10 @@ def account_setup_url() -> str | None:
         return None
     if not is_secure_account_origin(origin):
         return None
-    org = quote(record.organization_id, safe="")
-    return f"{origin}/home?org_id={org}"
+    if record.organization_id:
+        org = quote(record.organization_id, safe="")
+        return f"{origin}/home?org_id={org}"
+    return f"{origin}/home"
 
 
 def _fingerprint(records: list[dict[str, Any]]) -> str:

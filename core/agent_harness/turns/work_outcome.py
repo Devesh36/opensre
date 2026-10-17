@@ -34,6 +34,16 @@ class ExecutedToolOutcome:
     details: Any
 
 
+def counts_toward_work(event: ToolExecutionEndEvent) -> bool:
+    """True when this call is evidence for the goal gate.
+
+    Successful model-only discovery stays hidden. A failed model-only call
+    still counts: ``skill_view(reference=...)`` is step work, and hiding that
+    error lets the turn accept a conclusion.
+    """
+    return not (bool(event.data.get("model_only")) and not event.is_error)
+
+
 def tap_executed_tool_outcomes(
     inner: RuntimeEventCallback | None,
     outcomes: list[ExecutedToolOutcome],
@@ -45,7 +55,11 @@ def tap_executed_tool_outcomes(
     """
 
     def _callback(event: RuntimeEvent) -> None:
-        if isinstance(event, ToolExecutionEndEvent) and not event.data.get("skipped"):
+        if (
+            isinstance(event, ToolExecutionEndEvent)
+            and not event.data.get("skipped")
+            and counts_toward_work(event)
+        ):
             outcomes.append(
                 ExecutedToolOutcome(
                     name=event.tool_name,
@@ -116,6 +130,14 @@ def last_work_classified(tool_results: Sequence[tuple[ToolCall, ToolExecutionRes
     return str(raw.get("status") or "") in _CLASSIFIED_WORK_STATUSES
 
 
+def last_work_blocked(tool_results: Sequence[tuple[ToolCall, ToolExecutionResult]]) -> bool:
+    """Allow a tool-classified blocker to end a turn even with an unfinished plan."""
+    result = _last_work_result(tool_results)
+    details = result.details if result is not None else None
+    raw = details.get("work_outcome") if isinstance(details, Mapping) else None
+    return isinstance(raw, Mapping) and raw.get("status") == "blocked"
+
+
 def last_work_needs_setup(tool_results: Sequence[tuple[ToolCall, ToolExecutionResult]]) -> bool:
     """True when the last work tool returned a ``tool_unavailable`` envelope naming a setup.
 
@@ -148,6 +170,7 @@ def format_outcomes_for_review(outcomes: Sequence[ExecutedToolOutcome]) -> str:
 
 __all__ = [
     "ExecutedToolOutcome",
+    "counts_toward_work",
     "format_outcomes_for_review",
     "last_work_classified",
     "last_work_needs_setup",

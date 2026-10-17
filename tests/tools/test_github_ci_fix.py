@@ -50,7 +50,11 @@ from integrations.github.tools.ci_fix.verification import (
     CheckState,
     CheckVerification,
 )
-from integrations.github.tools.ci_fix.worktree import BranchWorktree, create_branch_worktree
+from integrations.github.tools.ci_fix.worktree import (
+    BranchWorktree,
+    create_branch_checkout,
+    create_branch_worktree,
+)
 from tests.tools.conftest import BaseToolContract
 from tools.registry import clear_tool_registry_cache, get_registered_tool_map, get_registered_tools
 
@@ -140,7 +144,7 @@ def test_clean_pr_is_a_successful_noop_in_tool_analytics(monkeypatch: pytest.Mon
             )
         ],
         [_registered(fix_github_pr_ci)],
-        {},
+        {"github": {"connection_origin": "webapp", "auth_token": "app-token"}},
     )[0]
     assert result.is_error is False
     assert tool_result_is_error(result.details) is False
@@ -226,7 +230,7 @@ def test_available_when_github_token_present(monkeypatch) -> None:
     assert _github_ci_fix_available({}) is False
 
     monkeypatch.setenv("GITHUB_TOKEN", "tok")
-    assert _github_ci_fix_available({}) is True
+    assert _github_ci_fix_available({}) is False
 
 
 def test_gather_ci_fix_context_builds_task_with_failing_logs() -> None:
@@ -352,6 +356,34 @@ def test_create_branch_worktree_uses_linked_git_worktree(tmp_path: Path) -> None
     assert commands[0] == ["git", "fetch", "origin", "refs/heads/main:refs/remotes/origin/main"]
     assert commands[1][:5] == ["git", "worktree", "add", "-b", result.branch_name]
     assert commands[1][-1] == "origin/main"
+
+
+def test_create_branch_checkout_reuses_an_isolated_clone(tmp_path: Path) -> None:
+    workspace = tmp_path / "work"
+    workspace.mkdir()
+    commands: list[list[str]] = []
+
+    def run_success(cmd: list[str], **_kwargs: object) -> SimpleNamespace:
+        commands.append(cmd)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    with (
+        patch("integrations.github.tools.ci_fix.worktree.ensure_git_repo"),
+        patch("integrations.github.tools.ci_fix.worktree.subprocess.run", side_effect=run_success),
+        patch("integrations.github.tools.ci_fix.worktree.uuid.uuid4") as uuid4,
+    ):
+        uuid4.return_value.hex = "1234567890abcdef"
+        result = create_branch_checkout(str(workspace), _BRANCH_CTX)
+
+    assert result.path == str(workspace)
+    assert commands[0] == ["git", "fetch", "origin", "refs/heads/main:refs/remotes/origin/main"]
+    assert commands[1] == [
+        "git",
+        "checkout",
+        "-b",
+        result.branch_name,
+        "origin/main",
+    ]
 
 
 def test_gather_ci_fix_context_ignores_cancelled_sibling_checks() -> None:
@@ -923,7 +955,7 @@ def test_run_ci_fix_branch_target_uses_worktree_and_branch_verification(
     assert result["source_head_sha"] == _BRANCH_CTX.head_sha
     assert result["target_type"] == CI_TARGET_BRANCH
     assert result["checks_state"] == "passed"
-    assert "separate git worktree" in prompts[0]
+    assert "isolated checkout" in prompts[0]
     mock_worktree.assert_called_once_with("/workspace", _BRANCH_CTX, token="tok")
     mock_run_fix.assert_called_once()
     assert mock_run_fix.call_args.args[1] == "/workspace/.opensre-ci-fix-main-12345678"
@@ -939,6 +971,68 @@ def test_run_ci_fix_branch_target_uses_worktree_and_branch_verification(
         poll_interval_seconds=DEFAULT_POLL_INTERVAL_SECONDS,
     )
     mock_cleanup.assert_called_once()
+
+
+@patch(
+    "integrations.github.tools.ci_fix.runner.push_ci_fix",
+    return_value=PushResult(
+        branch_name="opensre/ci-fix-main-ea14998-12345678",
+        head_sha="new-sha",
+        changed_files=["app.py"],
+    ),
+)
+@patch(
+    "integrations.github.tools.ci_fix.runner.wait_for_branch_checks",
+    return_value=CheckVerification(state=CheckState.PASSED, check_names=("CI",)),
+)
+@patch(
+    "integrations.github.tools.ci_fix.runner.run_fix",
+    return_value=CodingResult(success=True, summary="Fixed CI.", changed_files=["app.py"]),
+)
+@patch("integrations.github.tools.ci_fix.runner.pre_coding_changes", return_value={})
+@patch("integrations.github.tools.ci_fix.runner.cleanup_branch_worktree")
+@patch("integrations.github.tools.ci_fix.runner.create_branch_worktree")
+@patch(
+    "integrations.github.tools.ci_fix.runner.create_branch_checkout",
+    return_value=BranchWorktree(
+        path="/workspace",
+        branch_name="opensre/ci-fix-main-ea14998-12345678",
+    ),
+)
+@patch("integrations.github.tools.ci_fix.runner.ensure_push_ready")
+@patch(
+    "integrations.github.tools.ci_fix.runner.repair_workspace",
+    return_value=nullcontext("/workspace"),
+)
+@patch(
+    "integrations.github.tools.ci_fix.runner.gather_branch_ci_fix_context",
+    return_value=_BRANCH_CTX,
+)
+def test_run_ci_fix_remote_branch_reuses_isolated_checkout(
+    _gather: MagicMock,
+    _workspace: MagicMock,
+    _push_ready: MagicMock,
+    isolated_branch: MagicMock,
+    linked_worktree: MagicMock,
+    cleanup: MagicMock,
+    _pre: MagicMock,
+    _run_fix: MagicMock,
+    _wait: MagicMock,
+    push: MagicMock,
+) -> None:
+    result = runner.run_ci_fix(
+        owner="Tracer-Cloud",
+        repo="opensre",
+        branch="main",
+        github_token="tok",
+        confirm_fn=lambda _prompt: "y",
+    )
+
+    assert result["success"] is True
+    isolated_branch.assert_called_once_with("/workspace", _BRANCH_CTX, token="tok")
+    linked_worktree.assert_not_called()
+    cleanup.assert_not_called()
+    assert push.call_args.kwargs["workspace"] == "/workspace"
 
 
 def test_run_ci_fix_no_failing_checks_response_text() -> None:
@@ -976,7 +1070,9 @@ def test_tool_passes_shell_confirmation_function() -> None:
     with patch(
         "integrations.github.tools.ci_fix.tool.run_ci_fix", return_value={"success": True}
     ) as runner:
-        result = fix_github_pr_ci(context=agent_context)
+        result = fix_github_pr_ci(
+            github_connection_origin="webapp", github_token="app-token", context=agent_context
+        )
 
     assert result["success"] is True
     assert result["work_outcome"]["status"] == "succeeded"

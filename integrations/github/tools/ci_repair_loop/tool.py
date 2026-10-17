@@ -10,6 +10,11 @@ from core.agent_harness.tools import action_context_from_agent_context, capabili
 from core.domain.types.tools import ToolSurface
 from core.tool import ERROR_KIND_REFUSED, SideEffectLevel, report_run_error
 from core.tool_framework import tool
+from integrations.github.agent_tools import (
+    github_tool_available,
+    github_tool_params,
+    require_webapp_github,
+)
 from integrations.github.client import GitHubApiError, GitHubRestClient
 from integrations.github.helpers import (
     GITHUB_INJECTED_PARAMS,
@@ -94,6 +99,7 @@ def _inspection_done(run: RepairRun, *, wait_until_terminal: bool, until: float)
     name="schedule_ci_repair_loop",
     source="github",
     display_name="Schedule bounded CI repair",
+    compact_description="Schedule one bounded background repair for a GitHub pull request.",
     use_cases=["Repair one selected PR in the background"],
     description=(
         "Schedule repair of one open GitHub PR whose branch is in the same repository. "
@@ -105,8 +111,8 @@ def _inspection_done(run: RepairRun, *, wait_until_terminal: bool, until: float)
     surfaces=(ToolSurface.ACTION,),
     side_effect_level=SideEffectLevel.MUTATING,
     accepts_runtime_context=True,
-    is_available=github_source_available,
-    extract_params=_credentials,
+    is_available=github_tool_available(github_source_available),
+    extract_params=github_tool_params(_credentials),
     injected_params=GITHUB_INJECTED_PARAMS,
     input_schema={
         "type": "object",
@@ -129,6 +135,7 @@ def _inspection_done(run: RepairRun, *, wait_until_terminal: bool, until: float)
         "additionalProperties": False,
     },
 )
+@require_webapp_github
 def schedule_ci_repair_loop(
     owner: str,
     repo: str,
@@ -146,6 +153,7 @@ def schedule_ci_repair_loop(
             repo=repo,
             pr_number=pr_number,
             github_token=github_token,
+            github_connection_id=str(_kwargs.get("github_connection_id") or ""),
             store=store,
             scheduler_in_process=_scheduler_in_process(context),
             fast_checks=fast_checks,
@@ -177,6 +185,7 @@ def schedule_ci_repair_loop(
     name="get_ci_repair_loop",
     source="github",
     display_name="Inspect CI repair",
+    compact_description="Read or wait for a scheduled CI repair run and its evidence.",
     use_cases=[
         "Observe an active CI repair run",
         "Retrieve a completed repair report and its evidence links",
@@ -189,8 +198,8 @@ def schedule_ci_repair_loop(
     ),
     surfaces=(ToolSurface.ACTION,),
     side_effect_level=SideEffectLevel.READ_ONLY,
-    is_available=github_source_available,
-    extract_params=_credentials,
+    is_available=github_tool_available(github_source_available),
+    extract_params=github_tool_params(_credentials),
     injected_params=GITHUB_INJECTED_PARAMS,
     input_schema={
         "type": "object",
@@ -219,6 +228,7 @@ def schedule_ci_repair_loop(
         "additionalProperties": False,
     },
 )
+@require_webapp_github
 def get_ci_repair_loop(
     task_id: str = "",
     wait_seconds: int = 0,

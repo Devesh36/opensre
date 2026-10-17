@@ -12,6 +12,7 @@ from __future__ import annotations
 from rich.console import Console
 from rich.markup import escape as _rich_escape
 
+from config.command_inputs import GOAL_EDIT_INPUT, GOAL_SET_INPUT
 from core.agent_harness import SessionManager
 from core.agent_harness.spi.cancel import HostCancelReason
 from core.agent_harness.spi.session_goal import (
@@ -35,8 +36,15 @@ from core.agent_harness.spi.session_state import (
     set_auto_command,
 )
 from infrastructure.terminal.theme import DIM, ERROR, HIGHLIGHT
+from surfaces.interactive_shell.command_registry.input_collection import can_collect_input
 from surfaces.interactive_shell.runtime import Session
 from surfaces.interactive_shell.runtime.goal_controls import consume_inflight_goal_control
+from surfaces.interactive_shell.ui.goal_input import (
+    build_goal_edit_form,
+    build_goal_set_form,
+    parse_max_turns,
+)
+from surfaces.shared.terminal.components.command_input import run_command_input
 from surfaces.shared.terminal.components.rendering import print_repl_text
 
 _USAGE = "/goal [show|set|pause|resume|edit|clear|help]  or  /goal <condition>"
@@ -104,7 +112,7 @@ def _set(session: Session, console: Console, args: list[str]) -> bool:
         flag = rest.pop(0)
         if flag in {"--max-turns", "--max_turns"} and rest:
             try:
-                max_turns = max(1, int(rest.pop(0)))
+                max_turns = parse_max_turns(rest.pop(0), allow_blank=False)
             except ValueError:
                 _print_set_usage(console)
                 return True
@@ -115,6 +123,27 @@ def _set(session: Session, console: Console, args: list[str]) -> bool:
     if not condition:
         _print_set_usage(console)
         return True
+    return _attach_goal(session, console, condition, max_turns)
+
+
+def _collect_goal_set(session: Session, console: Console, args: list[str]) -> bool:
+    """Open the styled form for a condition-less ``/goal set``.
+
+    Attach, persist, and autosubmit only after explicit Set goal; cancellation
+    leaves all goal state unchanged.
+    """
+    options: dict[str, str] = {}
+    index = 0
+    while index + 1 < len(args) and args[index] in {"--max-turns", "--max_turns"}:
+        options["max_turns"] = args[index + 1]
+        index += 2
+    values = run_command_input(build_goal_set_form(options))
+    if values is None:
+        return True
+    return _attach_goal(session, console, values.condition, values.max_turns)
+
+
+def _attach_goal(session: Session, console: Console, condition: str, max_turns: int) -> bool:
     checklist = derive_session_goal_checklist(condition)
     goal = SessionGoal(
         condition=condition,
@@ -217,6 +246,19 @@ def _edit(session: Session, console: Console, args: list[str]) -> bool:
         )
         return True
     condition = " ".join(args).strip()
+    if not condition and can_collect_input(session, GOAL_EDIT_INPUT, ["edit", *args]):
+        draft_condition = run_command_input(
+            build_goal_edit_form(goal.condition, paused=session_goal_is_paused(session))
+        )
+        if draft_condition is None:
+            return True
+        condition = draft_condition
+        if session.session_goal is not goal:
+            console.print(f"[{ERROR}]goal changed while editing. Open /goal edit again.[/]")
+            return True
+        if condition == goal.condition:
+            console.print(f"[{DIM}]no changes.[/]")
+            return True
     if not condition:
         console.print(f"[{ERROR}]usage:[/] /goal edit <condition>")
         console.print(f"[{DIM}]e.g.[/] [{HIGHLIGHT}]{_EDIT_EXAMPLE}[/]")
@@ -262,6 +304,8 @@ def _cmd_goal(session: Session, console: Console, args: list[str]) -> bool:
     if sub in {"show", "status"}:
         return _show(session, console)
     if sub == "set":
+        if can_collect_input(session, GOAL_SET_INPUT, args):
+            return _collect_goal_set(session, console, args[1:])
         return _set(session, console, args[1:])
     if sub == "pause":
         return _pause(session, console)

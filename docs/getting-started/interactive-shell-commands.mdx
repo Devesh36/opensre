@@ -187,19 +187,31 @@ These commands delegate to the same Click CLI you would run outside the REPL.
 
 ### Commands with interactive menus (TTY)
 
-Bare invocation opens a picker or submenu:
+These invocations open a picker or submenu:
 
 | Command | Menu behavior |
 | --- | --- |
 | `/help` | Browse categories; Enter runs the selected command |
-| `/integrations` | list / verify / show / setup / remove |
-| `/mcp` | list / connect / disconnect |
+| `/integrations list` | Browse configured integrations; verify, setup, or remove the selected item |
+| `/mcp list` | Browse configured MCP servers; verify, connect, or disconnect |
 | `/model` | show / set / restore / toolcall |
 | `/theme` | Pick a colour theme from the installed list |
 | `/choose` | Reopen the selection menu the agent queued |
 | `/trust`, `/verbose` | on / off |
 | `/history` | show / clear / off / on / retention |
 | `/resume` | Arrow-key picker of recent conversations |
+
+`/integrations list` and `/mcp list` use the same searchable list as `/loops list`.
+Type to filter; click a row or use ↑↓/Tab to see its details below the list.
+New connections show **Checking…** while connectivity checks run in the background;
+results appear without pressing Enter. Search and navigation stay available while checks run.
+The list remembers this session’s last check result with a **Last checked** timestamp,
+including when you reopen it or switch between the two lists. **Enter** runs a fresh
+check and updates the result in place. Use **F2** for setup, **F3** to
+remove/disconnect (with confirmation), **F4** to add/connect, and **Esc** to close.
+Checks time out after 30 seconds; Esc cancels an in-progress check.
+These action keys leave ordinary typing available for search. Connections without
+a verifier show **Configured**, not a successful connectivity check.
 
 `/model` keeps its menu running: picking `show` prints the current models and
 hands you back to the menu, so leave it with **done** or Esc.
@@ -509,12 +521,25 @@ Set a finish line and keep working toward it across turns:
 /goal set --max-turns 4 Prefer live PostHog if connected
 /goal pause
 /goal resume
+/goal edit
 /goal edit <updated condition>
 /goal clear
 ```
 
 Bare `/goal` shows the current goal. `/goal set` starts work immediately.
+
+In an interactive terminal, `/goal set` without a condition asks for one, then
+shows the turn budget for review. The condition is required; max turns is
+optional and empty leaves the goal unbounded. Use arrow keys or Tab/Shift-Tab
+to move between rows, then Enter to edit a row or choose **Set goal**. Ctrl-S
+attaches the goal from the summary and runs the condition as the next turn.
+Esc returns from an edit without applying it; Esc on the summary cancels
+without attaching anything. Fully specified commands still execute directly.
 See [Goals](/getting-started/goals) for the full workflow.
+
+Bare `/goal edit` reviews the current condition in the same form. Choose **Save changes**
+to apply it. The existing turn budget and progress stay attached; an active goal
+continues with the updated condition, while a paused goal stays paused.
 
 </Accordion>
 
@@ -566,7 +591,6 @@ Shortcut for integration connectivity checks (same as `opensre integrations veri
 <Accordion title="/integrations">
 
 ```text
-/integrations
 /integrations list
 /integrations verify
 /integrations verify datadog
@@ -578,22 +602,28 @@ Shortcut for integration connectivity checks (same as `opensre integrations veri
 
 | Subcommand | Behavior |
 | --- | --- |
-| `list` (default) | Verify all configured integrations and render status table |
+| `list` | Browse configured integrations in a TTY; verify and render a status table otherwise |
 | `verify` | Verify all integrations; prints summary line |
 | `verify &lt;service&gt;` | Verify one integration (same as `/verify &lt;service&gt;`) |
 | `show &lt;service&gt;` | Verify one service and print key/value config (masked secrets) |
 | `setup &lt;service&gt;` | Guided setup with sign-in instructions, discovery, and verification |
 | `remove &lt;service&gt;` | Remove from local store **elevated** |
 
-You can ask “Can you configure Telegram/GitHub/PostHog for me?” to start the same guided flow. It explains each human action before requesting input, discovers IDs where possible, and lets you retry failed checks. Enter credentials only in the setup flow's hidden input.
+GitHub setup opens the OpenSRE app, where you connect through OAuth or enter a token. Opening the app leaves setup pending until the connection is refreshed.
 
-Bare `/integrations` opens an interactive menu in a TTY with service pickers for show/remove.
+You can ask “Can you configure Telegram/PostHog for me?” to start the same guided flow. It explains each human action before requesting input, discovers IDs where possible, and lets you retry failed checks. Enter credentials only in the setup flow's hidden input.
+
+`/integrations list` opens a searchable configured-integration browser in a TTY. Click a row or use **↑↓/Tab** to see its details; **Enter** runs a fresh connectivity check when supported. Use **F2** for setup, **F3** to remove with confirmation, **F4** to add, and **Esc** to close. Verification updates the list in place; setup and removal return to the conversation.
+
+Connections without a result are checked automatically in the background, up to three at a time. Last-known results and their **Last checked** timestamps are remembered for this REPL session only; reopening reuses them until you press Enter to recheck. Connections without a verifier show **Configured**, not a successful health check; setup and removal remain available. Use `/integrations verify` to check all connections again.
 
 </Accordion>
 
 <Accordion title="/mcp">
 
 MCP-capable integrations only (subset of the full integration catalog).
+
+`/mcp list` opens the same searchable browser and automatically checks connections without a result in the background. It shows **Checking…** until results arrive, or this session’s last check result with its timestamp. Click a row or use **↑↓/Tab** to browse, **Enter** to check again, **F2** to reconfigure, **F3** to disconnect with confirmation, **F4** to connect, and **Esc** to close. Explicit subcommands remain available below.
 
 ```text
 /mcp list
@@ -603,7 +633,7 @@ MCP-capable integrations only (subset of the full integration catalog).
 
 | Subcommand | Maps to |
 | --- | --- |
-| `list` | Table of MCP servers from verified integrations |
+| `list` | Browse configured MCP servers in a TTY; render a verified table otherwise |
 | `connect &lt;server&gt;` | `opensre integrations setup &lt;server&gt;` |
 | `disconnect &lt;server&gt;` | `opensre integrations remove &lt;server&gt;` |
 
@@ -790,10 +820,40 @@ Shows up to **50** recent tasks, newest first. Use the **id** column (short pref
 ```text
 /work
 /work add &lt;title&gt;
+/work edit
+/work edit &lt;id-or-title&gt; --priority high --due 2026-10-20
 /work done &lt;id-or-title&gt;
 /work next
 /work path
 ```
+
+Interactive record lists (`/work list`, `/work next`, `/loops list`, `/cron list`,
+`/memory list`, and `/tasks`, including their list aliases) share read-only search.
+Type a name, ID, or displayed detail to filter; use arrow keys or Tab to move
+through matches. Enter never changes a record. Esc closes search and leaves the
+full listing in your terminal. Command filters still apply. CLI, piped, and
+agent-requested listings remain plain output; logs and reports are unchanged.
+
+In an interactive terminal, `/work add` without a title asks for one, then shows
+selectable detail rows with Priority selected. Use arrow keys or Tab/Shift-Tab to
+move between rows, then Enter to edit a row or choose **Create work item**.
+Ctrl-S creates the item from the summary. Priority is a selection; project supports existing names or a new
+entry; due date supports Today, Tomorrow, or an ISO date/datetime. Optional fields
+remain unset unless supplied, and the existing Normal priority is shown explicitly.
+Esc returns from an edit without applying it; Esc on the summary cancels creation.
+Fully specified commands still execute directly.
+
+Use `/work done` or `/work complete` without a target to choose an unfinished work
+item in an interactive terminal. Type to search, use arrow keys to choose, and
+Enter to mark it complete. You can still pass one or more IDs directly. Outside
+the interactive terminal, a completion target is required.
+
+Use `/work edit` to choose an existing item, or `/work edit <id-or-title>` to open
+its prefilled title, priority, project, owner, and due date. Choose **Save changes**
+after reviewing. An explicit field command executes directly; use a quoted empty
+value such as `--owner ""` or `--due ""` to clear an optional field.
+Missing-target edit options such as `/work edit --priority high` are kept for
+review after you choose an item.
 
 `/work add` creates durable human todos; it does not schedule reminder delivery.
 For reminders, use the destination-aware `opensre work add` command with
@@ -1042,14 +1102,17 @@ Read/write `~/.opensre/config.yml`. Prefer env vars for secrets; use config for 
 <Accordion title="/cron">
 
 ```text
+/cron
 /cron list
+/cron status
+/cron start [--service]
 /cron add
 /cron remove &lt;id&gt;
 /cron run &lt;id&gt;
 /cron logs &lt;id&gt;
 ```
 
-Scheduled report delivery. See [Cron](/platform/cron).
+Scheduled report delivery. Press Enter or Tab after `/cron` to choose a subcommand. When `/cron add` is missing required values, the form opens the first missing input and preserves supplied options. Review the task, schedule and delivery in compact rows; use **More options** for settings such as timezone, name and lookback. Required values and defaults appear while editing. Choose **Create schedule** or press **Ctrl-S** from the main review to save. **Esc** returns from an editor or More options; from the main review it cancels without saving. Creating a schedule does not run it immediately. Complete commands and non-interactive calls keep their usual behavior. Choices needing task IDs still return to the composer for editing. `/cron list` displays all tasks with their IDs and timezone context; `/cron logs <id>` shows execution history. In the interactive shell, `/cron run <id>` waits up to five seconds before returning control while the task continues in the background; read its outcome with `/cron logs <id>`. `/cron start` runs the scheduler in the foreground until interrupted. See [Cron](/platform/cron).
 
 </Accordion>
 
@@ -1064,6 +1127,8 @@ Scheduled report delivery. See [Cron](/platform/cron).
 /loops show &lt;name-or-id&gt; --run &lt;run-id&gt;
 /loops add --name "Morning ops" --time 08:30 --prompt "Check open incidents and summarize production risk" --run-now
 /loops add --name "CI fix agent" --cron "*/30 * * * * *" --mode agent --prompt "Repair failing PR checks with fix_github_pr_ci"
+/loops edit
+/loops edit &lt;name-or-id&gt; --time 09:30 --weekdays
 /loops run &lt;loop_id&gt;
 /loops stop &lt;loop_id&gt;
 /loops start &lt;loop_id&gt;
@@ -1078,7 +1143,24 @@ Agent-mode prompts must contain the complete task and name the tools to use; eac
 
 The list shows each loop's latest finding and run status, plus its next scheduled time in your local timezone. Failed and quiet runs replace the previous result in the table.
 
+In an interactive terminal, omit the ID from `/loops run`, `/loops start`,
+`/loops stop`, `/loops delete`, or `/loops next` to choose a loop from a searchable
+list. Start offers stopped and draft loops; stop offers active loops. Running a
+loop requires the **Run now** action after reviewing its configuration. Deleting
+requires **Delete permanently** confirmation. Esc cancels selection; Esc during
+action review returns to the list. Outside the interactive terminal, supply an ID.
+
 Use `/loops show` to pick a loop, or pass its name or ID directly. Details contain the full report, recent runs, and configuration. Open an earlier report with the run ID shown in its history. New reports are retained even when delivery fails; older reports may be unavailable.
+
+Use `/loops edit` to pick a recurring loop, or pass its name or ID to review the
+current settings. Edit its name and schedule, with timezone and lookback under
+**More options**. Ordinary prompt loops also expose their prompt and Report/Agent
+mode; managed instructions remain tied to their template, report, or skill.
+Choose **Save changes** to update the existing loop. Editing does not run it,
+change its delivery destinations, or enable a stopped loop. Complete commands
+with explicit edit options also work without an interactive terminal.
+If you omit the target but supply options, such as `/loops edit --time 09:30`,
+those values are kept for review after you choose a loop.
 
 You can also ask naturally:
 

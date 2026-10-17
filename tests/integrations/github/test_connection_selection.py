@@ -24,6 +24,7 @@ def _grant(
     token: str,
 ) -> dict[str, Any]:
     return {
+        "connection_origin": "webapp",
         "connection_id": connection_id,
         "integration_id": connection_id,
         "is_default": is_default,
@@ -139,3 +140,33 @@ def test_a_dead_default_does_not_fall_through_to_another_live_grant() -> None:
     assert github["connection_selection_error"] == "github_connection_unavailable"
     assert github["connection_id"] == ""
     assert github.get("auth_token") != "gho_other"
+
+
+def test_a_personal_default_outranks_the_workspace_default() -> None:
+    """Viktor-style personal + team defaults must not cancel each other out."""
+    workspace = _grant(_ORG, available=True, is_default=True, token="gho_team")
+    personal = {
+        **_grant("personal-1", available=True, is_default=True, token="gho_mine"),
+        "owner_kind": "user",
+    }
+
+    selected = select_github_connection(_catalog(workspace, personal), None)
+
+    github = selected["github"]
+    assert "connection_selection_error" not in github
+    assert github["auth_token"] == "gho_mine"
+
+
+def test_a_local_grant_cannot_be_selected_or_override_an_app_default() -> None:
+    app = _grant(_ORG, available=True, is_default=True, token="app-token")
+    local = _grant(_LAPTOP, available=True, is_default=True, token="local-token")
+    local["connection_origin"] = "local"
+    assert (
+        select_github_connection(_catalog(app, local), None)["github"]["auth_token"] == "app-token"
+    )
+    assert (
+        select_github_connection(_catalog(app, local), _LAPTOP)["github"][
+            "connection_selection_error"
+        ]
+        == "github_connection_required"
+    )

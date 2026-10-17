@@ -15,6 +15,7 @@ from infrastructure.analytics.capture import capture_interactive_shell_rendered
 from infrastructure.analytics.github_identity import identify_saved_github_username
 from infrastructure.analytics.usage_context import claim_process_session_id
 from infrastructure.logging import install_shell_log_handler, quiet_noisy_third_party_loggers
+from infrastructure.terminal.prompt_support import begin_ctrl_c_exit
 from infrastructure.terminal.theme import set_active_theme
 from surfaces.interactive_shell.controller import InteractiveShellController
 from surfaces.interactive_shell.runtime.context import create_repl_runtime
@@ -33,8 +34,12 @@ from surfaces.interactive_shell.runtime.startup.tool_registry_prewarm import (
     start_tool_registry_prewarm,
 )
 from surfaces.interactive_shell.session import Session
+from surfaces.interactive_shell.ui.input_prompt.alternate_scroll import (
+    alternate_scroll_disabled,
+)
 from surfaces.interactive_shell.ui.terminal_ui import render_terminal_ui
-from surfaces.shared.terminal.banner import animate_launch_wordmark
+from surfaces.interactive_shell.ui.transcript_view import TranscriptStore, record_startup_output
+from surfaces.shared.terminal.banner import ResponsiveLaunchBanner, animate_launch_wordmark
 from surfaces.shared.terminal.components.rendering import repl_clear_screen
 
 # Fallback when a caller does not supply one. Forces a terminal because the
@@ -106,8 +111,12 @@ async def run_repl_async(
     SessionManager.for_session(session).open_store(session)
     # The runtime is booted; nothing has printed yet. Stop the launch spin and
     # paint the static banner before anything below can write to the screen.
+    transcript = TranscriptStore()
     if finish_banner is not None:
         finish_banner()
+        # The banner is in scrollback; the full-screen view lays it out again
+        # at whatever width the window has when it is drawn.
+        transcript.append_renderable(ResponsiveLaunchBanner(session=session), on_normal_screen=True)
     # The launch has nothing left to load: held-back work no longer competes
     # with it for the interpreter.
     if after_banner is not None:
@@ -116,35 +125,63 @@ async def run_repl_async(
         tools_ready()
 
     try:
-        if resume_session_id:
-            from surfaces.interactive_shell.command_registry.session_cmds.resume import (
-                resume_session_by_prefix,
-            )
+        # Mouse reporting carries the wheel to the transcript wherever it reaches
+        # us. Where it does not (tmux with ``mouse off``), the terminal would turn
+        # wheel notches into Up keys and recall history into the composer instead.
+        with alternate_scroll_disabled():
+            with record_startup_output(transcript):
+                started = _prepare_shell_start(session, out, resume_session_id, startup_work)
+            if not started:
+                return 1
+            await InteractiveShellController(
+                runtime_context,
+                config=cfg,
+                console=out,
+                startup_work=startup_work,
+                transcript=transcript,
+            ).start_interactive_shell()
+        return 0
+    finally:
+        # The exit is settled however it was asked for (Ctrl+C, Ctrl+D, /exit),
+        # and the prompt is off screen, so SIGINT reaches the process handler
+        # again: one press must end the run rather than re-open the
+        # double-press gate on an exit the user already confirmed.
+        begin_ctrl_c_exit()
+        try:
+            startup_work.close()
+            join_first_turn_warmup()
+        finally:
+            # Nested, because the drains above can block and a teardown Ctrl+C
+            # now raises wherever it lands. True end-of-run teardown persists
+            # and releases the session, and that is not the user's to skip.
+            close_repl_session(session, runtime_context.state)
 
-            slash_command = f"/resume {resume_session_id.strip()}"
-            if not resume_session_by_prefix(
+
+def _prepare_shell_start(
+    session: Session,
+    out: Console,
+    resume_session_id: str | None,
+    startup_work: DeferredStartupWork,
+) -> bool:
+    """Replay a resumed session or queue the demo menu; False when resume fails."""
+    if resume_session_id:
+        from surfaces.interactive_shell.command_registry.session_cmds.resume import (
+            resume_session_by_prefix,
+        )
+
+        slash_command = f"/resume {resume_session_id.strip()}"
+        return bool(
+            resume_session_by_prefix(
                 resume_session_id.strip(),
                 session,
                 out,
                 slash_command=slash_command,
-            ):
-                return 1
-        elif offer_demo(session, out):
-            # Entering the master skill queues its menu; the first model turn is the answer.
-            startup_work.defer("first-turn warm-up", warm_first_turn)
-
-        await InteractiveShellController(
-            runtime_context,
-            config=cfg,
-            console=out,
-            startup_work=startup_work,
-        ).start_interactive_shell()
-        return 0
-    finally:
-        startup_work.close()
-        join_first_turn_warmup()
-        # True end-of-run teardown: persist and release the session's resources.
-        close_repl_session(session, runtime_context.state)
+            )
+        )
+    if offer_demo(session, out):
+        # Entering the master skill queues its menu; the first model turn is the answer.
+        startup_work.defer("first-turn warm-up", warm_first_turn)
+    return True
 
 
 def _start_launch_banner(

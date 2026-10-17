@@ -53,10 +53,11 @@ def _ctx(
         ("/integrations", ["setup", "datadog"], "/integrations setup datadog"),
         ("/mcp", ["connect", "github"], "/mcp connect github"),
         ("/mcp", ["disconnect", "github"], "/mcp disconnect github"),
-        ("/integrations", [], "/integrations"),
-        ("/mcp", [], "/mcp"),
+        ("/integrations", ["list"], "/integrations list"),
+        ("/mcp", ["list"], "/mcp list"),
         ("/loops", ["show"], "/loops show"),
         ("/tools", [], "/tools"),
+        ("/cron", [], "/cron"),
     ],
 )
 def test_interactive_picker_command_is_deferred_to_exclusive_stdin(
@@ -143,18 +144,50 @@ def test_interactive_picker_runs_inline_when_exclusive_stdin_active() -> None:
     session.terminal.exclusive_stdin_active = True
 
     handled = slash_tool.execute_slash_tool(
-        {"command": "/integrations", "args": []},
+        {"command": "/integrations", "args": ["list"]},
         ctx,
     )
 
     assert handled is True
-    assert ports.dispatched == ["/integrations"]
+    assert ports.dispatched == ["/integrations list"]
     assert session.terminal.pending_prompt_default is None
     assert session.terminal.pending_prompt_autosubmit is False
     # Exclusive stdin means the user typed this slash literally, so the prompt
     # line already shows it — announcing it again would be the third rendering
-    # of one command.
-    assert buf.getvalue() == ""
+    # of one command. Only the blank row that separates it from the output.
+    assert buf.getvalue() == "\n"
+
+
+@pytest.mark.parametrize(
+    ("typed", "args"),
+    [
+        ("/rename release-candidate", ["release-candidate"]),
+        # Rebuilt as ``/rename 'release candidate'``, so only matching on tokens
+        # recognises it as the line the user typed.
+        ('/rename "release candidate"', ["release candidate"]),
+        ("/rename   release-candidate", ["release-candidate"]),
+    ],
+    ids=["plain", "requoted", "extra-spaces"],
+)
+def test_a_typed_command_is_not_announced_under_its_own_prompt_row(
+    typed: str, args: list[str]
+) -> None:
+    """A typed ``/rename`` printed twice: once as the user row, once as ``$ /rename``.
+
+    Only a handful of commands reserve exclusive stdin, so that check alone left
+    every other typed command announcing itself a second time. The command line
+    is rebuilt from parsed arguments, so the match is on tokens: a quoted or
+    loosely spaced spelling is still the line the prompt row already shows.
+    """
+    ctx, buf, session, ports = _ctx(ports=FakeSlashPorts(tty=True))
+    ctx = replace(ctx, turn_user_message=typed)
+
+    slash_tool.execute_slash_tool({"command": "/rename", "args": args}, ctx)
+
+    assert len(ports.dispatched) == 1
+    assert session.terminal.exclusive_stdin_active is False
+    # Just the blank row that separates the command's output from the prompt.
+    assert buf.getvalue() == "\n"
 
 
 def test_agent_resolved_slash_announces_itself() -> None:
@@ -244,12 +277,12 @@ def test_interactive_picker_runs_inline_when_not_a_tty() -> None:
 def test_duplicate_slash_invoke_alone_may_run_twice() -> None:
     """Slash tool itself does not suppress repeats; the action-turn guard does."""
     ctx, _buf, _session, ports = _ctx(ports=FakeSlashPorts(tty=True))
-    args = {"command": "/integrations", "args": ["list"]}
+    args = {"command": "/health", "args": []}
 
     assert slash_tool.execute_slash_tool(args, ctx) is True
     assert slash_tool.execute_slash_tool(args, ctx) is True
 
-    assert ports.dispatched == ["/integrations list", "/integrations list"]
+    assert ports.dispatched == ["/health", "/health"]
 
 
 def test_interleaved_slash_invoke_runs_each_time() -> None:
@@ -258,17 +291,17 @@ def test_interleaved_slash_invoke_runs_each_time() -> None:
 
     assert slash_tool.execute_slash_tool({"command": "/health", "args": []}, ctx) is True
     assert (
-        slash_tool.execute_slash_tool({"command": "/integrations", "args": ["list"]}, ctx) is True
+        slash_tool.execute_slash_tool({"command": "/integrations", "args": ["show", "github"]}, ctx)
+        is True
     )
     assert slash_tool.execute_slash_tool({"command": "/health", "args": []}, ctx) is True
 
-    assert ports.dispatched == ["/health", "/integrations list", "/health"]
+    assert ports.dispatched == ["/health", "/integrations show github", "/health"]
 
 
 @pytest.mark.parametrize(
     ("command", "args"),
     [
-        ("/integrations", ["list"]),
         ("/integrations", ["show", "github"]),
         ("/loops", ["show", "abc123"]),
         ("/health", []),
@@ -316,8 +349,8 @@ class FailureRecordingSlashPorts(FakeSlashPorts):
     """Fake ports whose dispatch records a failing slash row, like a real
     handler whose delegated CLI subprocess exited non-zero."""
 
-    error_text: str = "Usage: opensre cron remove [OPTIONS] TASK_ID"
-    fail_commands: frozenset[str] = frozenset({"/cron remove"})
+    error_text: str = "Error: task missing-task not found"
+    fail_commands: frozenset[str] = frozenset({"/cron remove missing-task"})
 
     def dispatch(self, command: str, *, session: Any = None, **_kwargs: Any) -> bool:
         self.dispatched.append(command)
@@ -336,12 +369,14 @@ def test_failed_dispatch_returns_error_observation() -> None:
     ports = FailureRecordingSlashPorts(tty=True)
     ctx, _buf, _session, _ports = _ctx(ports=ports)
 
-    result = slash_tool.execute_slash_tool({"command": "/cron", "args": ["remove"]}, ctx)
+    result = slash_tool.execute_slash_tool(
+        {"command": "/cron", "args": ["remove", "missing-task"]}, ctx
+    )
 
     assert result == {
         "ok": False,
-        "command": "/cron remove",
-        "error": "Usage: opensre cron remove [OPTIONS] TASK_ID",
+        "command": "/cron remove missing-task",
+        "error": "Error: task missing-task not found",
     }
 
 
@@ -350,21 +385,25 @@ def test_corrected_retry_after_failure_executes_in_same_turn() -> None:
     ports = FailureRecordingSlashPorts(tty=True)
     ctx, _buf, _session, _ports = _ctx(ports=ports)
 
-    first = slash_tool.execute_slash_tool({"command": "/cron", "args": ["remove"]}, ctx)
+    first = slash_tool.execute_slash_tool(
+        {"command": "/cron", "args": ["remove", "missing-task"]}, ctx
+    )
     retry = slash_tool.execute_slash_tool(
         {"command": "/cron", "args": ["remove", "ecf7c2580b83"]}, ctx
     )
 
     assert isinstance(first, dict) and first["ok"] is False
     assert retry is True
-    assert ports.dispatched == ["/cron remove", "/cron remove ecf7c2580b83"]
+    assert ports.dispatched == ["/cron remove missing-task", "/cron remove ecf7c2580b83"]
 
 
 def test_error_observation_excerpt_is_capped() -> None:
     ports = FailureRecordingSlashPorts(tty=True, error_text="x" * 5000)
     ctx, _buf, _session, _ports = _ctx(ports=ports)
 
-    result = slash_tool.execute_slash_tool({"command": "/cron", "args": ["remove"]}, ctx)
+    result = slash_tool.execute_slash_tool(
+        {"command": "/cron", "args": ["remove", "missing-task"]}, ctx
+    )
 
     assert isinstance(result, dict)
     # Matches _MAX_OBSERVED_ERROR_CHARS in tools.interactive_shell.actions.slash.
@@ -394,24 +433,35 @@ def test_failed_rows_from_earlier_turns_are_not_evidence() -> None:
 def test_cron_list_output_reaches_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
     """Successful '/cron list' must surface task ids in the observation so the
     agent can chain a data-dependent '/cron remove <id>' in the same turn."""
-    import subprocess
-
-    import surfaces.interactive_shell.command_registry.cli_parity as cli_parity
+    from infrastructure.scheduling.scheduler.loops import LoopSummary
+    from infrastructure.scheduling.scheduler.types import Provider, TaskKind
+    from surfaces.interactive_shell.command_registry import cron_cmds
     from surfaces.interactive_shell.runtime.slash_adapter import repl_slash_ports
+    from surfaces.shared.terminal.tables import schedule_listing
 
-    def _fake_run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
-        assert kwargs.get("capture_output") is True
-        return subprocess.CompletedProcess(
-            cmd,
-            returncode=0,
-            stdout="ecf7c2580b83  daily_summary  0 8 * * 1-5  UTC  slack",
-            stderr="",
-        )
-
-    monkeypatch.setattr(cli_parity.subprocess, "run", _fake_run)
+    loop = LoopSummary(
+        id="ecf7c2580b83",
+        task_ids=("ecf7c2580b83",),
+        name="daily_summary",
+        description="",
+        prompt="",
+        kind=TaskKind.MANUAL_LOOP,
+        cron="0 8 * * 1-5",
+        timezone="UTC",
+        provider=Provider.SLACK,
+        chat_id="C123",
+        channels=("slack",),
+        enabled=True,
+        window_hours=24,
+        last_run=None,
+        next_run=None,
+    )
+    monkeypatch.setattr(cron_cmds, "list_loop_summaries", lambda: [loop])
+    monkeypatch.setattr(schedule_listing, "latest_loop_runs", lambda _: {})
     buf = io.StringIO()
     console = Console(file=buf, force_terminal=False, highlight=False)
     session = Session()
+    session.terminal.exclusive_stdin_active = True
     ctx = ActionToolScope(
         session=session,
         console=console,

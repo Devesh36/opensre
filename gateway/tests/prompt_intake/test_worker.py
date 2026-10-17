@@ -145,7 +145,9 @@ class _ToolCatalogHandler(_Handler):
             tools = provider.action_tools(
                 confirm_fn=None,
                 is_tty=False,
-                resolved_integrations={"github": {"token": "test-token"}},
+                resolved_integrations={
+                    "github": {"auth_token": "test-token", "connection_origin": "webapp"}
+                },
             )
             snapshots.append({tool.name for tool in tools})
         return super().run(text, session, output, logger, **kwargs)
@@ -168,14 +170,15 @@ def test_remote_prompt_tools_survive_resume_without_enabling_controls_on_schedul
     for names in handler.prompt_tools:
         assert {
             "slash_invoke",
-            "schedule_ci_repair_loop",
-            "list_scheduled_loops",
             "cli_exec",
             "llm_set_provider",
             "task_cancel",
+            "tool_search",
         } <= names
         assert names.isdisjoint(
             {
+                "schedule_ci_repair_loop",
+                "list_scheduled_loops",
                 "ask_hosted_gateway",
                 "check_hosted_gateway",
                 "start_hosted_gateway",
